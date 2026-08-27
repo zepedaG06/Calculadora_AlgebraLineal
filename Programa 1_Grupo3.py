@@ -11,11 +11,20 @@ Restricciones cumplidas:
 
 from fractions import Fraction
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox
+
+try:
+    import customtkinter as ctk
+except ModuleNotFoundError:
+    ctk = None
 
 
 EPSILON = Fraction(0)
 
+
+# -----------------------------------------------------------------------------
+# Logica matematica
+# -----------------------------------------------------------------------------
 
 def convertir_numero(texto):
     """Convierte la entrada del usuario a Fraction para trabajar con valores exactos."""
@@ -87,9 +96,9 @@ def gauss_jordan(matriz_aumentada, num_variables):
     """
     Reduce la matriz aumentada hasta forma escalonada reducida.
 
-    La normalizacion deja cada pivote igual a 1.
-    La eliminacion se aplica en todas las filas distintas de la fila pivote,
-    por eso el resultado facilita leer soluciones unicas o parametricas.
+    La normalizacion deja cada pivote igual a 1. La eliminacion se aplica en
+    todas las filas distintas de la fila pivote, lo cual facilita leer
+    soluciones unicas o parametricas.
     """
     matriz = copiar_matriz(matriz_aumentada)
     pasos = [("Matriz aumentada inicial", copiar_matriz(matriz))]
@@ -112,7 +121,10 @@ def gauss_jordan(matriz_aumentada, num_variables):
         if valor_pivote != 1:
             multiplicar_fila(matriz, fila_pivote, Fraction(1, 1) / valor_pivote)
             pasos.append(
-                (f"F{fila_pivote + 1} -> F{fila_pivote + 1} / {formatear_numero(valor_pivote)}", copiar_matriz(matriz))
+                (
+                    f"F{fila_pivote + 1} -> F{fila_pivote + 1} / {formatear_numero(valor_pivote)}",
+                    copiar_matriz(matriz),
+                )
             )
 
         for fila in range(len(matriz)):
@@ -272,70 +284,184 @@ def resolver_sistema(A, b):
     return resultado
 
 
-class AplicacionAlgebraLineal:
-    """Interfaz grafica hecha con Tkinter."""
+# -----------------------------------------------------------------------------
+# Configuracion visual
+# -----------------------------------------------------------------------------
 
-    def __init__(self, raiz):
-        self.raiz = raiz
-        self.raiz.title("Programa 1 - Calculadora de Algebra Lineal")
-        self.raiz.geometry("1050x700")
+PALETA = {
+    "fondo": "#0F172A",
+    "sidebar": "#111827",
+    "panel": "#1E293B",
+    "panel_2": "#273449",
+    "entrada": "#0F172A",
+    "borde": "#334155",
+    "texto": "#F8FAFC",
+    "texto_2": "#CBD5E1",
+    "texto_3": "#94A3B8",
+    "primario": "#2563EB",
+    "primario_hover": "#1D4ED8",
+    "secundario": "#334155",
+    "secundario_hover": "#475569",
+    "exito": "#22C55E",
+    "advertencia": "#F59E0B",
+    "error": "#EF4444",
+}
+
+FUENTE_TITULO = ("Segoe UI", 26, "bold")
+FUENTE_SUBTITULO = ("Segoe UI", 14)
+FUENTE_SECCION = ("Segoe UI", 17, "bold")
+FUENTE_NORMAL = ("Segoe UI", 13)
+FUENTE_PEQUENA = ("Segoe UI", 11)
+FUENTE_MONO = ("Consolas", 13)
+
+
+# -----------------------------------------------------------------------------
+# Componentes de interfaz
+# -----------------------------------------------------------------------------
+
+def configurar_customtkinter():
+    if ctk is None:
+        return
+    ctk.set_appearance_mode("dark")
+    ctk.set_default_color_theme("blue")
+
+
+def crear_tarjeta(parent, titulo=None):
+    tarjeta = ctk.CTkFrame(
+        parent,
+        fg_color=PALETA["panel"],
+        corner_radius=8,
+        border_width=1,
+        border_color=PALETA["borde"],
+    )
+    if titulo:
+        ctk.CTkLabel(
+            tarjeta,
+            text=titulo,
+            font=FUENTE_SECCION,
+            text_color=PALETA["texto"],
+        ).pack(anchor="w", padx=18, pady=(16, 8))
+    return tarjeta
+
+
+class MatrixInputPanel(ctk.CTkFrame):
+    """Componente visual para capturar la matriz aumentada [A | b]."""
+
+    def __init__(self, parent, on_resolver, on_limpiar):
+        super().__init__(parent, fg_color=PALETA["panel"], corner_radius=8, border_width=1, border_color=PALETA["borde"])
+        self.on_resolver = on_resolver
+        self.on_limpiar = on_limpiar
         self.entradas = []
+        self.m = 0
+        self.n = 0
 
-        self.crear_interfaz()
+        self.header = ctk.CTkFrame(self, fg_color="transparent")
+        self.header.pack(fill="x", padx=18, pady=(16, 8))
 
-    def crear_interfaz(self):
-        marco_superior = ttk.Frame(self.raiz, padding=10)
-        marco_superior.pack(fill="x")
+        ctk.CTkLabel(self.header, text="Matriz aumentada [A | b]", font=FUENTE_SECCION).pack(side="left")
+        self.dimension_label = ctk.CTkLabel(self.header, text="", font=FUENTE_PEQUENA, text_color=PALETA["texto_3"])
+        self.dimension_label.pack(side="right")
 
-        ttk.Label(marco_superior, text="Ecuaciones (m):").pack(side="left")
-        self.entrada_m = ttk.Entry(marco_superior, width=6)
-        self.entrada_m.insert(0, "3")
-        self.entrada_m.pack(side="left", padx=5)
+        self.canvas_frame = ctk.CTkFrame(self, fg_color=PALETA["panel_2"], corner_radius=8)
+        self.canvas_frame.pack(fill="both", expand=True, padx=18, pady=(0, 12))
 
-        ttk.Label(marco_superior, text="Variables (n):").pack(side="left")
-        self.entrada_n = ttk.Entry(marco_superior, width=6)
-        self.entrada_n.insert(0, "3")
-        self.entrada_n.pack(side="left", padx=5)
+        self.canvas = tk.Canvas(
+            self.canvas_frame,
+            bg=PALETA["panel_2"],
+            highlightthickness=0,
+            height=230,
+        )
+        self.scroll_y = ctk.CTkScrollbar(self.canvas_frame, orientation="vertical", command=self.canvas.yview)
+        self.scroll_x = ctk.CTkScrollbar(self.canvas_frame, orientation="horizontal", command=self.canvas.xview)
+        self.canvas.configure(yscrollcommand=self.scroll_y.set, xscrollcommand=self.scroll_x.set)
 
-        ttk.Button(marco_superior, text="Crear matriz", command=self.crear_entradas_matriz).pack(side="left", padx=8)
-        ttk.Button(marco_superior, text="Resolver", command=self.resolver_desde_interfaz).pack(side="left")
+        self.canvas.grid(row=0, column=0, sticky="nsew", padx=(12, 4), pady=(12, 4))
+        self.scroll_y.grid(row=0, column=1, sticky="ns", pady=(12, 4), padx=(0, 8))
+        self.scroll_x.grid(row=1, column=0, sticky="ew", padx=(12, 4), pady=(0, 8))
+        self.canvas_frame.grid_rowconfigure(0, weight=1)
+        self.canvas_frame.grid_columnconfigure(0, weight=1)
 
-        self.marco_matriz = ttk.LabelFrame(self.raiz, text="Matriz aumentada [A | b]", padding=10)
-        self.marco_matriz.pack(fill="x", padx=10, pady=5)
+        self.grid_host = ctk.CTkFrame(self.canvas, fg_color="transparent")
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.grid_host, anchor="nw")
+        self.grid_host.bind("<Configure>", self._actualizar_scroll)
 
-        self.salida = tk.Text(self.raiz, wrap="none", font=("Consolas", 10))
-        self.salida.pack(fill="both", expand=True, padx=10, pady=10)
+        self.actions = ctk.CTkFrame(self, fg_color="transparent")
+        self.actions.pack(fill="x", padx=18, pady=(0, 16))
 
-        self.crear_entradas_matriz()
+        self.solve_button = ctk.CTkButton(
+            self.actions,
+            text="Resolver sistema",
+            height=42,
+            fg_color=PALETA["primario"],
+            hover_color=PALETA["primario_hover"],
+            command=self.on_resolver,
+        )
+        self.solve_button.pack(side="left")
 
-    def crear_entradas_matriz(self):
-        for widget in self.marco_matriz.winfo_children():
+        ctk.CTkButton(
+            self.actions,
+            text="Limpiar",
+            height=42,
+            fg_color=PALETA["secundario"],
+            hover_color=PALETA["secundario_hover"],
+            command=self.on_limpiar,
+        ).pack(side="left", padx=10)
+
+    def _actualizar_scroll(self, _event=None):
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def crear_matriz(self, m, n):
+        for widget in self.grid_host.winfo_children():
             widget.destroy()
 
-        try:
-            m = int(self.entrada_m.get())
-            n = int(self.entrada_n.get())
-            if m <= 0 or n <= 0:
-                raise ValueError
-        except ValueError:
-            messagebox.showerror("Entrada invalida", "m y n deben ser enteros positivos.")
-            return
-
+        self.m = m
+        self.n = n
         self.entradas = []
+        self.dimension_label.configure(text=f"{m} ecuaciones x {n} variables")
+
+        ctk.CTkLabel(self.grid_host, text="A", font=FUENTE_PEQUENA, text_color=PALETA["texto_3"]).grid(row=0, column=0, columnspan=n, pady=(4, 8))
+        ctk.CTkLabel(self.grid_host, text="b", font=FUENTE_PEQUENA, text_color=PALETA["texto_3"]).grid(row=0, column=n + 1, pady=(4, 8))
+
         for i in range(m):
             fila = []
             for j in range(n):
-                entrada = ttk.Entry(self.marco_matriz, width=8)
-                entrada.grid(row=i, column=j, padx=3, pady=3)
+                entrada = ctk.CTkEntry(
+                    self.grid_host,
+                    width=72,
+                    height=36,
+                    justify="center",
+                    font=FUENTE_NORMAL,
+                    fg_color=PALETA["entrada"],
+                    border_color=PALETA["borde"],
+                )
+                entrada.grid(row=i + 1, column=j, padx=4, pady=5)
                 entrada.insert(0, "0")
                 fila.append(entrada)
 
-            ttk.Label(self.marco_matriz, text="=").grid(row=i, column=n, padx=5)
-            entrada_b = ttk.Entry(self.marco_matriz, width=8)
-            entrada_b.grid(row=i, column=n + 1, padx=3, pady=3)
+            separador = ctk.CTkFrame(self.grid_host, width=2, height=36, fg_color=PALETA["texto_3"])
+            separador.grid(row=i + 1, column=n, padx=12, pady=5)
+
+            entrada_b = ctk.CTkEntry(
+                self.grid_host,
+                width=72,
+                height=36,
+                justify="center",
+                font=FUENTE_NORMAL,
+                fg_color=PALETA["entrada"],
+                border_color=PALETA["borde"],
+            )
+            entrada_b.grid(row=i + 1, column=n + 1, padx=4, pady=5)
             entrada_b.insert(0, "0")
             fila.append(entrada_b)
             self.entradas.append(fila)
+
+        self._actualizar_scroll()
+
+    def limpiar(self):
+        for fila in self.entradas:
+            for entrada in fila:
+                entrada.delete(0, "end")
+                entrada.insert(0, "0")
 
     def leer_datos(self):
         A = []
@@ -346,66 +472,324 @@ class AplicacionAlgebraLineal:
             b.append(valores[-1])
         return A, b
 
-    def resolver_desde_interfaz(self):
-        try:
-            A, b = self.leer_datos()
-            resultado = resolver_sistema(A, b)
-            self.mostrar_resultado(resultado)
-        except Exception as error:
-            messagebox.showerror("Error", str(error))
 
-    def escribir(self, texto=""):
-        self.salida.insert("end", texto + "\n")
+class ProcessPanel(ctk.CTkFrame):
+    """Muestra las operaciones elementales y la matriz despues de cada paso."""
+
+    def __init__(self, parent):
+        super().__init__(parent, fg_color=PALETA["panel"], corner_radius=8, border_width=1, border_color=PALETA["borde"])
+        ctk.CTkLabel(self, text="Proceso de Eliminacion", font=FUENTE_SECCION).pack(anchor="w", padx=18, pady=(16, 8))
+        self.contenedor = ctk.CTkScrollableFrame(self, fg_color="transparent", height=280)
+        self.contenedor.pack(fill="both", expand=True, padx=18, pady=(0, 16))
+        self.mostrar_placeholder()
+
+    def limpiar(self):
+        for widget in self.contenedor.winfo_children():
+            widget.destroy()
+
+    def mostrar_placeholder(self):
+        self.limpiar()
+        ctk.CTkLabel(
+            self.contenedor,
+            text="Crea un sistema, ingresa los coeficientes y presiona Resolver sistema.",
+            font=FUENTE_NORMAL,
+            text_color=PALETA["texto_3"],
+            wraplength=520,
+            justify="left",
+        ).pack(anchor="w", pady=8)
+
+    def mostrar_pasos(self, pasos):
+        self.limpiar()
+        for indice, (descripcion, matriz) in enumerate(pasos, start=1):
+            item = ctk.CTkFrame(self.contenedor, fg_color=PALETA["panel_2"], corner_radius=8)
+            item.pack(fill="x", pady=(0, 10))
+
+            ctk.CTkLabel(
+                item,
+                text=f"Paso {indice}: {descripcion}",
+                font=FUENTE_NORMAL,
+                text_color=PALETA["texto"],
+            ).pack(anchor="w", padx=14, pady=(10, 4))
+
+            ctk.CTkLabel(
+                item,
+                text=matriz_a_texto(matriz),
+                font=FUENTE_MONO,
+                text_color=PALETA["texto_2"],
+                justify="left",
+            ).pack(anchor="w", padx=14, pady=(0, 12))
+
+
+class ResultPanel(ctk.CTkFrame):
+    """Presenta clasificacion, variables, solucion y verificacion."""
+
+    def __init__(self, parent):
+        super().__init__(parent, fg_color=PALETA["panel"], corner_radius=8, border_width=1, border_color=PALETA["borde"])
+        ctk.CTkLabel(self, text="Resultado", font=FUENTE_SECCION).pack(anchor="w", padx=18, pady=(16, 8))
+        self.contenido = ctk.CTkFrame(self, fg_color="transparent")
+        self.contenido.pack(fill="both", expand=True, padx=18, pady=(0, 16))
+        self.mostrar_placeholder()
+
+    def limpiar(self):
+        for widget in self.contenido.winfo_children():
+            widget.destroy()
+
+    def mostrar_placeholder(self):
+        self.limpiar()
+        ctk.CTkLabel(
+            self.contenido,
+            text="Aqui se mostraran la clasificacion, la solucion y la verificacion.",
+            font=FUENTE_NORMAL,
+            text_color=PALETA["texto_3"],
+            wraplength=360,
+            justify="left",
+        ).pack(anchor="w", pady=8)
+
+    def _estado_color(self, clasificacion):
+        if "inconsistente" in clasificacion.lower():
+            return PALETA["error"]
+        if "indeterminado" in clasificacion.lower():
+            return PALETA["advertencia"]
+        return PALETA["exito"]
 
     def mostrar_resultado(self, resultado):
-        self.salida.delete("1.0", "end")
+        self.limpiar()
+        color = self._estado_color(resultado["clasificacion"])
 
-        self.escribir("PROCESO DE ELIMINACION POR FILAS")
-        self.escribir("=" * 70)
+        estado = ctk.CTkFrame(self.contenido, fg_color=PALETA["panel_2"], corner_radius=8)
+        estado.pack(fill="x", pady=(0, 12))
+        ctk.CTkFrame(estado, fg_color=color, width=5, corner_radius=8).pack(side="left", fill="y")
+        texto_estado = ctk.CTkFrame(estado, fg_color="transparent")
+        texto_estado.pack(side="left", fill="both", expand=True, padx=14, pady=12)
 
-        for descripcion, matriz in resultado["pasos"]:
-            self.escribir(descripcion)
-            self.escribir(matriz_a_texto(matriz))
-            self.escribir()
-
-        self.escribir("CLASIFICACION")
-        self.escribir(resultado["clasificacion"])
-        self.escribir(resultado["descripcion"])
-        self.escribir()
+        ctk.CTkLabel(texto_estado, text="Clasificacion del sistema", font=FUENTE_PEQUENA, text_color=PALETA["texto_3"]).pack(anchor="w")
+        ctk.CTkLabel(texto_estado, text=resultado["clasificacion"], font=("Segoe UI", 15, "bold"), text_color=PALETA["texto"]).pack(anchor="w", pady=(2, 0))
+        ctk.CTkLabel(texto_estado, text=resultado["descripcion"], font=FUENTE_PEQUENA, text_color=PALETA["texto_2"]).pack(anchor="w")
 
         basicas = ", ".join(f"x{c + 1}" for c in resultado["variables_basicas"]) or "ninguna"
         libres = ", ".join(f"x{c + 1}" for c in resultado["variables_libres"]) or "ninguna"
-        self.escribir(f"Variables basicas: {basicas}")
-        self.escribir(f"Variables libres: {libres}")
-        self.escribir()
+        ctk.CTkLabel(self.contenido, text=f"Variables basicas: {basicas}", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(anchor="w", pady=2)
+        ctk.CTkLabel(self.contenido, text=f"Variables libres: {libres}", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(anchor="w", pady=(2, 12))
 
         if resultado["solucion"] is not None:
-            self.escribir("SOLUCION")
-            for i, valor in enumerate(resultado["solucion"], start=1):
-                self.escribir(f"x{i} = {formatear_numero(valor)}")
-            self.escribir()
+            self._mostrar_solucion_unica(resultado["solucion"])
 
         if resultado["expresiones"] is not None:
-            self.escribir("SOLUCION PARAMETRICA")
-            for i in range(len(resultado["expresiones"])):
-                self.escribir(f"x{i + 1} = {resultado['expresiones'][i]}")
-            self.escribir()
+            self._mostrar_solucion_parametrica(resultado["expresiones"])
 
         if resultado["verificacion"] is not None:
-            correcta, detalles = resultado["verificacion"]
-            self.escribir("VERIFICACION CON EL SISTEMA ORIGINAL")
-            for i, (obtenido, esperado, coincide) in enumerate(detalles, start=1):
-                marca = "correcto" if coincide else "incorrecto"
-                self.escribir(
-                    f"Ecuacion {i}: {formatear_numero(obtenido)} = {formatear_numero(esperado)} -> {marca}"
-                )
-            self.escribir("Resultado: " + ("verificado correctamente" if correcta else "no verificado"))
+            self._mostrar_verificacion(resultado["verificacion"])
 
+    def _mostrar_solucion_unica(self, solucion):
+        tarjeta = ctk.CTkFrame(self.contenido, fg_color=PALETA["panel_2"], corner_radius=8)
+        tarjeta.pack(fill="x", pady=(0, 12))
+        ctk.CTkLabel(tarjeta, text="Solucion", font=("Segoe UI", 15, "bold")).pack(anchor="w", padx=14, pady=(12, 6))
+        for i, valor in enumerate(solucion, start=1):
+            ctk.CTkLabel(tarjeta, text=f"x{i} = {formatear_numero(valor)}", font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=14, pady=1)
+        ctk.CTkLabel(tarjeta, text="").pack(pady=3)
+
+    def _mostrar_solucion_parametrica(self, expresiones):
+        tarjeta = ctk.CTkFrame(self.contenido, fg_color=PALETA["panel_2"], corner_radius=8)
+        tarjeta.pack(fill="x", pady=(0, 12))
+        ctk.CTkLabel(tarjeta, text="Solucion parametrica", font=("Segoe UI", 15, "bold")).pack(anchor="w", padx=14, pady=(12, 6))
+        for i in range(len(expresiones)):
+            ctk.CTkLabel(tarjeta, text=f"x{i + 1} = {expresiones[i]}", font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=14, pady=1)
+        ctk.CTkLabel(tarjeta, text="").pack(pady=3)
+
+    def _mostrar_verificacion(self, verificacion):
+        correcta, detalles = verificacion
+        color = PALETA["exito"] if correcta else PALETA["error"]
+        texto = "Solucion verificada" if correcta else "La solucion no coincide"
+
+        tarjeta = ctk.CTkFrame(self.contenido, fg_color=PALETA["panel_2"], corner_radius=8)
+        tarjeta.pack(fill="x")
+        ctk.CTkLabel(tarjeta, text="Verificacion", font=("Segoe UI", 15, "bold")).pack(anchor="w", padx=14, pady=(12, 4))
+        ctk.CTkLabel(tarjeta, text=texto, font=FUENTE_NORMAL, text_color=color).pack(anchor="w", padx=14, pady=(0, 6))
+
+        for i, (obtenido, esperado, coincide) in enumerate(detalles, start=1):
+            marca = "correcto" if coincide else "incorrecto"
+            ctk.CTkLabel(
+                tarjeta,
+                text=f"Ecuacion {i}: {formatear_numero(obtenido)} = {formatear_numero(esperado)} ({marca})",
+                font=FUENTE_PEQUENA,
+                text_color=PALETA["texto_2"],
+            ).pack(anchor="w", padx=14, pady=1)
+        ctk.CTkLabel(tarjeta, text="").pack(pady=3)
+
+
+# -----------------------------------------------------------------------------
+# Ventana principal
+# -----------------------------------------------------------------------------
+
+class AplicacionAlgebraLineal(ctk.CTk):
+    """Aplicacion de escritorio moderna hecha con CustomTkinter."""
+
+    def __init__(self):
+        super().__init__()
+        self.title("Calculadora de Algebra Lineal - Grupo 3")
+        self.geometry("1180x760")
+        self.minsize(980, 640)
+        self.configure(fg_color=PALETA["fondo"])
+
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
+        self.crear_sidebar()
+        self.crear_contenido_principal()
+        self.crear_sistema()
+
+    def crear_sidebar(self):
+        sidebar = ctk.CTkFrame(self, fg_color=PALETA["sidebar"], corner_radius=0, width=240)
+        sidebar.grid(row=0, column=0, sticky="nsew")
+        sidebar.grid_propagate(False)
+
+        ctk.CTkLabel(sidebar, text="Algebra\nLineal", font=("Segoe UI", 26, "bold"), justify="left").pack(anchor="w", padx=24, pady=(28, 8))
+        ctk.CTkLabel(sidebar, text="Calculadora academica", font=FUENTE_PEQUENA, text_color=PALETA["texto_3"]).pack(anchor="w", padx=24, pady=(0, 28))
+
+        self._nav_item(sidebar, "Calculadora", activo=True)
+        self._nav_item(sidebar, "Metodo de Eliminacion")
+        self._nav_item(sidebar, "Ayuda")
+
+        ctk.CTkFrame(sidebar, fg_color="transparent").pack(fill="both", expand=True)
+        ctk.CTkLabel(sidebar, text="Tema", font=FUENTE_PEQUENA, text_color=PALETA["texto_3"]).pack(anchor="w", padx=24, pady=(0, 6))
+        self.theme_switch = ctk.CTkSwitch(sidebar, text="Modo claro", command=self.cambiar_tema)
+        self.theme_switch.pack(anchor="w", padx=24, pady=(0, 24))
+
+    def _nav_item(self, parent, texto, activo=False):
+        color = PALETA["primario"] if activo else "transparent"
+        item = ctk.CTkButton(
+            parent,
+            text=texto,
+            anchor="w",
+            height=38,
+            fg_color=color,
+            hover_color=PALETA["secundario_hover"],
+            text_color=PALETA["texto"],
+            command=lambda: None,
+        )
+        item.pack(fill="x", padx=16, pady=4)
+
+    def crear_contenido_principal(self):
+        contenedor = ctk.CTkFrame(self, fg_color=PALETA["fondo"], corner_radius=0)
+        contenedor.grid(row=0, column=1, sticky="nsew")
+        contenedor.grid_columnconfigure(0, weight=1)
+        contenedor.grid_rowconfigure(1, weight=1)
+
+        header = ctk.CTkFrame(contenedor, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", padx=28, pady=(24, 12))
+        header.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(header, text="Calculadora de Algebra Lineal", font=FUENTE_TITULO).grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(
+            header,
+            text="Solucion de sistemas de ecuaciones lineales por eliminacion por filas",
+            font=FUENTE_SUBTITULO,
+            text_color=PALETA["texto_2"],
+        ).grid(row=1, column=0, sticky="w", pady=(4, 0))
+
+        contenido = ctk.CTkFrame(contenedor, fg_color="transparent")
+        contenido.grid(row=1, column=0, sticky="nsew", padx=28, pady=(0, 24))
+        contenido.grid_columnconfigure(0, weight=3)
+        contenido.grid_columnconfigure(1, weight=2)
+        contenido.grid_rowconfigure(1, weight=1)
+
+        self.config_panel = crear_tarjeta(contenido, "Configuracion del sistema")
+        self.config_panel.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 14))
+        self.crear_configuracion(self.config_panel)
+
+        self.matrix_panel = MatrixInputPanel(contenido, self.resolver_desde_interfaz, self.limpiar_matriz)
+        self.matrix_panel.grid(row=1, column=0, sticky="nsew", padx=(0, 14))
+
+        derecha = ctk.CTkFrame(contenido, fg_color="transparent")
+        derecha.grid(row=1, column=1, sticky="nsew")
+        derecha.grid_rowconfigure(0, weight=3)
+        derecha.grid_rowconfigure(1, weight=2)
+        derecha.grid_columnconfigure(0, weight=1)
+
+        self.process_panel = ProcessPanel(derecha)
+        self.process_panel.grid(row=0, column=0, sticky="nsew", pady=(0, 14))
+
+        self.result_panel = ResultPanel(derecha)
+        self.result_panel.grid(row=1, column=0, sticky="nsew")
+
+    def crear_configuracion(self, parent):
+        fila = ctk.CTkFrame(parent, fg_color="transparent")
+        fila.pack(fill="x", padx=18, pady=(0, 16))
+
+        ctk.CTkLabel(fila, text="Ecuaciones", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(side="left", padx=(0, 8))
+        self.entrada_m = ctk.CTkEntry(fila, width=70, height=38, justify="center", fg_color=PALETA["entrada"], border_color=PALETA["borde"])
+        self.entrada_m.insert(0, "3")
+        self.entrada_m.pack(side="left", padx=(0, 18))
+
+        ctk.CTkLabel(fila, text="Variables", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(side="left", padx=(0, 8))
+        self.entrada_n = ctk.CTkEntry(fila, width=70, height=38, justify="center", fg_color=PALETA["entrada"], border_color=PALETA["borde"])
+        self.entrada_n.insert(0, "3")
+        self.entrada_n.pack(side="left", padx=(0, 18))
+
+        ctk.CTkButton(
+            fila,
+            text="Crear sistema",
+            width=150,
+            height=40,
+            fg_color=PALETA["primario"],
+            hover_color=PALETA["primario_hover"],
+            command=self.crear_sistema,
+        ).pack(side="left")
+
+        ctk.CTkLabel(
+            fila,
+            text="Puedes escribir enteros, decimales o fracciones como 3/2.",
+            font=FUENTE_PEQUENA,
+            text_color=PALETA["texto_3"],
+        ).pack(side="left", padx=18)
+
+    def cambiar_tema(self):
+        if self.theme_switch.get() == 1:
+            ctk.set_appearance_mode("light")
+        else:
+            ctk.set_appearance_mode("dark")
+
+    def crear_sistema(self):
+        try:
+            m = int(self.entrada_m.get())
+            n = int(self.entrada_n.get())
+            if m <= 0 or n <= 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Entrada invalida", "m y n deben ser enteros positivos.")
+            return
+
+        self.matrix_panel.crear_matriz(m, n)
+        self.process_panel.mostrar_placeholder()
+        self.result_panel.mostrar_placeholder()
+
+    def limpiar_matriz(self):
+        self.matrix_panel.limpiar()
+        self.process_panel.mostrar_placeholder()
+        self.result_panel.mostrar_placeholder()
+
+    def resolver_desde_interfaz(self):
+        try:
+            A, b = self.matrix_panel.leer_datos()
+            resultado = resolver_sistema(A, b)
+            self.process_panel.mostrar_pasos(resultado["pasos"])
+            self.result_panel.mostrar_resultado(resultado)
+        except Exception as error:
+            messagebox.showerror("Error", str(error))
+
+
+# -----------------------------------------------------------------------------
+# Inicio del programa
+# -----------------------------------------------------------------------------
 
 def main():
-    raiz = tk.Tk()
-    app = AplicacionAlgebraLineal(raiz)
-    raiz.mainloop()
+    if ctk is None:
+        raise SystemExit(
+            "CustomTkinter no esta instalado. Ejecuta: py -m pip install customtkinter"
+        )
+    configurar_customtkinter()
+    app = AplicacionAlgebraLineal()
+    app.mainloop()
 
 
 if __name__ == "__main__":
