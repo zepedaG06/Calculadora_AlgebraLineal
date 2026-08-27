@@ -4,7 +4,7 @@ import unittest
 from fractions import Fraction
 
 
-RUTA_PROGRAMA = pathlib.Path(__file__).with_name("Programa 1_Grupox.py")
+RUTA_PROGRAMA = pathlib.Path(__file__).with_name("Programa 1_Grupo3.py")
 spec = importlib.util.spec_from_file_location("programa_algebra", RUTA_PROGRAMA)
 programa = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(programa)
@@ -66,3 +66,4 @@ class PruebasEliminacionPorFilas(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

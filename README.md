@@ -17,13 +17,13 @@ El algoritmo de eliminacion por filas esta implementado manualmente.
 En Visual Studio Code, abre esta carpeta y ejecuta:
 
 ```powershell
-python "Programa 1_Grupox.py"
+python "Programa 1_Grupo3.py"
 ```
 
 Si Windows no reconoce `python`, usa:
 
 ```powershell
-py "Programa 1_Grupox.py"
+py "Programa 1_Grupo3.py"
 ```
 
 ## Como probar
@@ -41,4 +41,5 @@ py -m unittest test_algoritmo.py
 ## Framework elegido
 
 Se usa Tkinter porque viene incluido con Python, permite construir una interfaz grafica sencilla y es facil de explicar en la defensa.
+
 
