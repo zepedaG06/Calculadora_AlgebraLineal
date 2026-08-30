@@ -103,16 +103,54 @@ def buscar_fila_pivote(matriz, fila_inicio, columna):
     return None
 
 
+class PasoEliminacion(dict):
+    """
+    Representa un paso en el procedimiento de eliminacion por filas.
+    Compatible como diccionario (paso['operacion']), como objeto con atributos
+    (paso.operacion) y como secuencia (paso[0]=operacion, paso[1]=matriz, paso[2]=explicacion)
+    para garantizar maxima compatibilidad con tests y codigo previo.
+    """
+
+    def __init__(self, operacion, explicacion, matriz, tipo="operacion"):
+        super().__init__(
+            operacion=operacion,
+            explicacion=explicacion,
+            matriz=matriz,
+            tipo=tipo,
+        )
+        self.operacion = operacion
+        self.explicacion = explicacion
+        self.matriz = matriz
+        self.tipo = tipo
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            if key == 0:
+                return self["operacion"]
+            elif key == 1:
+                return self["matriz"]
+            elif key == 2:
+                return self["explicacion"]
+            raise IndexError("Indice de paso fuera de rango (0-2)")
+        return super().__getitem__(key)
+
+
 def gauss_jordan(matriz_aumentada, num_variables):
     """
-    Reduce la matriz aumentada hasta forma escalonada reducida.
+    Reduce la matriz aumentada hasta forma escalonada reducida por operaciones elementales.
 
-    La normalizacion deja cada pivote igual a 1. La eliminacion se aplica en
-    todas las filas distintas de la fila pivote, lo cual facilita leer
-    soluciones unicas o parametricas.
+    Registra cada paso ejecutado con su operacion elemental, explicacion pedagogica
+    y la matriz aumentada resultante.
     """
     matriz = copiar_matriz(matriz_aumentada)
-    pasos = [("Matriz aumentada inicial", copiar_matriz(matriz))]
+    pasos = [
+        PasoEliminacion(
+            operacion="Matriz aumentada inicial",
+            explicacion="Se plantea la matriz aumentada [A | b] con los coeficientes del sistema y los términos independientes.",
+            matriz=copiar_matriz(matriz),
+            tipo="inicial",
+        )
+    ]
     columnas_pivote = []
     fila_pivote = 0
 
@@ -125,16 +163,42 @@ def gauss_jordan(matriz_aumentada, num_variables):
         if fila_encontrada != fila_pivote:
             intercambiar_filas(matriz, fila_pivote, fila_encontrada)
             pasos.append(
-                (f"F{fila_pivote + 1} <-> F{fila_encontrada + 1}", copiar_matriz(matriz))
+                PasoEliminacion(
+                    operacion=f"F{fila_pivote + 1} ↔ F{fila_encontrada + 1}",
+                    explicacion=(
+                        f"Se intercambian la fila {fila_pivote + 1} y la fila {fila_encontrada + 1} "
+                        f"porque el elemento en la posición pivote actual es cero. Se necesita una fila con un "
+                        f"valor no nulo en la columna {columna + 1} para continuar la eliminación."
+                    ),
+                    matriz=copiar_matriz(matriz),
+                    tipo="intercambio",
+                )
             )
 
         valor_pivote = matriz[fila_pivote][columna]
         if valor_pivote != 1:
-            multiplicar_fila(matriz, fila_pivote, Fraction(1, 1) / valor_pivote)
+            inverso = Fraction(1, 1) / valor_pivote
+            multiplicar_fila(matriz, fila_pivote, inverso)
+            if valor_pivote == -1:
+                op_str = f"F{fila_pivote + 1} → -F{fila_pivote + 1}"
+                expl = (
+                    f"Se multiplica la fila {fila_pivote + 1} por -1 para convertir el pivote "
+                    f"de la columna {columna + 1} en 1."
+                )
+            else:
+                inv_str = f"({formatear_numero(inverso)})" if inverso.denominator != 1 else formatear_numero(inverso)
+                op_str = f"F{fila_pivote + 1} → {inv_str}F{fila_pivote + 1}"
+                expl = (
+                    f"Se multiplica la fila {fila_pivote + 1} por {formatear_numero(inverso)} "
+                    f"(equivalente a dividir entre {formatear_numero(valor_pivote)}) para convertir el pivote "
+                    f"de la columna {columna + 1} en 1."
+                )
             pasos.append(
-                (
-                    f"F{fila_pivote + 1} -> F{fila_pivote + 1} / {formatear_numero(valor_pivote)}",
-                    copiar_matriz(matriz),
+                PasoEliminacion(
+                    operacion=op_str,
+                    explicacion=expl,
+                    matriz=copiar_matriz(matriz),
+                    tipo="escalado",
                 )
             )
 
@@ -145,11 +209,42 @@ def gauss_jordan(matriz_aumentada, num_variables):
             factor = matriz[fila][columna]
             if factor != 0:
                 sumar_multiplo_fila(matriz, fila, fila_pivote, -factor)
+                posicion = "debajo" if fila > fila_pivote else "arriba"
+                abs_factor = abs(factor)
                 signo = "-" if factor > 0 else "+"
+
+                if abs_factor == 1:
+                    op_str = f"F{fila + 1} → F{fila + 1} {signo} F{fila_pivote + 1}"
+                    if factor > 0:
+                        expl = (
+                            f"Se resta la fila {fila_pivote + 1} a la fila {fila + 1} para generar "
+                            f"un cero {posicion} del pivote en la columna {columna + 1}."
+                        )
+                    else:
+                        expl = (
+                            f"Se suma la fila {fila_pivote + 1} a la fila {fila + 1} para generar "
+                            f"un cero {posicion} del pivote en la columna {columna + 1}."
+                        )
+                else:
+                    fact_str = f"({formatear_numero(abs_factor)})" if abs_factor.denominator != 1 else formatear_numero(abs_factor)
+                    op_str = f"F{fila + 1} → F{fila + 1} {signo} {fact_str}F{fila_pivote + 1}"
+                    if factor > 0:
+                        expl = (
+                            f"Se multiplica la fila {fila_pivote + 1} por {formatear_numero(abs_factor)} y se resta el resultado "
+                            f"a la fila {fila + 1} para generar un cero {posicion} del pivote en la columna {columna + 1}."
+                        )
+                    else:
+                        expl = (
+                            f"Se multiplica la fila {fila_pivote + 1} por {formatear_numero(abs_factor)} y se suma el resultado "
+                            f"a la fila {fila + 1} para generar un cero {posicion} del pivote en la columna {columna + 1}."
+                        )
+
                 pasos.append(
-                    (
-                        f"F{fila + 1} -> F{fila + 1} {signo} {formatear_numero(abs(factor))}F{fila_pivote + 1}",
-                        copiar_matriz(matriz),
+                    PasoEliminacion(
+                        operacion=op_str,
+                        explicacion=expl,
+                        matriz=copiar_matriz(matriz),
+                        tipo="eliminacion",
                     )
                 )
 
