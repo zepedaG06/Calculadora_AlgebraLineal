@@ -87,10 +87,20 @@ def sumar_multiplo_fila(matriz, destino, origen, factor):
 
 def matriz_a_texto(matriz):
     """Convierte una matriz aumentada en texto alineado para mostrarla en la interfaz."""
+    if not matriz or not matriz[0]:
+        return ""
+    num_cols = len(matriz[0])
+    anchos = [0] * num_cols
+    for fila in matriz:
+        for c, val in enumerate(fila):
+            txt = formatear_numero(val)
+            if len(txt) > anchos[c]:
+                anchos[c] = len(txt)
+    anchos = [max(w, 4) for w in anchos]
     lineas = []
     for fila in matriz:
-        coeficientes = "  ".join(f"{formatear_numero(x):>8}" for x in fila[:-1])
-        independiente = f"{formatear_numero(fila[-1]):>8}"
+        coeficientes = "  ".join(f"{formatear_numero(fila[c]):>{anchos[c]}}" for c in range(num_cols - 1))
+        independiente = f"{formatear_numero(fila[-1]):>{anchos[-1]}}"
         lineas.append(f"[ {coeficientes} | {independiente} ]")
     return "\n".join(lineas)
 
@@ -334,27 +344,180 @@ def obtener_solucion_parametrica(matriz_rref, columnas_pivote, num_variables):
     return expresiones, variables_libres, parametros
 
 
+def obtener_nombres_variables(num_variables):
+    """Genera nombres de variables intuitivos (x, y, z, w o x1, x2, ...)."""
+    if num_variables == 2:
+        return ["x", "y"]
+    elif num_variables == 3:
+        return ["x", "y", "z"]
+    elif num_variables == 4:
+        return ["x", "y", "z", "w"]
+    return [f"x{i + 1}" for i in range(num_variables)]
+
+
+def formatear_ecuacion_original(fila_coefs, termino_indep, nombres_vars):
+    """
+    Formatea la ecuacion algebraica original a partir de los coeficientes y terminos independientes.
+    Omite coeficientes 0, muestra 1x como x, -1x como -x, y maneja signos + / - correctamente.
+    """
+    terminos = []
+    for j, c in enumerate(fila_coefs):
+        if c == 0:
+            continue
+        var = nombres_vars[j]
+        if c == 1:
+            term_str = var if not terminos else f"+ {var}"
+        elif c == -1:
+            term_str = f"-{var}" if not terminos else f"- {var}"
+        elif c > 0:
+            c_str = formatear_numero(c)
+            if c.denominator != 1:
+                c_str = f"({c_str})"
+            term_str = f"{c_str}{var}" if not terminos else f"+ {c_str}{var}"
+        else:
+            c_str = formatear_numero(abs(c))
+            if abs(c).denominator != 1:
+                c_str = f"({c_str})"
+            term_str = f"-{c_str}{var}" if not terminos else f"- {c_str}{var}"
+        terminos.append(term_str)
+
+    lado_izq = " ".join(terminos) if terminos else "0"
+    lado_der = formatear_numero(termino_indep)
+    return f"{lado_izq} = {lado_der}"
+
+
+def formatear_sustitucion(fila_coefs, termino_indep, solucion):
+    """
+    Genera la expresion de sustitucion explicita con parentesis para cada variable:
+    ejemplo: 2(1) - (2) + (3) = 3 o 2(1) - 3(2) + (4) = 7.
+    """
+    terminos = []
+    for j, c in enumerate(fila_coefs):
+        if c == 0:
+            continue
+        val = solucion[j]
+        val_str = f"({formatear_numero(val)})"
+
+        if c == 1:
+            term_str = val_str if not terminos else f"+ {val_str}"
+        elif c == -1:
+            term_str = f"-{val_str}" if not terminos else f"- {val_str}"
+        elif c > 0:
+            c_str = formatear_numero(c)
+            term_str = f"{c_str}{val_str}" if not terminos else f"+ {c_str}{val_str}"
+        else:
+            c_str = formatear_numero(abs(c))
+            term_str = f"-{c_str}{val_str}" if not terminos else f"- {c_str}{val_str}"
+        terminos.append(term_str)
+
+    lado_izq = " ".join(terminos) if terminos else "0"
+    lado_der = formatear_numero(termino_indep)
+    return f"{lado_izq} = {lado_der}"
+
+
+def formatear_simplificacion(fila_coefs, termino_indep, solucion):
+    """
+    Evalua paso a paso la simplificacion de los terminos sustituidos:
+    1. Productos individuales evaluados: 2 - 2 + 3 = 3
+    2. Suma total evaluada: 3 = 3
+    """
+    pasos_simpl = []
+    productos = []
+
+    for j, c in enumerate(fila_coefs):
+        if c == 0:
+            continue
+        prod = c * solucion[j]
+        productos.append(prod)
+
+    if len(productos) > 1:
+        partes = []
+        for p in productos:
+            if not partes:
+                partes.append(formatear_numero(p))
+            else:
+                if p >= 0:
+                    partes.append(f"+ {formatear_numero(p)}")
+                else:
+                    partes.append(f"- {formatear_numero(abs(p))}")
+        linea_intermedia = f"{' '.join(partes)} = {formatear_numero(termino_indep)}"
+        pasos_simpl.append(linea_intermedia)
+
+    suma_total = sum(productos) if productos else Fraction(0)
+    linea_final = f"{formatear_numero(suma_total)} = {formatear_numero(termino_indep)}"
+    pasos_simpl.append(linea_final)
+
+    coincide = (suma_total == termino_indep)
+    return pasos_simpl, coincide, suma_total
+
+
+class DetalleVerificacion(dict):
+    """
+    Representa la verificacion explicativa de una ecuacion individual del sistema.
+    Soporta acceso como dict (d['ecuacion_original']), atributos (d.ecuacion_original)
+    e indexacion por tupla [0]=suma_obtenida, [1]=esperado, [2]=coincide para maxima compatibilidad.
+    """
+
+    def __init__(self, indice, ecuacion_original, sustitucion, simplificacion, suma_obtenida, esperado, coincide):
+        super().__init__(
+            indice=indice,
+            ecuacion_original=ecuacion_original,
+            sustitucion=sustitucion,
+            simplificacion=simplificacion,
+            suma_obtenida=suma_obtenida,
+            esperado=esperado,
+            coincide=coincide,
+        )
+        self.indice = indice
+        self.ecuacion_original = ecuacion_original
+        self.sustitucion = sustitucion
+        self.simplificacion = simplificacion
+        self.suma_obtenida = suma_obtenida
+        self.esperado = esperado
+        self.coincide = coincide
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return [self["suma_obtenida"], self["esperado"], self["coincide"]][key]
+        return super().__getitem__(key)
+
+
 def verificar_solucion(A_original, b_original, solucion):
     """
-    Verifica Ax = b usando el sistema original.
-    No resuelve el sistema; solo sustituye los valores obtenidos.
+    Verifica Ax = b usando el sistema original de forma explicativa y pedagogica.
+    Genera la ecuacion original, la sustitucion explicita y la simplificacion paso a paso.
     """
-    resultados = []
+    num_vars = len(A_original[0])
+    nombres_vars = obtener_nombres_variables(num_vars)
+    detalles = []
     correcta = True
 
     for i, fila in enumerate(A_original):
-        suma = sum(fila[j] * solucion[j] for j in range(len(solucion)))
         esperado = b_original[i]
-        coincide = suma == esperado
+        orig_str = formatear_ecuacion_original(fila, esperado, nombres_vars)
+        sust_str = formatear_sustitucion(fila, esperado, solucion)
+        simpl_pasos, coincide, suma = formatear_simplificacion(fila, esperado, solucion)
         correcta = correcta and coincide
-        resultados.append((suma, esperado, coincide))
 
-    return correcta, resultados
+        detalles.append(
+            DetalleVerificacion(
+                indice=i + 1,
+                ecuacion_original=orig_str,
+                sustitucion=sust_str,
+                simplificacion=simpl_pasos,
+                suma_obtenida=suma,
+                esperado=esperado,
+                coincide=coincide,
+            )
+        )
+
+    return correcta, detalles
 
 
 def resolver_sistema(A, b):
     """Funcion principal de la parte matematica."""
     num_variables = len(A[0])
+    nombres_vars = obtener_nombres_variables(num_variables)
     aumentada = crear_matriz_aumentada(A, b)
     rref, columnas_pivote, pasos = gauss_jordan(aumentada, num_variables)
     clasificacion, descripcion = clasificar_sistema(rref, columnas_pivote, num_variables)
@@ -366,11 +529,13 @@ def resolver_sistema(A, b):
         "columnas_pivote": columnas_pivote,
         "variables_basicas": columnas_pivote,
         "variables_libres": [c for c in range(num_variables) if c not in columnas_pivote],
+        "nombres_variables": nombres_vars,
         "clasificacion": clasificacion,
         "descripcion": descripcion,
         "homogeneo": es_sistema_homogeneo(b),
         "solucion": None,
         "expresiones": None,
+        "solucion_particular": None,
         "verificacion": None,
     }
 
@@ -391,6 +556,7 @@ def resolver_sistema(A, b):
         resultado["expresiones"] = expresiones
         resultado["variables_libres"] = libres
         resultado["parametros"] = parametros
+        resultado["solucion_particular"] = solucion_particular
         resultado["verificacion"] = verificar_solucion(A, b, solucion_particular)
 
     return resultado
