@@ -630,11 +630,11 @@ class MatrixInputPanel(ctk.CTkFrame):
 
 
 class ProcessPanel(ctk.CTkFrame):
-    """Muestra las operaciones elementales y la matriz despues de cada paso."""
+    """Muestra las operaciones elementales, explicaciones pedagogicas y la matriz tras cada paso."""
 
     def __init__(self, parent):
         super().__init__(parent, fg_color=PALETA["panel"], corner_radius=12, border_width=1, border_color=PALETA["borde"])
-        ctk.CTkLabel(self, text="Proceso de Eliminacion", font=FUENTE_SECCION).pack(anchor="w", padx=18, pady=(16, 8))
+        ctk.CTkLabel(self, text="Procedimiento de Solución", font=FUENTE_SECCION, text_color=PALETA["texto"]).pack(anchor="w", padx=18, pady=(16, 8))
         self.contenedor = ctk.CTkScrollableFrame(
             self, fg_color="transparent", height=280,
             scrollbar_button_color=PALETA["primario"],
@@ -651,7 +651,7 @@ class ProcessPanel(ctk.CTkFrame):
         self.limpiar()
         ctk.CTkLabel(
             self.contenedor,
-            text="Crea un sistema, ingresa los coeficientes y presiona Resolver sistema.",
+            text="Crea un sistema, ingresa los coeficientes y presiona Resolver sistema para ver el procedimiento paso a paso.",
             font=FUENTE_NORMAL,
             text_color=PALETA["texto_3"],
             wraplength=520,
@@ -660,38 +660,89 @@ class ProcessPanel(ctk.CTkFrame):
 
     def mostrar_pasos(self, pasos):
         self.limpiar()
-        for indice, (descripcion, matriz) in enumerate(pasos, start=1):
-            item = ctk.CTkFrame(self.contenedor, fg_color=PALETA["panel_2"], corner_radius=10)
-            item.pack(fill="x", pady=(0, 10))
+        for indice, paso in enumerate(pasos):
+            if isinstance(paso, dict):
+                operacion = paso.get("operacion", "")
+                explicacion = paso.get("explicacion", "")
+                matriz = paso.get("matriz", [])
+                tipo = paso.get("tipo", "")
+            elif hasattr(paso, "operacion"):
+                operacion = paso.operacion
+                explicacion = paso.explicacion
+                matriz = paso.matriz
+                tipo = getattr(paso, "tipo", "")
+            else:
+                operacion = paso[0]
+                matriz = paso[1]
+                explicacion = paso[2] if len(paso) > 2 else ""
+                tipo = ""
+
+            es_inicial = (indice == 0) or (tipo == "inicial")
+            titulo_paso = "Matriz aumentada inicial" if es_inicial else f"Paso {indice}"
+
+            item = ctk.CTkFrame(self.contenedor, fg_color=PALETA["panel_2"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
+            item.pack(fill="x", pady=(0, 12), padx=2)
 
             cabecera = ctk.CTkFrame(item, fg_color="transparent")
-            cabecera.pack(fill="x", padx=14, pady=(10, 4))
+            cabecera.pack(fill="x", padx=14, pady=(10, 6))
 
             ctk.CTkLabel(
                 cabecera,
-                text=f"{indice}",
+                text=titulo_paso,
                 font=("Segoe UI", 12, "bold"),
                 text_color="#04191A",
                 fg_color=PALETA["primario"],
-                corner_radius=10,
-                width=22,
-                height=22,
-            ).pack(side="left", padx=(0, 8))
+                corner_radius=6,
+                padx=8,
+                pady=2,
+            ).pack(side="left", padx=(0, 10))
+
+            if not es_inicial:
+                ctk.CTkLabel(
+                    cabecera,
+                    text=f"Operación: {operacion}",
+                    font=("Segoe UI", 13, "bold"),
+                    text_color=PALETA["texto"],
+                ).pack(side="left")
+
+            if explicacion:
+                frame_expl = ctk.CTkFrame(item, fg_color=PALETA["entrada"], corner_radius=6, border_width=1, border_color=PALETA["borde"])
+                frame_expl.pack(fill="x", padx=14, pady=(2, 8))
+
+                ctk.CTkLabel(
+                    frame_expl,
+                    text="Explicación:",
+                    font=("Segoe UI", 11, "bold"),
+                    text_color=PALETA["primario"],
+                ).pack(anchor="w", padx=10, pady=(6, 2))
+
+                ctk.CTkLabel(
+                    frame_expl,
+                    text=explicacion,
+                    font=FUENTE_NORMAL,
+                    text_color=PALETA["texto_2"],
+                    wraplength=480,
+                    justify="left",
+                ).pack(anchor="w", padx=10, pady=(0, 8))
+
+            frame_matriz = ctk.CTkFrame(item, fg_color="transparent")
+            frame_matriz.pack(fill="x", padx=14, pady=(0, 10))
+
+            etiqueta_mat = "Matriz inicial:" if es_inicial else "Matriz resultante:"
+            ctk.CTkLabel(
+                frame_matriz,
+                text=etiqueta_mat,
+                font=FUENTE_PEQUENA,
+                text_color=PALETA["texto_3"],
+            ).pack(anchor="w", pady=(0, 2))
 
             ctk.CTkLabel(
-                cabecera,
-                text=descripcion,
-                font=FUENTE_NORMAL,
-                text_color=PALETA["texto"],
-            ).pack(side="left")
-
-            ctk.CTkLabel(
-                item,
+                frame_matriz,
                 text=matriz_a_texto(matriz),
                 font=FUENTE_MONO,
                 text_color=PALETA["texto_2"],
                 justify="left",
-            ).pack(anchor="w", padx=14, pady=(0, 12))
+            ).pack(anchor="w")
 
 
 class ResultPanel(ctk.CTkFrame):
