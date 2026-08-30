@@ -447,13 +447,11 @@ def configurar_customtkinter():
 def resolver_color(par):
     """
     Convierte una tupla (claro, oscuro) de PALETA en el color concreto que
-    corresponde al modo de apariencia activo. Se usa para widgets nativos de
-    tkinter (como tk.Canvas) que no saben elegir automaticamente entre
-    modo claro y modo oscuro como si lo hacen los widgets CTk*.
+    corresponde al modo oscuro permanente. Se usa para widgets nativos de
+    tkinter (como tk.Canvas).
     """
     if isinstance(par, tuple):
-        modo = ctk.get_appearance_mode() if ctk is not None else "Dark"
-        return par[0] if modo == "Light" else par[1]
+        return par[1]
     return par
 
 
@@ -865,16 +863,6 @@ class AplicacionAlgebraLineal(ctk.CTk):
 
         ctk.CTkFrame(sidebar, fg_color="transparent").pack(fill="both", expand=True)
 
-        ctk.CTkLabel(sidebar, text="Tema", font=FUENTE_PEQUENA, text_color=PALETA["texto_3"]).pack(anchor="w", padx=24, pady=(0, 6))
-        self.theme_switch = ctk.CTkSwitch(
-            sidebar, text="Modo claro", command=self.cambiar_tema,
-            fg_color=PALETA["secundario"],
-            progress_color=PALETA["primario"],
-            button_color=PALETA["texto_2"],
-            button_hover_color=PALETA["primario_hover"],
-        )
-        self.theme_switch.pack(anchor="w", padx=24, pady=(0, 12))
-
         pie = ctk.CTkFrame(sidebar, fg_color="transparent")
         pie.pack(fill="x", padx=24, pady=(0, 20))
         if self.logo_pequeno is not None:
@@ -1108,13 +1096,6 @@ class AplicacionAlgebraLineal(ctk.CTk):
             font=FUENTE_PEQUENA,
             text_color=PALETA["texto_3"],
         ).pack(side="left", padx=18)
-
-    def cambiar_tema(self):
-        if self.theme_switch.get() == 1:
-            ctk.set_appearance_mode("light")
-        else:
-            ctk.set_appearance_mode("dark")
-        self.matrix_panel.actualizar_tema_canvas()
 
     def crear_sistema(self):
         try:
