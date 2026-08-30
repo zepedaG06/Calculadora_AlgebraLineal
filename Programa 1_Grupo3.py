@@ -9,6 +9,7 @@ Restricciones cumplidas:
 - La eliminacion por filas esta implementada manualmente.
 """
 
+import os
 from fractions import Fraction
 import tkinter as tk
 from tkinter import messagebox
@@ -18,8 +19,18 @@ try:
 except ModuleNotFoundError:
     ctk = None
 
+try:
+    from PIL import Image
+except ModuleNotFoundError:
+    Image = None
+
 
 EPSILON = Fraction(0)
+
+# Carpeta donde vive este archivo, para poder cargar el logo sin importar
+# desde donde se ejecute el programa.
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+RUTA_LOGO = os.path.join(BASE_DIR, "logo_uam.png")
 
 
 # -----------------------------------------------------------------------------
@@ -287,24 +298,30 @@ def resolver_sistema(A, b):
 # -----------------------------------------------------------------------------
 # Configuracion visual
 # -----------------------------------------------------------------------------
+# Paleta basada en los colores del escudo de la Universidad Americana (UAM):
+# el turquesa/teal institucional como color primario, con un fondo oscuro
+# de contraste para que la interfaz se vea moderna y profesional.
 
+# Cada valor es una tupla (modo_claro, modo_oscuro). CustomTkinter aplica
+# automaticamente el color correcto segun el modo activo (ctk.set_appearance_mode).
+# En modo claro: fondo blanco y texto en el turquesa institucional #04A7AD.
 PALETA = {
-    "fondo": "#0F172A",
-    "sidebar": "#111827",
-    "panel": "#1E293B",
-    "panel_2": "#273449",
-    "entrada": "#0F172A",
-    "borde": "#334155",
-    "texto": "#F8FAFC",
-    "texto_2": "#CBD5E1",
-    "texto_3": "#94A3B8",
-    "primario": "#2563EB",
-    "primario_hover": "#1D4ED8",
-    "secundario": "#334155",
-    "secundario_hover": "#475569",
-    "exito": "#22C55E",
-    "advertencia": "#F59E0B",
-    "error": "#EF4444",
+    "fondo": ("#FFFFFF", "#0B1B1C"),
+    "sidebar": ("#FFFFFF", "#08292B"),
+    "panel": ("#FFFFFF", "#0F2F31"),
+    "panel_2": ("#EAF8F8", "#153B3E"),
+    "entrada": ("#FFFFFF", "#0B2426"),
+    "borde": ("#BFEBEA", "#1F5457"),
+    "texto": ("#04A7AD", "#F4FBFB"),
+    "texto_2": ("#04A7AD", "#C8E7E6"),
+    "texto_3": ("#4FC2C7", "#7FB8B7"),
+    "primario": ("#04A7AD", "#04A7AD"),
+    "primario_hover": ("#03888D", "#03888D"),
+    "secundario": ("#EAF8F8", "#1F5457"),
+    "secundario_hover": ("#D4F1F0", "#2B6E71"),
+    "exito": ("#1FA463", "#2ED573"),
+    "advertencia": ("#C97F0E", "#F5A623"),
+    "error": ("#D93C3C", "#EF4B4B"),
 }
 
 FUENTE_TITULO = ("Segoe UI", 26, "bold")
@@ -326,11 +343,37 @@ def configurar_customtkinter():
     ctk.set_default_color_theme("blue")
 
 
+def resolver_color(par):
+    """
+    Convierte una tupla (claro, oscuro) de PALETA en el color concreto que
+    corresponde al modo de apariencia activo. Se usa para widgets nativos de
+    tkinter (como tk.Canvas) que no saben elegir automaticamente entre
+    modo claro y modo oscuro como si lo hacen los widgets CTk*.
+    """
+    if isinstance(par, tuple):
+        modo = ctk.get_appearance_mode() if ctk is not None else "Dark"
+        return par[0] if modo == "Light" else par[1]
+    return par
+
+
+def cargar_logo(tamano=(96, 96)):
+    """Carga el logo de la UAM como CTkImage, si esta disponible."""
+    if ctk is None or Image is None:
+        return None
+    if not os.path.exists(RUTA_LOGO):
+        return None
+    try:
+        imagen = Image.open(RUTA_LOGO).convert("RGBA")
+        return ctk.CTkImage(light_image=imagen, dark_image=imagen, size=tamano)
+    except Exception:
+        return None
+
+
 def crear_tarjeta(parent, titulo=None):
     tarjeta = ctk.CTkFrame(
         parent,
         fg_color=PALETA["panel"],
-        corner_radius=8,
+        corner_radius=12,
         border_width=1,
         border_color=PALETA["borde"],
     )
@@ -348,7 +391,7 @@ class MatrixInputPanel(ctk.CTkFrame):
     """Componente visual para capturar la matriz aumentada [A | b]."""
 
     def __init__(self, parent, on_resolver, on_limpiar):
-        super().__init__(parent, fg_color=PALETA["panel"], corner_radius=8, border_width=1, border_color=PALETA["borde"])
+        super().__init__(parent, fg_color=PALETA["panel"], corner_radius=12, border_width=1, border_color=PALETA["borde"])
         self.on_resolver = on_resolver
         self.on_limpiar = on_limpiar
         self.entradas = []
@@ -362,17 +405,23 @@ class MatrixInputPanel(ctk.CTkFrame):
         self.dimension_label = ctk.CTkLabel(self.header, text="", font=FUENTE_PEQUENA, text_color=PALETA["texto_3"])
         self.dimension_label.pack(side="right")
 
-        self.canvas_frame = ctk.CTkFrame(self, fg_color=PALETA["panel_2"], corner_radius=8)
+        self.canvas_frame = ctk.CTkFrame(self, fg_color=PALETA["panel_2"], corner_radius=10)
         self.canvas_frame.pack(fill="both", expand=True, padx=18, pady=(0, 12))
 
         self.canvas = tk.Canvas(
             self.canvas_frame,
-            bg=PALETA["panel_2"],
+            bg=resolver_color(PALETA["panel_2"]),
             highlightthickness=0,
             height=230,
         )
-        self.scroll_y = ctk.CTkScrollbar(self.canvas_frame, orientation="vertical", command=self.canvas.yview)
-        self.scroll_x = ctk.CTkScrollbar(self.canvas_frame, orientation="horizontal", command=self.canvas.xview)
+        self.scroll_y = ctk.CTkScrollbar(
+            self.canvas_frame, orientation="vertical", command=self.canvas.yview,
+            button_color=PALETA["primario"], button_hover_color=PALETA["primario_hover"],
+        )
+        self.scroll_x = ctk.CTkScrollbar(
+            self.canvas_frame, orientation="horizontal", command=self.canvas.xview,
+            button_color=PALETA["primario"], button_hover_color=PALETA["primario_hover"],
+        )
         self.canvas.configure(yscrollcommand=self.scroll_y.set, xscrollcommand=self.scroll_x.set)
 
         self.canvas.grid(row=0, column=0, sticky="nsew", padx=(12, 4), pady=(12, 4))
@@ -392,8 +441,11 @@ class MatrixInputPanel(ctk.CTkFrame):
             self.actions,
             text="Resolver sistema",
             height=42,
+            corner_radius=8,
             fg_color=PALETA["primario"],
             hover_color=PALETA["primario_hover"],
+            text_color="#04191A",
+            font=("Segoe UI", 13, "bold"),
             command=self.on_resolver,
         )
         self.solve_button.pack(side="left")
@@ -402,6 +454,7 @@ class MatrixInputPanel(ctk.CTkFrame):
             self.actions,
             text="Limpiar",
             height=42,
+            corner_radius=8,
             fg_color=PALETA["secundario"],
             hover_color=PALETA["secundario_hover"],
             command=self.on_limpiar,
@@ -409,6 +462,10 @@ class MatrixInputPanel(ctk.CTkFrame):
 
     def _actualizar_scroll(self, _event=None):
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def actualizar_tema_canvas(self):
+        """Vuelve a pintar el canvas nativo con el color correcto tras cambiar de tema."""
+        self.canvas.configure(bg=resolver_color(PALETA["panel_2"]))
 
     def crear_matriz(self, m, n):
         for widget in self.grid_host.winfo_children():
@@ -419,8 +476,8 @@ class MatrixInputPanel(ctk.CTkFrame):
         self.entradas = []
         self.dimension_label.configure(text=f"{m} ecuaciones x {n} variables")
 
-        ctk.CTkLabel(self.grid_host, text="A", font=FUENTE_PEQUENA, text_color=PALETA["texto_3"]).grid(row=0, column=0, columnspan=n, pady=(4, 8))
-        ctk.CTkLabel(self.grid_host, text="b", font=FUENTE_PEQUENA, text_color=PALETA["texto_3"]).grid(row=0, column=n + 1, pady=(4, 8))
+        ctk.CTkLabel(self.grid_host, text="A", font=FUENTE_PEQUENA, text_color=PALETA["primario"]).grid(row=0, column=0, columnspan=n, pady=(4, 8))
+        ctk.CTkLabel(self.grid_host, text="b", font=FUENTE_PEQUENA, text_color=PALETA["primario"]).grid(row=0, column=n + 1, pady=(4, 8))
 
         for i in range(m):
             fila = []
@@ -438,7 +495,7 @@ class MatrixInputPanel(ctk.CTkFrame):
                 entrada.insert(0, "0")
                 fila.append(entrada)
 
-            separador = ctk.CTkFrame(self.grid_host, width=2, height=36, fg_color=PALETA["texto_3"])
+            separador = ctk.CTkFrame(self.grid_host, width=2, height=36, fg_color=PALETA["primario"])
             separador.grid(row=i + 1, column=n, padx=12, pady=5)
 
             entrada_b = ctk.CTkEntry(
@@ -477,9 +534,13 @@ class ProcessPanel(ctk.CTkFrame):
     """Muestra las operaciones elementales y la matriz despues de cada paso."""
 
     def __init__(self, parent):
-        super().__init__(parent, fg_color=PALETA["panel"], corner_radius=8, border_width=1, border_color=PALETA["borde"])
+        super().__init__(parent, fg_color=PALETA["panel"], corner_radius=12, border_width=1, border_color=PALETA["borde"])
         ctk.CTkLabel(self, text="Proceso de Eliminacion", font=FUENTE_SECCION).pack(anchor="w", padx=18, pady=(16, 8))
-        self.contenedor = ctk.CTkScrollableFrame(self, fg_color="transparent", height=280)
+        self.contenedor = ctk.CTkScrollableFrame(
+            self, fg_color="transparent", height=280,
+            scrollbar_button_color=PALETA["primario"],
+            scrollbar_button_hover_color=PALETA["primario_hover"],
+        )
         self.contenedor.pack(fill="both", expand=True, padx=18, pady=(0, 16))
         self.mostrar_placeholder()
 
@@ -501,15 +562,29 @@ class ProcessPanel(ctk.CTkFrame):
     def mostrar_pasos(self, pasos):
         self.limpiar()
         for indice, (descripcion, matriz) in enumerate(pasos, start=1):
-            item = ctk.CTkFrame(self.contenedor, fg_color=PALETA["panel_2"], corner_radius=8)
+            item = ctk.CTkFrame(self.contenedor, fg_color=PALETA["panel_2"], corner_radius=10)
             item.pack(fill="x", pady=(0, 10))
 
+            cabecera = ctk.CTkFrame(item, fg_color="transparent")
+            cabecera.pack(fill="x", padx=14, pady=(10, 4))
+
             ctk.CTkLabel(
-                item,
-                text=f"Paso {indice}: {descripcion}",
+                cabecera,
+                text=f"{indice}",
+                font=("Segoe UI", 12, "bold"),
+                text_color="#04191A",
+                fg_color=PALETA["primario"],
+                corner_radius=10,
+                width=22,
+                height=22,
+            ).pack(side="left", padx=(0, 8))
+
+            ctk.CTkLabel(
+                cabecera,
+                text=descripcion,
                 font=FUENTE_NORMAL,
                 text_color=PALETA["texto"],
-            ).pack(anchor="w", padx=14, pady=(10, 4))
+            ).pack(side="left")
 
             ctk.CTkLabel(
                 item,
@@ -524,7 +599,7 @@ class ResultPanel(ctk.CTkFrame):
     """Presenta clasificacion, variables, solucion y verificacion."""
 
     def __init__(self, parent):
-        super().__init__(parent, fg_color=PALETA["panel"], corner_radius=8, border_width=1, border_color=PALETA["borde"])
+        super().__init__(parent, fg_color=PALETA["panel"], corner_radius=12, border_width=1, border_color=PALETA["borde"])
         ctk.CTkLabel(self, text="Resultado", font=FUENTE_SECCION).pack(anchor="w", padx=18, pady=(16, 8))
         self.contenido = ctk.CTkFrame(self, fg_color="transparent")
         self.contenido.pack(fill="both", expand=True, padx=18, pady=(0, 16))
@@ -556,7 +631,7 @@ class ResultPanel(ctk.CTkFrame):
         self.limpiar()
         color = self._estado_color(resultado["clasificacion"])
 
-        estado = ctk.CTkFrame(self.contenido, fg_color=PALETA["panel_2"], corner_radius=8)
+        estado = ctk.CTkFrame(self.contenido, fg_color=PALETA["panel_2"], corner_radius=10)
         estado.pack(fill="x", pady=(0, 12))
         ctk.CTkFrame(estado, fg_color=color, width=5, corner_radius=8).pack(side="left", fill="y")
         texto_estado = ctk.CTkFrame(estado, fg_color="transparent")
@@ -581,17 +656,17 @@ class ResultPanel(ctk.CTkFrame):
             self._mostrar_verificacion(resultado["verificacion"])
 
     def _mostrar_solucion_unica(self, solucion):
-        tarjeta = ctk.CTkFrame(self.contenido, fg_color=PALETA["panel_2"], corner_radius=8)
+        tarjeta = ctk.CTkFrame(self.contenido, fg_color=PALETA["panel_2"], corner_radius=10)
         tarjeta.pack(fill="x", pady=(0, 12))
-        ctk.CTkLabel(tarjeta, text="Solucion", font=("Segoe UI", 15, "bold")).pack(anchor="w", padx=14, pady=(12, 6))
+        ctk.CTkLabel(tarjeta, text="Solucion", font=("Segoe UI", 15, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=14, pady=(12, 6))
         for i, valor in enumerate(solucion, start=1):
             ctk.CTkLabel(tarjeta, text=f"x{i} = {formatear_numero(valor)}", font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=14, pady=1)
         ctk.CTkLabel(tarjeta, text="").pack(pady=3)
 
     def _mostrar_solucion_parametrica(self, expresiones):
-        tarjeta = ctk.CTkFrame(self.contenido, fg_color=PALETA["panel_2"], corner_radius=8)
+        tarjeta = ctk.CTkFrame(self.contenido, fg_color=PALETA["panel_2"], corner_radius=10)
         tarjeta.pack(fill="x", pady=(0, 12))
-        ctk.CTkLabel(tarjeta, text="Solucion parametrica", font=("Segoe UI", 15, "bold")).pack(anchor="w", padx=14, pady=(12, 6))
+        ctk.CTkLabel(tarjeta, text="Solucion parametrica", font=("Segoe UI", 15, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=14, pady=(12, 6))
         for i in range(len(expresiones)):
             ctk.CTkLabel(tarjeta, text=f"x{i + 1} = {expresiones[i]}", font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=14, pady=1)
         ctk.CTkLabel(tarjeta, text="").pack(pady=3)
@@ -601,9 +676,9 @@ class ResultPanel(ctk.CTkFrame):
         color = PALETA["exito"] if correcta else PALETA["error"]
         texto = "Solucion verificada" if correcta else "La solucion no coincide"
 
-        tarjeta = ctk.CTkFrame(self.contenido, fg_color=PALETA["panel_2"], corner_radius=8)
+        tarjeta = ctk.CTkFrame(self.contenido, fg_color=PALETA["panel_2"], corner_radius=10)
         tarjeta.pack(fill="x")
-        ctk.CTkLabel(tarjeta, text="Verificacion", font=("Segoe UI", 15, "bold")).pack(anchor="w", padx=14, pady=(12, 4))
+        ctk.CTkLabel(tarjeta, text="Verificacion", font=("Segoe UI", 15, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=14, pady=(12, 4))
         ctk.CTkLabel(tarjeta, text=texto, font=FUENTE_NORMAL, text_color=color).pack(anchor="w", padx=14, pady=(0, 6))
 
         for i, (obtenido, esperado, coincide) in enumerate(detalles, start=1):
@@ -626,10 +701,14 @@ class AplicacionAlgebraLineal(ctk.CTk):
 
     def __init__(self):
         super().__init__()
-        self.title("Calculadora de Algebra Lineal - Grupo 3")
+        self.title("Calculadora de Algebra Lineal - Grupo 3 - UAM")
         self.geometry("1180x760")
         self.minsize(980, 640)
         self.configure(fg_color=PALETA["fondo"])
+
+        self.logo_grande = cargar_logo((56, 56))
+        self.logo_pequeno = cargar_logo((34, 34))
+        self._configurar_icono_ventana()
 
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -638,33 +717,69 @@ class AplicacionAlgebraLineal(ctk.CTk):
         self.crear_contenido_principal()
         self.crear_sistema()
 
+    def _configurar_icono_ventana(self):
+        """Usa el logo de la UAM como icono de la ventana (si esta disponible)."""
+        if Image is None or not os.path.exists(RUTA_LOGO):
+            return
+        try:
+            self._icono_tk = tk.PhotoImage(file=RUTA_LOGO)
+            self.iconphoto(True, self._icono_tk)
+        except Exception:
+            pass
+
     def crear_sidebar(self):
         sidebar = ctk.CTkFrame(self, fg_color=PALETA["sidebar"], corner_radius=0, width=240)
         sidebar.grid(row=0, column=0, sticky="nsew")
         sidebar.grid_propagate(False)
 
-        ctk.CTkLabel(sidebar, text="Algebra\nLineal", font=("Segoe UI", 26, "bold"), justify="left").pack(anchor="w", padx=24, pady=(28, 8))
-        ctk.CTkLabel(sidebar, text="Calculadora academica", font=FUENTE_PEQUENA, text_color=PALETA["texto_3"]).pack(anchor="w", padx=24, pady=(0, 28))
+        marca = ctk.CTkFrame(sidebar, fg_color="transparent")
+        marca.pack(fill="x", padx=24, pady=(28, 8))
+
+        fila_marca = ctk.CTkFrame(marca, fg_color="transparent")
+        fila_marca.pack(anchor="w")
+
+        if self.logo_grande is not None:
+            ctk.CTkLabel(fila_marca, image=self.logo_grande, text="").pack(side="left", padx=(0, 12))
+
+        texto_marca = ctk.CTkFrame(fila_marca, fg_color="transparent")
+        texto_marca.pack(side="left")
+        ctk.CTkLabel(texto_marca, text="Algebra\nLineal", font=("Segoe UI", 19, "bold"), justify="left", text_color=PALETA["texto"]).pack(anchor="w")
+
+        ctk.CTkLabel(marca, text="Universidad Americana \u2022 Grupo 3", font=FUENTE_PEQUENA, text_color=PALETA["texto_3"]).pack(anchor="w", pady=(10, 0))
+
+        ctk.CTkFrame(sidebar, height=1, fg_color=PALETA["borde"]).pack(fill="x", padx=24, pady=18)
 
         self._nav_item(sidebar, "Calculadora", activo=True)
         self._nav_item(sidebar, "Metodo de Eliminacion")
         self._nav_item(sidebar, "Ayuda")
 
         ctk.CTkFrame(sidebar, fg_color="transparent").pack(fill="both", expand=True)
+
         ctk.CTkLabel(sidebar, text="Tema", font=FUENTE_PEQUENA, text_color=PALETA["texto_3"]).pack(anchor="w", padx=24, pady=(0, 6))
-        self.theme_switch = ctk.CTkSwitch(sidebar, text="Modo claro", command=self.cambiar_tema)
-        self.theme_switch.pack(anchor="w", padx=24, pady=(0, 24))
+        self.theme_switch = ctk.CTkSwitch(
+            sidebar, text="Modo claro", command=self.cambiar_tema,
+            progress_color=PALETA["primario"],
+        )
+        self.theme_switch.pack(anchor="w", padx=24, pady=(0, 12))
+
+        pie = ctk.CTkFrame(sidebar, fg_color="transparent")
+        pie.pack(fill="x", padx=24, pady=(0, 20))
+        if self.logo_pequeno is not None:
+            ctk.CTkLabel(pie, image=self.logo_pequeno, text="").pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(pie, text="Excellentia\nAcademica", font=("Segoe UI", 10), text_color=PALETA["texto_3"], justify="left").pack(side="left")
 
     def _nav_item(self, parent, texto, activo=False):
         color = PALETA["primario"] if activo else "transparent"
+        texto_color = "#04191A" if activo else PALETA["texto"]
         item = ctk.CTkButton(
             parent,
             text=texto,
             anchor="w",
             height=38,
+            corner_radius=8,
             fg_color=color,
             hover_color=PALETA["secundario_hover"],
-            text_color=PALETA["texto"],
+            text_color=texto_color,
             command=lambda: None,
         )
         item.pack(fill="x", padx=16, pady=4)
@@ -679,7 +794,7 @@ class AplicacionAlgebraLineal(ctk.CTk):
         header.grid(row=0, column=0, sticky="ew", padx=28, pady=(24, 12))
         header.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(header, text="Calculadora de Algebra Lineal", font=FUENTE_TITULO).grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(header, text="Calculadora de Algebra Lineal", font=FUENTE_TITULO, text_color=PALETA["texto"]).grid(row=0, column=0, sticky="w")
         ctk.CTkLabel(
             header,
             text="Solucion de sistemas de ecuaciones lineales por eliminacion por filas",
@@ -731,8 +846,11 @@ class AplicacionAlgebraLineal(ctk.CTk):
             text="Crear sistema",
             width=150,
             height=40,
+            corner_radius=8,
             fg_color=PALETA["primario"],
             hover_color=PALETA["primario_hover"],
+            text_color="#04191A",
+            font=("Segoe UI", 13, "bold"),
             command=self.crear_sistema,
         ).pack(side="left")
 
@@ -748,6 +866,7 @@ class AplicacionAlgebraLineal(ctk.CTk):
             ctk.set_appearance_mode("light")
         else:
             ctk.set_appearance_mode("dark")
+        self.matrix_panel.actualizar_tema_canvas()
 
     def crear_sistema(self):
         try:
