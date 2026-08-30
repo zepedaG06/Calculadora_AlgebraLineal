@@ -168,6 +168,11 @@ def fila_inconsistente(fila, num_variables):
     return coeficientes_cero and fila[-1] != 0
 
 
+def es_sistema_homogeneo(b):
+    """Un sistema es homogeneo cuando el vector b es todo ceros (Ax = 0)."""
+    return all(valor == 0 for valor in b)
+
+
 def clasificar_sistema(matriz_rref, columnas_pivote, num_variables):
     """Clasifica el sistema segun la forma escalonada reducida."""
     for fila in matriz_rref:
@@ -268,6 +273,7 @@ def resolver_sistema(A, b):
         "variables_libres": [c for c in range(num_variables) if c not in columnas_pivote],
         "clasificacion": clasificacion,
         "descripcion": descripcion,
+        "homogeneo": es_sistema_homogeneo(b),
         "solucion": None,
         "expresiones": None,
         "verificacion": None,
@@ -329,7 +335,7 @@ FUENTE_SUBTITULO = ("Segoe UI", 14)
 FUENTE_SECCION = ("Segoe UI", 17, "bold")
 FUENTE_NORMAL = ("Segoe UI", 13)
 FUENTE_PEQUENA = ("Segoe UI", 11)
-FUENTE_MONO = ("Consolas", 13)
+FUENTE_MONO = ("Consolas", 15)
 
 
 # -----------------------------------------------------------------------------
@@ -641,6 +647,14 @@ class ResultPanel(ctk.CTkFrame):
         ctk.CTkLabel(texto_estado, text=resultado["clasificacion"], font=("Segoe UI", 15, "bold"), text_color=PALETA["texto"]).pack(anchor="w", pady=(2, 0))
         ctk.CTkLabel(texto_estado, text=resultado["descripcion"], font=FUENTE_PEQUENA, text_color=PALETA["texto_2"]).pack(anchor="w")
 
+        etiqueta_homogeneo = "Sistema homogeneo (Ax = 0)" if resultado["homogeneo"] else "Sistema no homogeneo"
+        ctk.CTkLabel(
+            self.contenido,
+            text=etiqueta_homogeneo,
+            font=("Segoe UI", 12, "bold"),
+            text_color=PALETA["primario"],
+        ).pack(anchor="w", pady=(8, 2))
+
         basicas = ", ".join(f"x{c + 1}" for c in resultado["variables_basicas"]) or "ninguna"
         libres = ", ".join(f"x{c + 1}" for c in resultado["variables_libres"]) or "ninguna"
         ctk.CTkLabel(self.contenido, text=f"Variables basicas: {basicas}", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(anchor="w", pady=2)
@@ -749,16 +763,20 @@ class AplicacionAlgebraLineal(ctk.CTk):
 
         ctk.CTkFrame(sidebar, height=1, fg_color=PALETA["borde"]).pack(fill="x", padx=24, pady=18)
 
-        self._nav_item(sidebar, "Calculadora", activo=True)
-        self._nav_item(sidebar, "Metodo de Eliminacion")
-        self._nav_item(sidebar, "Ayuda")
+        self.nav_botones = {}
+        self.nav_botones["calculadora"] = self._nav_item(sidebar, "Calculadora", "calculadora", activo=True)
+        self.nav_botones["metodo"] = self._nav_item(sidebar, "Metodo de Eliminacion", "metodo")
+        self.nav_botones["ayuda"] = self._nav_item(sidebar, "Ayuda", "ayuda")
 
         ctk.CTkFrame(sidebar, fg_color="transparent").pack(fill="both", expand=True)
 
         ctk.CTkLabel(sidebar, text="Tema", font=FUENTE_PEQUENA, text_color=PALETA["texto_3"]).pack(anchor="w", padx=24, pady=(0, 6))
         self.theme_switch = ctk.CTkSwitch(
             sidebar, text="Modo claro", command=self.cambiar_tema,
+            fg_color=PALETA["secundario"],
             progress_color=PALETA["primario"],
+            button_color=PALETA["texto_2"],
+            button_hover_color=PALETA["primario_hover"],
         )
         self.theme_switch.pack(anchor="w", padx=24, pady=(0, 12))
 
@@ -768,7 +786,7 @@ class AplicacionAlgebraLineal(ctk.CTk):
             ctk.CTkLabel(pie, image=self.logo_pequeno, text="").pack(side="left", padx=(0, 8))
         ctk.CTkLabel(pie, text="Excellentia\nAcademica", font=("Segoe UI", 10), text_color=PALETA["texto_3"], justify="left").pack(side="left")
 
-    def _nav_item(self, parent, texto, activo=False):
+    def _nav_item(self, parent, texto, pagina, activo=False):
         color = PALETA["primario"] if activo else "transparent"
         texto_color = "#04191A" if activo else PALETA["texto"]
         item = ctk.CTkButton(
@@ -780,32 +798,63 @@ class AplicacionAlgebraLineal(ctk.CTk):
             fg_color=color,
             hover_color=PALETA["secundario_hover"],
             text_color=texto_color,
-            command=lambda: None,
+            command=lambda: self.cambiar_pagina(pagina),
         )
         item.pack(fill="x", padx=16, pady=4)
+        return item
+
+    def cambiar_pagina(self, pagina):
+        for nombre, boton in self.nav_botones.items():
+            if nombre == pagina:
+                boton.configure(fg_color=PALETA["primario"], text_color="#04191A")
+            else:
+                boton.configure(fg_color="transparent", text_color=PALETA["texto"])
+        self.paginas[pagina].tkraise()
 
     def crear_contenido_principal(self):
         contenedor = ctk.CTkFrame(self, fg_color=PALETA["fondo"], corner_radius=0)
         contenedor.grid(row=0, column=1, sticky="nsew")
         contenedor.grid_columnconfigure(0, weight=1)
-        contenedor.grid_rowconfigure(1, weight=1)
+        contenedor.grid_rowconfigure(0, weight=1)
 
-        header = ctk.CTkFrame(contenedor, fg_color="transparent")
+        self.paginas = {
+            "calculadora": self._crear_pagina_calculadora(contenedor),
+            "metodo": self._crear_pagina_metodo(contenedor),
+            "ayuda": self._crear_pagina_ayuda(contenedor),
+        }
+        for pagina in self.paginas.values():
+            pagina.grid(row=0, column=0, sticky="nsew")
+
+        self.paginas["calculadora"].tkraise()
+
+    def _crear_encabezado(self, parent, titulo, subtitulo):
+        header = ctk.CTkFrame(parent, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", padx=28, pady=(24, 12))
         header.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(header, text="Calculadora de Algebra Lineal", font=FUENTE_TITULO, text_color=PALETA["texto"]).grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(header, text=titulo, font=FUENTE_TITULO, text_color=PALETA["texto"]).grid(row=0, column=0, sticky="w")
         ctk.CTkLabel(
             header,
-            text="Solucion de sistemas de ecuaciones lineales por eliminacion por filas",
+            text=subtitulo,
             font=FUENTE_SUBTITULO,
             text_color=PALETA["texto_2"],
         ).grid(row=1, column=0, sticky="w", pady=(4, 0))
 
-        contenido = ctk.CTkFrame(contenedor, fg_color="transparent")
+    def _crear_pagina_calculadora(self, parent):
+        pagina = ctk.CTkFrame(parent, fg_color=PALETA["fondo"], corner_radius=0)
+        pagina.grid_columnconfigure(0, weight=1)
+        pagina.grid_rowconfigure(1, weight=1)
+
+        self._crear_encabezado(
+            pagina,
+            "Calculadora de Algebra Lineal",
+            "Solucion de sistemas de ecuaciones lineales por eliminacion por filas",
+        )
+
+        contenido = ctk.CTkFrame(pagina, fg_color="transparent")
         contenido.grid(row=1, column=0, sticky="nsew", padx=28, pady=(0, 24))
-        contenido.grid_columnconfigure(0, weight=3)
-        contenido.grid_columnconfigure(1, weight=2)
+        contenido.grid_columnconfigure(0, weight=2)
+        contenido.grid_columnconfigure(1, weight=3)
         contenido.grid_rowconfigure(1, weight=1)
 
         self.config_panel = crear_tarjeta(contenido, "Configuracion del sistema")
@@ -826,6 +875,110 @@ class AplicacionAlgebraLineal(ctk.CTk):
 
         self.result_panel = ResultPanel(derecha)
         self.result_panel.grid(row=1, column=0, sticky="nsew")
+
+        return pagina
+
+    def _crear_pagina_metodo(self, parent):
+        pagina = ctk.CTkFrame(parent, fg_color=PALETA["fondo"], corner_radius=0)
+        pagina.grid_columnconfigure(0, weight=1)
+        pagina.grid_rowconfigure(1, weight=1)
+
+        self._crear_encabezado(
+            pagina,
+            "Metodo de Eliminacion de Gauss-Jordan",
+            "Como el programa reduce la matriz aumentada paso a paso",
+        )
+
+        cuerpo = ctk.CTkScrollableFrame(pagina, fg_color="transparent")
+        cuerpo.grid(row=1, column=0, sticky="nsew", padx=28, pady=(0, 24))
+
+        pasos_metodo = [
+            ("1. Matriz aumentada [A | b]",
+             "Se construye colocando junto a la matriz de coeficientes A la columna de terminos independientes b. Cada fila representa una ecuacion del sistema."),
+            ("2. Buscar el pivote",
+             "En cada columna se busca una fila con un valor distinto de cero para usarlo como pivote. Si la fila del pivote tiene un cero en esa columna, se intercambia con otra fila (Fi <-> Fj)."),
+            ("3. Normalizar el pivote",
+             "La fila del pivote se multiplica por el inverso del valor del pivote, de modo que el pivote quede en 1 (Fi -> Fi / k)."),
+            ("4. Eliminar la columna",
+             "Se suma un multiplo de la fila pivote a todas las demas filas para convertir en cero el resto de la columna del pivote (Fi -> Fi + factor * Fpivote)."),
+            ("5. Repetir por columnas",
+             "El proceso se repite para cada columna de variables hasta llegar a la forma escalonada reducida (cada pivote en 1, con ceros arriba y abajo)."),
+            ("6. Clasificar el sistema",
+             "Si aparece una fila 0 = k con k distinto de cero, el sistema es inconsistente. Si cada variable tiene columna pivote, es consistente determinado (solucion unica). Si sobran variables sin pivote, es consistente indeterminado (infinitas soluciones)."),
+            ("7. Variables basicas y libres",
+             "Las columnas que contienen un pivote corresponden a variables basicas. Las columnas sin pivote corresponden a variables libres, que se expresan como parametros (t, s, r, ...)."),
+            ("8. Verificar la solucion",
+             "Los valores obtenidos se sustituyen en el sistema original (Ax = b) para comprobar que cada ecuacion se cumple."),
+        ]
+
+        for titulo, texto in pasos_metodo:
+            tarjeta = ctk.CTkFrame(cuerpo, fg_color=PALETA["panel"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
+            tarjeta.pack(fill="x", pady=(0, 12))
+            ctk.CTkLabel(tarjeta, text=titulo, font=("Segoe UI", 15, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=16, pady=(12, 4))
+            ctk.CTkLabel(
+                tarjeta, text=texto, font=FUENTE_NORMAL, text_color=PALETA["texto_2"],
+                wraplength=780, justify="left",
+            ).pack(anchor="w", padx=16, pady=(0, 12))
+
+        return pagina
+
+    def _crear_pagina_ayuda(self, parent):
+        pagina = ctk.CTkFrame(parent, fg_color=PALETA["fondo"], corner_radius=0)
+        pagina.grid_columnconfigure(0, weight=1)
+        pagina.grid_rowconfigure(1, weight=1)
+
+        self._crear_encabezado(
+            pagina,
+            "Ayuda",
+            "Como usar la calculadora y significado de los conceptos clave",
+        )
+
+        cuerpo = ctk.CTkScrollableFrame(pagina, fg_color="transparent")
+        cuerpo.grid(row=1, column=0, sticky="nsew", padx=28, pady=(0, 24))
+
+        tarjeta_uso = ctk.CTkFrame(cuerpo, fg_color=PALETA["panel"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
+        tarjeta_uso.pack(fill="x", pady=(0, 16))
+        ctk.CTkLabel(tarjeta_uso, text="Como usar la calculadora", font=("Segoe UI", 15, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=16, pady=(14, 6))
+        pasos_uso = [
+            "1. En 'Calculadora', escribe el numero de ecuaciones y variables y presiona 'Crear sistema'.",
+            "2. Llena la matriz A con los coeficientes y la columna b con los terminos independientes (acepta enteros, decimales o fracciones como 3/2).",
+            "3. Presiona 'Resolver sistema' para ver cada operacion elemental en 'Proceso de Eliminacion'.",
+            "4. Revisa 'Resultado' para ver la clasificacion del sistema, las variables basicas/libres, la solucion y su verificacion.",
+            "5. Usa 'Limpiar' para reiniciar la matriz actual sin cambiar el tamano del sistema.",
+        ]
+        for paso in pasos_uso:
+            ctk.CTkLabel(
+                tarjeta_uso, text=paso, font=FUENTE_NORMAL, text_color=PALETA["texto_2"],
+                wraplength=780, justify="left",
+            ).pack(anchor="w", padx=16, pady=2)
+        ctk.CTkLabel(tarjeta_uso, text="").pack(pady=4)
+
+        conceptos = [
+            ("Matriz aumentada", "La matriz [A | b] que combina los coeficientes del sistema con los terminos independientes."),
+            ("Operacion elemental", "Un intercambio de filas, una multiplicacion de una fila por un escalar, o la suma de un multiplo de una fila a otra."),
+            ("Pivote", "El primer valor distinto de cero de una fila, usado como referencia para eliminar el resto de su columna."),
+            ("Forma escalonada reducida", "Resultado final de Gauss-Jordan: cada pivote vale 1 y tiene ceros arriba y abajo de el."),
+            ("Variables basicas", "Las variables cuya columna en la matriz reducida contiene un pivote."),
+            ("Variables libres", "Las variables sin columna pivote; su valor se deja como parametro (t, s, r, ...)."),
+            ("Sistema consistente", "Tiene al menos una solucion (determinado: unica, o indeterminado: infinitas)."),
+            ("Sistema inconsistente", "No tiene solucion; aparece una fila equivalente a 0 = k con k distinto de cero."),
+            ("Sistema homogeneo", "Aquel en el que todos los terminos independientes (b) son cero; siempre es consistente porque x = 0 es una solucion."),
+        ]
+
+        tarjeta_conceptos = ctk.CTkFrame(cuerpo, fg_color=PALETA["panel"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
+        tarjeta_conceptos.pack(fill="x")
+        ctk.CTkLabel(tarjeta_conceptos, text="Conceptos clave", font=("Segoe UI", 15, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=16, pady=(14, 6))
+        for nombre, definicion in conceptos:
+            fila = ctk.CTkFrame(tarjeta_conceptos, fg_color="transparent")
+            fila.pack(fill="x", padx=16, pady=4)
+            ctk.CTkLabel(fila, text=f"{nombre}:", font=("Segoe UI", 13, "bold"), text_color=PALETA["texto"]).pack(anchor="w")
+            ctk.CTkLabel(
+                fila, text=definicion, font=FUENTE_NORMAL, text_color=PALETA["texto_2"],
+                wraplength=780, justify="left",
+            ).pack(anchor="w")
+        ctk.CTkLabel(tarjeta_conceptos, text="").pack(pady=4)
+
+        return pagina
 
     def crear_configuracion(self, parent):
         fila = ctk.CTkFrame(parent, fg_color="transparent")

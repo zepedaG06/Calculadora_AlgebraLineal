@@ -4,8 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="b063673a-242a-44d1-834c-a3b57751a65a" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/Programa 1_Grupo3.py" beforeDir="false" afterPath="$PROJECT_DIR$/Programa 1_Grupo3.py" afterDir="false" />
+    <list default="true" id="b063673a-242a-44d1-834c-a3b57751a65a" name="Changes" comment="&quot;feat:Cambios en interfaz&quot;">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -103,6 +103,10 @@
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="&quot;feat:Cambios en interfaz&quot;" />
+    <option name="LAST_COMMIT_MESSAGE" value="&quot;feat:Cambios en interfaz&quot;" />
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />
