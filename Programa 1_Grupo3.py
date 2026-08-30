@@ -630,33 +630,75 @@ class MatrixInputPanel(ctk.CTkFrame):
 
 
 class ProcessPanel(ctk.CTkFrame):
-    """Muestra las operaciones elementales, explicaciones pedagogicas y la matriz tras cada paso."""
+    """Muestra las operaciones elementales, explicaciones pedagogicas y la matriz tras cada paso con scroll 2D."""
 
     def __init__(self, parent):
-        super().__init__(parent, fg_color=PALETA["panel"], corner_radius=12, border_width=1, border_color=PALETA["borde"])
-        ctk.CTkLabel(self, text="Procedimiento de Solución", font=FUENTE_SECCION, text_color=PALETA["texto"]).pack(anchor="w", padx=18, pady=(16, 8))
-        self.contenedor = ctk.CTkScrollableFrame(
-            self, fg_color="transparent", height=280,
-            scrollbar_button_color=PALETA["primario"],
-            scrollbar_button_hover_color=PALETA["primario_hover"],
+        super().__init__(parent, fg_color="transparent", corner_radius=0, border_width=0)
+
+        self.canvas_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.canvas_frame.pack(fill="both", expand=True, padx=4, pady=4)
+
+        self.canvas = tk.Canvas(
+            self.canvas_frame,
+            bg=resolver_color(PALETA["panel"]),
+            highlightthickness=0,
+            bd=0,
         )
-        self.contenedor.pack(fill="both", expand=True, padx=18, pady=(0, 16))
+        self.scroll_y = ctk.CTkScrollbar(
+            self.canvas_frame, orientation="vertical", command=self.canvas.yview,
+            button_color=PALETA["primario"], button_hover_color=PALETA["primario_hover"],
+        )
+        self.scroll_x = ctk.CTkScrollbar(
+            self.canvas_frame, orientation="horizontal", command=self.canvas.xview,
+            button_color=PALETA["primario"], button_hover_color=PALETA["primario_hover"],
+        )
+        self.canvas.configure(yscrollcommand=self.scroll_y.set, xscrollcommand=self.scroll_x.set)
+
+        self.canvas.grid(row=0, column=0, sticky="nsew")
+        self.scroll_y.grid(row=0, column=1, sticky="ns", padx=(4, 0))
+        self.scroll_x.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        self.canvas_frame.grid_rowconfigure(0, weight=1)
+        self.canvas_frame.grid_columnconfigure(0, weight=1)
+
+        self.grid_host = ctk.CTkFrame(self.canvas, fg_color="transparent")
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.grid_host, anchor="nw")
+
+        self.grid_host.bind("<Configure>", self._actualizar_scroll)
+        self.canvas.bind("<Configure>", self._on_canvas_configure)
+
+        self.canvas.bind("<Enter>", lambda e: self.canvas.bind_all("<MouseWheel>", self._on_mousewheel))
+        self.canvas.bind("<Leave>", lambda e: self.canvas.unbind_all("<MouseWheel>"))
+
         self.mostrar_placeholder()
 
+    def _on_mousewheel(self, event):
+        if event.state & 0x0001:
+            self.canvas.xview_scroll(int(-1 * (event.delta / 120)), "units")
+        else:
+            self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def _actualizar_scroll(self, event=None):
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def _on_canvas_configure(self, event):
+        width = max(event.width, self.grid_host.winfo_reqwidth())
+        self.canvas.itemconfig(self.canvas_window, width=width)
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
     def limpiar(self):
-        for widget in self.contenedor.winfo_children():
+        for widget in self.grid_host.winfo_children():
             widget.destroy()
 
     def mostrar_placeholder(self):
         self.limpiar()
         ctk.CTkLabel(
-            self.contenedor,
+            self.grid_host,
             text="Crea un sistema, ingresa los coeficientes y presiona Resolver sistema para ver el procedimiento paso a paso.",
             font=FUENTE_NORMAL,
             text_color=PALETA["texto_3"],
             wraplength=520,
             justify="left",
-        ).pack(anchor="w", pady=8)
+        ).pack(anchor="w", padx=14, pady=14)
 
     def mostrar_pasos(self, pasos):
         self.limpiar()
@@ -680,8 +722,8 @@ class ProcessPanel(ctk.CTkFrame):
             es_inicial = (indice == 0) or (tipo == "inicial")
             titulo_paso = "Matriz aumentada inicial" if es_inicial else f"Paso {indice}"
 
-            item = ctk.CTkFrame(self.contenedor, fg_color=PALETA["panel_2"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
-            item.pack(fill="x", pady=(0, 12), padx=2)
+            item = ctk.CTkFrame(self.grid_host, fg_color=PALETA["panel_2"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
+            item.pack(fill="x", expand=True, pady=(0, 12), padx=2)
 
             cabecera = ctk.CTkFrame(item, fg_color="transparent")
             cabecera.pack(fill="x", padx=14, pady=(10, 6))
@@ -721,7 +763,7 @@ class ProcessPanel(ctk.CTkFrame):
                     text=explicacion,
                     font=FUENTE_NORMAL,
                     text_color=PALETA["texto_2"],
-                    wraplength=480,
+                    wraplength=540,
                     justify="left",
                 ).pack(anchor="w", padx=10, pady=(0, 8))
 
@@ -746,29 +788,75 @@ class ProcessPanel(ctk.CTkFrame):
 
 
 class ResultPanel(ctk.CTkFrame):
-    """Presenta clasificacion, variables, solucion y verificacion."""
+    """Presenta clasificacion, variables, solucion y verificacion explicativa detallada."""
 
     def __init__(self, parent):
-        super().__init__(parent, fg_color=PALETA["panel"], corner_radius=12, border_width=1, border_color=PALETA["borde"])
-        ctk.CTkLabel(self, text="Resultado", font=FUENTE_SECCION).pack(anchor="w", padx=18, pady=(16, 8))
-        self.contenido = ctk.CTkFrame(self, fg_color="transparent")
-        self.contenido.pack(fill="both", expand=True, padx=18, pady=(0, 16))
+        super().__init__(parent, fg_color="transparent", corner_radius=0, border_width=0)
+
+        self.canvas_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.canvas_frame.pack(fill="both", expand=True, padx=4, pady=4)
+
+        self.canvas = tk.Canvas(
+            self.canvas_frame,
+            bg=resolver_color(PALETA["panel"]),
+            highlightthickness=0,
+            bd=0,
+        )
+        self.scroll_y = ctk.CTkScrollbar(
+            self.canvas_frame, orientation="vertical", command=self.canvas.yview,
+            button_color=PALETA["primario"], button_hover_color=PALETA["primario_hover"],
+        )
+        self.scroll_x = ctk.CTkScrollbar(
+            self.canvas_frame, orientation="horizontal", command=self.canvas.xview,
+            button_color=PALETA["primario"], button_hover_color=PALETA["primario_hover"],
+        )
+        self.canvas.configure(yscrollcommand=self.scroll_y.set, xscrollcommand=self.scroll_x.set)
+
+        self.canvas.grid(row=0, column=0, sticky="nsew")
+        self.scroll_y.grid(row=0, column=1, sticky="ns", padx=(4, 0))
+        self.scroll_x.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        self.canvas_frame.grid_rowconfigure(0, weight=1)
+        self.canvas_frame.grid_columnconfigure(0, weight=1)
+
+        self.grid_host = ctk.CTkFrame(self.canvas, fg_color="transparent")
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.grid_host, anchor="nw")
+
+        self.grid_host.bind("<Configure>", self._actualizar_scroll)
+        self.canvas.bind("<Configure>", self._on_canvas_configure)
+
+        self.canvas.bind("<Enter>", lambda e: self.canvas.bind_all("<MouseWheel>", self._on_mousewheel))
+        self.canvas.bind("<Leave>", lambda e: self.canvas.unbind_all("<MouseWheel>"))
+
         self.mostrar_placeholder()
 
+    def _on_mousewheel(self, event):
+        if event.state & 0x0001:
+            self.canvas.xview_scroll(int(-1 * (event.delta / 120)), "units")
+        else:
+            self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def _actualizar_scroll(self, event=None):
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def _on_canvas_configure(self, event):
+        width = max(event.width, self.grid_host.winfo_reqwidth())
+        self.canvas.itemconfig(self.canvas_window, width=width)
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
     def limpiar(self):
-        for widget in self.contenido.winfo_children():
+        for widget in self.grid_host.winfo_children():
             widget.destroy()
 
     def mostrar_placeholder(self):
         self.limpiar()
         ctk.CTkLabel(
-            self.contenido,
-            text="Aqui se mostraran la clasificacion, la solucion y la verificacion.",
+            self.grid_host,
+            text="Aqui se mostraran la clasificacion, la solucion y la verificacion explicativa paso a paso.",
             font=FUENTE_NORMAL,
             text_color=PALETA["texto_3"],
-            wraplength=360,
+            wraplength=480,
             justify="left",
-        ).pack(anchor="w", pady=8)
+        ).pack(anchor="w", padx=14, pady=14)
 
     def _estado_color(self, clasificacion):
         if "inconsistente" in clasificacion.lower():
@@ -780,74 +868,208 @@ class ResultPanel(ctk.CTkFrame):
     def mostrar_resultado(self, resultado):
         self.limpiar()
         color = self._estado_color(resultado["clasificacion"])
+        nombres_vars = resultado.get("nombres_variables", obtener_nombres_variables(len(resultado["matriz_inicial"][0]) - 1))
 
-        estado = ctk.CTkFrame(self.contenido, fg_color=PALETA["panel_2"], corner_radius=10)
-        estado.pack(fill="x", pady=(0, 12))
+        # 1. Estado y clasificacion
+        estado = ctk.CTkFrame(self.grid_host, fg_color=PALETA["panel_2"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
+        estado.pack(fill="x", expand=True, pady=(0, 12), padx=2)
         ctk.CTkFrame(estado, fg_color=color, width=5, corner_radius=8).pack(side="left", fill="y")
         texto_estado = ctk.CTkFrame(estado, fg_color="transparent")
         texto_estado.pack(side="left", fill="both", expand=True, padx=14, pady=12)
 
-        ctk.CTkLabel(texto_estado, text="Clasificacion del sistema", font=FUENTE_PEQUENA, text_color=PALETA["texto_3"]).pack(anchor="w")
+        ctk.CTkLabel(texto_estado, text="Clasificación del sistema", font=FUENTE_PEQUENA, text_color=PALETA["texto_3"]).pack(anchor="w")
         ctk.CTkLabel(texto_estado, text=resultado["clasificacion"], font=("Segoe UI", 15, "bold"), text_color=PALETA["texto"]).pack(anchor="w", pady=(2, 0))
         ctk.CTkLabel(texto_estado, text=resultado["descripcion"], font=FUENTE_PEQUENA, text_color=PALETA["texto_2"]).pack(anchor="w")
 
-        etiqueta_homogeneo = "Sistema homogeneo (Ax = 0)" if resultado["homogeneo"] else "Sistema no homogeneo"
+        # 2. Informacion de variables y homogeneidad
+        tarjeta_vars = ctk.CTkFrame(self.grid_host, fg_color=PALETA["panel_2"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
+        tarjeta_vars.pack(fill="x", expand=True, pady=(0, 12), padx=2)
+
+        etiqueta_homogeneo = "Sistema homogéneo (Ax = 0)" if resultado["homogeneo"] else "Sistema no homogéneo"
         ctk.CTkLabel(
-            self.contenido,
+            tarjeta_vars,
             text=etiqueta_homogeneo,
             font=("Segoe UI", 12, "bold"),
             text_color=PALETA["primario"],
-        ).pack(anchor="w", pady=(8, 2))
+        ).pack(anchor="w", padx=16, pady=(12, 4))
 
-        basicas = ", ".join(f"x{c + 1}" for c in resultado["variables_basicas"]) or "ninguna"
-        libres = ", ".join(f"x{c + 1}" for c in resultado["variables_libres"]) or "ninguna"
-        ctk.CTkLabel(self.contenido, text=f"Variables basicas: {basicas}", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(anchor="w", pady=2)
-        ctk.CTkLabel(self.contenido, text=f"Variables libres: {libres}", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(anchor="w", pady=(2, 12))
+        basicas = ", ".join(nombres_vars[c] for c in resultado["variables_basicas"]) or "ninguna"
+        libres = ", ".join(nombres_vars[c] for c in resultado["variables_libres"]) or "ninguna"
+        ctk.CTkLabel(tarjeta_vars, text=f"Variables básicas: {basicas}", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(anchor="w", padx=16, pady=2)
+        ctk.CTkLabel(tarjeta_vars, text=f"Variables libres: {libres}", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(anchor="w", padx=16, pady=(2, 12))
 
+        # 3. Solucion
         if resultado["solucion"] is not None:
-            self._mostrar_solucion_unica(resultado["solucion"])
+            self._mostrar_solucion_unica(resultado["solucion"], nombres_vars)
 
         if resultado["expresiones"] is not None:
-            self._mostrar_solucion_parametrica(resultado["expresiones"])
+            self._mostrar_solucion_parametrica(
+                resultado["expresiones"],
+                nombres_vars,
+                resultado.get("solucion_particular"),
+            )
 
+        # 4. Verificacion explicativa
         if resultado["verificacion"] is not None:
-            self._mostrar_verificacion(resultado["verificacion"])
+            es_param = (resultado["clasificacion"] == "Sistema consistente indeterminado")
+            self._mostrar_verificacion(resultado["verificacion"], es_parametrico=es_param)
+        else:
+            self._mostrar_verificacion_inconsistente()
 
-    def _mostrar_solucion_unica(self, solucion):
-        tarjeta = ctk.CTkFrame(self.contenido, fg_color=PALETA["panel_2"], corner_radius=10)
-        tarjeta.pack(fill="x", pady=(0, 12))
-        ctk.CTkLabel(tarjeta, text="Solucion", font=("Segoe UI", 15, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=14, pady=(12, 6))
-        for i, valor in enumerate(solucion, start=1):
-            ctk.CTkLabel(tarjeta, text=f"x{i} = {formatear_numero(valor)}", font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=14, pady=1)
-        ctk.CTkLabel(tarjeta, text="").pack(pady=3)
+    def _mostrar_solucion_unica(self, solucion, nombres_vars):
+        tarjeta = ctk.CTkFrame(self.grid_host, fg_color=PALETA["panel_2"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
+        tarjeta.pack(fill="x", expand=True, pady=(0, 12), padx=2)
+        ctk.CTkLabel(tarjeta, text="Solución encontrada", font=("Segoe UI", 15, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=16, pady=(12, 6))
+        for i, valor in enumerate(solucion):
+            var_nombre = nombres_vars[i]
+            ctk.CTkLabel(tarjeta, text=f"{var_nombre} = {formatear_numero(valor)}", font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=16, pady=2)
+        ctk.CTkLabel(tarjeta, text="").pack(pady=2)
 
-    def _mostrar_solucion_parametrica(self, expresiones):
-        tarjeta = ctk.CTkFrame(self.contenido, fg_color=PALETA["panel_2"], corner_radius=10)
-        tarjeta.pack(fill="x", pady=(0, 12))
-        ctk.CTkLabel(tarjeta, text="Solucion parametrica", font=("Segoe UI", 15, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=14, pady=(12, 6))
+    def _mostrar_solucion_parametrica(self, expresiones, nombres_vars, solucion_particular=None):
+        tarjeta = ctk.CTkFrame(self.grid_host, fg_color=PALETA["panel_2"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
+        tarjeta.pack(fill="x", expand=True, pady=(0, 12), padx=2)
+        ctk.CTkLabel(tarjeta, text="Solución paramétrica (infinitas soluciones)", font=("Segoe UI", 15, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=16, pady=(12, 6))
         for i in range(len(expresiones)):
-            ctk.CTkLabel(tarjeta, text=f"x{i + 1} = {expresiones[i]}", font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=14, pady=1)
-        ctk.CTkLabel(tarjeta, text="").pack(pady=3)
+            var_nombre = nombres_vars[i]
+            ctk.CTkLabel(tarjeta, text=f"{var_nombre} = {expresiones[i]}", font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=16, pady=2)
 
-    def _mostrar_verificacion(self, verificacion):
+        if solucion_particular is not None:
+            ctk.CTkLabel(tarjeta, text="Solución particular evaluada (parámetro(s) = 0):", font=("Segoe UI", 11, "bold"), text_color=PALETA["texto_3"]).pack(anchor="w", padx=16, pady=(10, 2))
+            part_str = ",  ".join(f"{nombres_vars[i]} = {formatear_numero(solucion_particular[i])}" for i in range(len(solucion_particular)))
+            ctk.CTkLabel(tarjeta, text=part_str, font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=16, pady=(0, 6))
+        ctk.CTkLabel(tarjeta, text="").pack(pady=2)
+
+    def _mostrar_verificacion(self, verificacion, es_parametrico=False):
         correcta, detalles = verificacion
-        color = PALETA["exito"] if correcta else PALETA["error"]
-        texto = "Solucion verificada" if correcta else "La solucion no coincide"
 
-        tarjeta = ctk.CTkFrame(self.contenido, fg_color=PALETA["panel_2"], corner_radius=10)
-        tarjeta.pack(fill="x")
-        ctk.CTkLabel(tarjeta, text="Verificacion", font=("Segoe UI", 15, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=14, pady=(12, 4))
-        ctk.CTkLabel(tarjeta, text=texto, font=FUENTE_NORMAL, text_color=color).pack(anchor="w", padx=14, pady=(0, 6))
+        tarjeta_principal = ctk.CTkFrame(self.grid_host, fg_color=PALETA["panel_2"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
+        tarjeta_principal.pack(fill="x", expand=True, pady=(0, 14), padx=2)
 
-        for i, (obtenido, esperado, coincide) in enumerate(detalles, start=1):
-            marca = "correcto" if coincide else "incorrecto"
+        header_frame = ctk.CTkFrame(tarjeta_principal, fg_color="transparent")
+        header_frame.pack(fill="x", padx=16, pady=(14, 4))
+
+        ctk.CTkLabel(
+            header_frame,
+            text="VERIFICACIÓN DE LA SOLUCIÓN",
+            font=("Segoe UI", 15, "bold"),
+            text_color=PALETA["primario"],
+        ).pack(side="left")
+
+        subtitulo = (
+            "Sustitución y comprobación con la solución particular en cada ecuación original:"
+            if es_parametrico
+            else "Sustitución de los valores encontrados en cada ecuación del sistema original:"
+        )
+        ctk.CTkLabel(
+            tarjeta_principal,
+            text=subtitulo,
+            font=FUENTE_PEQUENA,
+            text_color=PALETA["texto_3"],
+            wraplength=600,
+            justify="left",
+        ).pack(anchor="w", padx=16, pady=(0, 10))
+
+        for detalle in detalles:
+            item = ctk.CTkFrame(tarjeta_principal, fg_color=PALETA["entrada"], corner_radius=8, border_width=1, border_color=PALETA["borde"])
+            item.pack(fill="x", expand=True, padx=14, pady=(0, 12))
+
+            cabecera = ctk.CTkFrame(item, fg_color="transparent")
+            cabecera.pack(fill="x", padx=12, pady=(10, 6))
+
             ctk.CTkLabel(
-                tarjeta,
-                text=f"Ecuacion {i}: {formatear_numero(obtenido)} = {formatear_numero(esperado)} ({marca})",
-                font=FUENTE_PEQUENA,
+                cabecera,
+                text=f"Ecuación {detalle.indice}",
+                font=("Segoe UI", 12, "bold"),
+                text_color="#04191A",
+                fg_color=PALETA["primario"],
+                corner_radius=6,
+                padx=8,
+                pady=2,
+            ).pack(side="left", padx=(0, 10))
+
+            color_estado = PALETA["exito"] if detalle.coincide else PALETA["error"]
+            texto_estado = "✓ Ecuación verificada correctamente" if detalle.coincide else "✗ La igualdad no se cumple"
+            ctk.CTkLabel(
+                cabecera,
+                text=texto_estado,
+                font=("Segoe UI", 12, "bold"),
+                text_color=color_estado,
+            ).pack(side="left")
+
+            cuerpo = ctk.CTkFrame(item, fg_color="transparent")
+            cuerpo.pack(fill="x", padx=14, pady=(2, 10))
+
+            # 1. Ecuacion original
+            ctk.CTkLabel(cuerpo, text="Ecuación original:", font=("Segoe UI", 11, "bold"), text_color=PALETA["texto_3"]).pack(anchor="w", pady=(2, 0))
+            ctk.CTkLabel(cuerpo, text=detalle.ecuacion_original, font=FUENTE_MONO, text_color=PALETA["texto"]).pack(anchor="w", padx=10, pady=(1, 4))
+
+            # 2. Sustitucion
+            ctk.CTkLabel(cuerpo, text="Sustitución:", font=("Segoe UI", 11, "bold"), text_color=PALETA["texto_3"]).pack(anchor="w", pady=(2, 0))
+            ctk.CTkLabel(cuerpo, text=detalle.sustitucion, font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=10, pady=(1, 4))
+
+            # 3. Simplificacion
+            ctk.CTkLabel(cuerpo, text="Simplificación:", font=("Segoe UI", 11, "bold"), text_color=PALETA["texto_3"]).pack(anchor="w", pady=(2, 0))
+            for linea_s in detalle.simplificacion:
+                ctk.CTkLabel(cuerpo, text=linea_s, font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=10, pady=1)
+
+        # Resultado final
+        color_final = PALETA["exito"] if correcta else PALETA["error"]
+        tarjeta_final = ctk.CTkFrame(tarjeta_principal, fg_color=PALETA["panel_2"], corner_radius=8, border_width=2, border_color=color_final)
+        tarjeta_final.pack(fill="x", expand=True, padx=14, pady=(0, 14))
+
+        if correcta:
+            ctk.CTkLabel(
+                tarjeta_final,
+                text="✓ RESULTADO FINAL: Todas las ecuaciones fueron verificadas correctamente.",
+                font=("Segoe UI", 13, "bold"),
+                text_color=PALETA["exito"],
+            ).pack(anchor="w", padx=14, pady=(10, 2))
+            ctk.CTkLabel(
+                tarjeta_final,
+                text="La solución encontrada satisface todas las ecuaciones del sistema original.",
+                font=FUENTE_NORMAL,
                 text_color=PALETA["texto_2"],
-            ).pack(anchor="w", padx=14, pady=1)
-        ctk.CTkLabel(tarjeta, text="").pack(pady=3)
+            ).pack(anchor="w", padx=14, pady=(0, 10))
+        else:
+            ctk.CTkLabel(
+                tarjeta_final,
+                text="✗ RESULTADO FINAL: La solución no satisface el sistema original.",
+                font=("Segoe UI", 13, "bold"),
+                text_color=PALETA["error"],
+            ).pack(anchor="w", padx=14, pady=(10, 2))
+            ctk.CTkLabel(
+                tarjeta_final,
+                text="Una o más ecuaciones no cumplen la igualdad tras sustituir los valores.",
+                font=FUENTE_NORMAL,
+                text_color=PALETA["texto_2"],
+            ).pack(anchor="w", padx=14, pady=(0, 10))
+
+    def _mostrar_verificacion_inconsistente(self):
+        tarjeta = ctk.CTkFrame(self.grid_host, fg_color=PALETA["panel_2"], corner_radius=10, border_width=1, border_color=PALETA["error"])
+        tarjeta.pack(fill="x", expand=True, pady=(0, 14), padx=2)
+
+        ctk.CTkLabel(
+            tarjeta,
+            text="VERIFICACIÓN NO APLICABLE",
+            font=("Segoe UI", 15, "bold"),
+            text_color=PALETA["error"],
+        ).pack(anchor="w", padx=16, pady=(14, 4))
+
+        ctk.CTkLabel(
+            tarjeta,
+            text="El sistema es inconsistente y no tiene solución.",
+            font=("Segoe UI", 13, "bold"),
+            text_color=PALETA["texto"],
+        ).pack(anchor="w", padx=16, pady=(2, 4))
+
+        ctk.CTkLabel(
+            tarjeta,
+            text="Por definición matemática, no existe ningún conjunto de valores para las variables que satisfaga simultáneamente las ecuaciones del sistema.",
+            font=FUENTE_NORMAL,
+            text_color=PALETA["texto_2"],
+            wraplength=560,
+            justify="left",
+        ).pack(anchor="w", padx=16, pady=(0, 14))
 
 
 # -----------------------------------------------------------------------------
