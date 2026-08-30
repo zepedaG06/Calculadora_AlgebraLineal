@@ -1000,15 +1000,32 @@ class AplicacionAlgebraLineal(ctk.CTk):
 
         derecha = ctk.CTkFrame(contenido, fg_color="transparent")
         derecha.grid(row=1, column=1, sticky="nsew")
-        derecha.grid_rowconfigure(0, weight=3)
-        derecha.grid_rowconfigure(1, weight=2)
         derecha.grid_columnconfigure(0, weight=1)
+        derecha.grid_rowconfigure(0, weight=1)
 
-        self.process_panel = ProcessPanel(derecha)
-        self.process_panel.grid(row=0, column=0, sticky="nsew", pady=(0, 14))
+        self.tab_derecha = ctk.CTkTabview(
+            derecha,
+            fg_color=PALETA["panel"],
+            corner_radius=12,
+            border_width=1,
+            border_color=PALETA["borde"],
+            segmented_button_fg_color=PALETA["panel_2"],
+            segmented_button_selected_color=PALETA["primario"],
+            segmented_button_selected_hover_color=PALETA["primario_hover"],
+            segmented_button_unselected_color=PALETA["panel_2"],
+            segmented_button_unselected_hover_color=PALETA["secundario_hover"],
+            text_color=PALETA["texto"],
+        )
+        self.tab_derecha.grid(row=0, column=0, sticky="nsew")
 
-        self.result_panel = ResultPanel(derecha)
-        self.result_panel.grid(row=1, column=0, sticky="nsew")
+        tab_proc = self.tab_derecha.add("Procedimiento Paso a Paso")
+        tab_res = self.tab_derecha.add("Resultado y Verificación")
+
+        self.process_panel = ProcessPanel(tab_proc)
+        self.process_panel.pack(fill="both", expand=True)
+
+        self.result_panel = ResultPanel(tab_res)
+        self.result_panel.pack(fill="both", expand=True)
 
         return pagina
 
@@ -1173,6 +1190,7 @@ class AplicacionAlgebraLineal(ctk.CTk):
             resultado = resolver_sistema(A, b)
             self.process_panel.mostrar_pasos(resultado["pasos"])
             self.result_panel.mostrar_resultado(resultado)
+            self.tab_derecha.set("Procedimiento Paso a Paso")
         except Exception as error:
             messagebox.showerror("Error", str(error))
 
