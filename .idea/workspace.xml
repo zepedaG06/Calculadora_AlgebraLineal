@@ -3,14 +3,24 @@
   <component name="AutoImportSettings">
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
+  <component name="BackgroundAgentGlobalSettings">
+    <option name="selectedModelId" value="auto" />
+  </component>
   <component name="ChangeListManager">
-    <list default="true" id="b063673a-242a-44d1-834c-a3b57751a65a" name="Changes" comment="&quot;feat:Cambios en interfaz&quot;">
+    <list default="true" id="b063673a-242a-44d1-834c-a3b57751a65a" name="Changes" comment="&quot;feat: Varios cambios, sistema determina si es homogeneo,etc&quot;">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Programa 1_Grupo3.py" beforeDir="false" afterPath="$PROJECT_DIR$/Programa 1_Grupo3.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/universidad_americana.png.webp" beforeDir="false" afterPath="$PROJECT_DIR$/universidad_americana.png" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="CopilotPersistence">
+    <persistenceIdMap>
+      <entry key="_/Users/andresmejia/IdeaProjects/Calculadora_AlgebraLineal" value="3IjYiyuo4XoGDVYEacB1isp1olu" />
+    </persistenceIdMap>
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
@@ -32,6 +42,21 @@
   &quot;fromUser&quot;: false
 }</component>
   <component name="ProjectId" id="3IY1rG1Su27eELh8bFAlHj9M1Kh" />
+  <component name="ProjectSessionTemplates">
+    <option name="panelTemplate">
+      <template>
+        <option name="modeId" value="Agent" />
+        <option name="model">
+          <model>
+            <option name="modelType" value="builtin_id" />
+            <option name="modelValue" value="auto" />
+          </model>
+        </option>
+        <option name="targetType" value="BACKGROUND" />
+        <option name="worktreeMode" value="WORKSPACE" />
+      </template>
+    </option>
+  </component>
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
@@ -43,11 +68,14 @@
     &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
     &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
+    &quot;copilot.chat.legacySessionMetadata.migrated&quot;: &quot;true&quot;,
     &quot;git-widget-placeholder&quot;: &quot;main&quot;,
     &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
     &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.jshint&quot;: &quot;true&quot;,
     &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
     &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.jshint&quot;: &quot;&quot;,
     &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
     &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
     &quot;project.structure.last.edited&quot;: &quot;Modules&quot;,
@@ -104,9 +132,21 @@
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
   </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="&quot;feat:Cambios en interfaz&quot;" />
-    <option name="LAST_COMMIT_MESSAGE" value="&quot;feat:Cambios en interfaz&quot;" />
+    <MESSAGE value="&quot;feat: Varios cambios, sistema determina si es homogeneo,etc&quot;" />
+    <option name="LAST_COMMIT_MESSAGE" value="&quot;feat: Varios cambios, sistema determina si es homogeneo,etc&quot;" />
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />
