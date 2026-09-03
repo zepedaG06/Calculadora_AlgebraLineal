@@ -147,10 +147,11 @@ class PasoEliminacion(dict):
 
 def gauss_jordan(matriz_aumentada, num_variables):
     """
-    Reduce la matriz aumentada hasta forma escalonada reducida por operaciones elementales.
+    Reduce [A | b] a forma escalonada reducida por filas.
 
-    Registra cada paso ejecutado con su operacion elemental, explicacion pedagogica
-    y la matriz aumentada resultante.
+    Todas las operaciones se hacen con Fraction para evitar errores
+    de redondeo. En cada columna se selecciona como pivote la fila
+    disponible con mayor valor absoluto y se registra cada operación.
     """
     matriz = copiar_matriz(matriz_aumentada)
     pasos = [
@@ -161,14 +162,27 @@ def gauss_jordan(matriz_aumentada, num_variables):
             tipo="inicial",
         )
     ]
+
     columnas_pivote = []
     fila_pivote = 0
+    num_filas = len(matriz)
 
     for columna in range(num_variables):
-        fila_encontrada = buscar_fila_pivote(matriz, fila_pivote, columna)
+        if fila_pivote >= num_filas:
+            break
 
-        if fila_encontrada is None:
+        # Elegir la mejor fila pivote entre las filas disponibles.
+        candidatos = [
+            fila for fila in range(fila_pivote, num_filas)
+            if matriz[fila][columna] != 0
+        ]
+        if not candidatos:
             continue
+
+        fila_encontrada = max(
+            candidatos,
+            key=lambda fila: abs(matriz[fila][columna])
+        )
 
         if fila_encontrada != fila_pivote:
             intercambiar_filas(matriz, fila_pivote, fila_encontrada)
@@ -176,9 +190,9 @@ def gauss_jordan(matriz_aumentada, num_variables):
                 PasoEliminacion(
                     operacion=f"F{fila_pivote + 1} ↔ F{fila_encontrada + 1}",
                     explicacion=(
-                        f"Se intercambian la fila {fila_pivote + 1} y la fila {fila_encontrada + 1} "
-                        f"porque el elemento en la posición pivote actual es cero. Se necesita una fila con un "
-                        f"valor no nulo en la columna {columna + 1} para continuar la eliminación."
+                        f"Se intercambian F{fila_pivote + 1} y F{fila_encontrada + 1} "
+                        f"para colocar en la posición pivote un valor no nulo "
+                        f"de la columna {columna + 1}."
                     ),
                     matriz=copiar_matriz(matriz),
                     tipo="intercambio",
@@ -186,86 +200,76 @@ def gauss_jordan(matriz_aumentada, num_variables):
             )
 
         valor_pivote = matriz[fila_pivote][columna]
+
+        # Convertir el pivote en 1.
         if valor_pivote != 1:
             inverso = Fraction(1, 1) / valor_pivote
             multiplicar_fila(matriz, fila_pivote, inverso)
-            if valor_pivote == -1:
+
+            if inverso == -1:
                 op_str = f"F{fila_pivote + 1} → -F{fila_pivote + 1}"
-                expl = (
-                    f"Se multiplica la fila {fila_pivote + 1} por -1 para convertir el pivote "
-                    f"de la columna {columna + 1} en 1."
-                )
             else:
-                inv_str = f"({formatear_numero(inverso)})" if inverso.denominator != 1 else formatear_numero(inverso)
-                op_str = f"F{fila_pivote + 1} → {inv_str}F{fila_pivote + 1}"
-                expl = (
-                    f"Se multiplica la fila {fila_pivote + 1} por {formatear_numero(inverso)} "
-                    f"(equivalente a dividir entre {formatear_numero(valor_pivote)}) para convertir el pivote "
-                    f"de la columna {columna + 1} en 1."
-                )
+                op_str = f"F{fila_pivote + 1} → {formatear_numero(inverso)}F{fila_pivote + 1}"
+
             pasos.append(
                 PasoEliminacion(
                     operacion=op_str,
-                    explicacion=expl,
+                    explicacion=(
+                        f"Se multiplica F{fila_pivote + 1} por "
+                        f"{formatear_numero(inverso)} para convertir el pivote "
+                        f"de la columna {columna + 1} en 1."
+                    ),
                     matriz=copiar_matriz(matriz),
                     tipo="escalado",
                 )
             )
 
-        for fila in range(len(matriz)):
+        # Hacer cero la columna del pivote en TODAS las demás filas.
+        for fila in range(num_filas):
             if fila == fila_pivote:
                 continue
 
             factor = matriz[fila][columna]
-            if factor != 0:
-                sumar_multiplo_fila(matriz, fila, fila_pivote, -factor)
-                posicion = "debajo" if fila > fila_pivote else "arriba"
-                abs_factor = abs(factor)
-                signo = "-" if factor > 0 else "+"
+            if factor == 0:
+                continue
 
-                if abs_factor == 1:
-                    op_str = f"F{fila + 1} → F{fila + 1} {signo} F{fila_pivote + 1}"
-                    if factor > 0:
-                        expl = (
-                            f"Se resta la fila {fila_pivote + 1} a la fila {fila + 1} para generar "
-                            f"un cero {posicion} del pivote en la columna {columna + 1}."
-                        )
-                    else:
-                        expl = (
-                            f"Se suma la fila {fila_pivote + 1} a la fila {fila + 1} para generar "
-                            f"un cero {posicion} del pivote en la columna {columna + 1}."
-                        )
+            sumar_multiplo_fila(matriz, fila, fila_pivote, -factor)
+
+            factor_abs = abs(factor)
+            if factor > 0:
+                if factor_abs == 1:
+                    op_str = f"F{fila + 1} → F{fila + 1} - F{fila_pivote + 1}"
                 else:
-                    fact_str = f"({formatear_numero(abs_factor)})" if abs_factor.denominator != 1 else formatear_numero(abs_factor)
-                    op_str = f"F{fila + 1} → F{fila + 1} {signo} {fact_str}F{fila_pivote + 1}"
-                    if factor > 0:
-                        expl = (
-                            f"Se multiplica la fila {fila_pivote + 1} por {formatear_numero(abs_factor)} y se resta el resultado "
-                            f"a la fila {fila + 1} para generar un cero {posicion} del pivote en la columna {columna + 1}."
-                        )
-                    else:
-                        expl = (
-                            f"Se multiplica la fila {fila_pivote + 1} por {formatear_numero(abs_factor)} y se suma el resultado "
-                            f"a la fila {fila + 1} para generar un cero {posicion} del pivote en la columna {columna + 1}."
-                        )
-
-                pasos.append(
-                    PasoEliminacion(
-                        operacion=op_str,
-                        explicacion=expl,
-                        matriz=copiar_matriz(matriz),
-                        tipo="eliminacion",
+                    op_str = (
+                        f"F{fila + 1} → F{fila + 1} - "
+                        f"({formatear_numero(factor_abs)})F{fila_pivote + 1}"
                     )
+            else:
+                if factor_abs == 1:
+                    op_str = f"F{fila + 1} → F{fila + 1} + F{fila_pivote + 1}"
+                else:
+                    op_str = (
+                        f"F{fila + 1} → F{fila + 1} + "
+                        f"({formatear_numero(factor_abs)})F{fila_pivote + 1}"
+                    )
+
+            posicion = "debajo" if fila > fila_pivote else "arriba"
+            pasos.append(
+                PasoEliminacion(
+                    operacion=op_str,
+                    explicacion=(
+                        f"Se hace cero el elemento de F{fila + 1} en la columna "
+                        f"{columna + 1}, {posicion} del pivote, usando F{fila_pivote + 1}."
+                    ),
+                    matriz=copiar_matriz(matriz),
+                    tipo="eliminacion",
                 )
+            )
 
         columnas_pivote.append(columna)
         fila_pivote += 1
 
-        if fila_pivote == len(matriz):
-            break
-
     return matriz, columnas_pivote, pasos
-
 
 def fila_inconsistente(fila, num_variables):
     """Detecta una contradiccion: 0x1 + 0x2 + ... + 0xn = k, con k distinto de 0."""
@@ -487,16 +491,39 @@ def verificar_solucion(A_original, b_original, solucion):
     Verifica Ax = b usando el sistema original de forma explicativa y pedagogica.
     Genera la ecuacion original, la sustitucion explicita y la simplificacion paso a paso.
     """
+    if not A_original or not b_original:
+        return False, []
+
     num_vars = len(A_original[0])
+
+    if len(A_original) != len(b_original):
+        return False, []
+
+    if any(len(fila) != num_vars for fila in A_original):
+        return False, []
+
+    if len(solucion) != num_vars:
+        return False, []
+
     nombres_vars = obtener_nombres_variables(num_vars)
     detalles = []
     correcta = True
 
     for i, fila in enumerate(A_original):
         esperado = b_original[i]
+
+        # La comprobación real se hace con el sistema ORIGINAL,
+        # no con la matriz reducida.
+        suma_directa = sum(
+            fila[j] * solucion[j] for j in range(num_vars)
+        )
+        coincide = suma_directa == esperado
+
         orig_str = formatear_ecuacion_original(fila, esperado, nombres_vars)
         sust_str = formatear_sustitucion(fila, esperado, solucion)
-        simpl_pasos, coincide, suma = formatear_simplificacion(fila, esperado, solucion)
+        simpl_pasos, _, _ = formatear_simplificacion(fila, esperado, solucion)
+
+        # La suma calculada directamente es la autoridad de la verificación.
         correcta = correcta and coincide
 
         detalles.append(
@@ -505,7 +532,7 @@ def verificar_solucion(A_original, b_original, solucion):
                 ecuacion_original=orig_str,
                 sustitucion=sust_str,
                 simplificacion=simpl_pasos,
-                suma_obtenida=suma,
+                suma_obtenida=suma_directa,
                 esperado=esperado,
                 coincide=coincide,
             )
@@ -548,10 +575,12 @@ def resolver_sistema(A, b):
         expresiones, libres, parametros = obtener_solucion_parametrica(
             rref, columnas_pivote, num_variables
         )
+        # Para verificar una solución infinita elegimos todos los parámetros = 0.
+        # Así, las variables libres valen 0 y cada variable básica toma
+        # exactamente el término independiente de su fila pivote.
         solucion_particular = [Fraction(0) for _ in range(num_variables)]
-        for variable, expresion in expresiones.items():
-            if variable not in libres:
-                solucion_particular[variable] = rref[columnas_pivote.index(variable)][-1]
+        for fila, columna_pivote in enumerate(columnas_pivote):
+            solucion_particular[columna_pivote] = rref[fila][-1]
 
         resultado["expresiones"] = expresiones
         resultado["variables_libres"] = libres
@@ -1552,12 +1581,48 @@ class AplicacionAlgebraLineal(ctk.CTk):
             command=self.crear_sistema,
         ).pack(side="left")
 
+        ctk.CTkButton(
+            fila,
+            text="2 × 2",
+            width=80,
+            height=40,
+            corner_radius=8,
+            fg_color=PALETA["secundario"],
+            hover_color=PALETA["secundario_hover"],
+            text_color=PALETA["texto"],
+            font=("Segoe UI", 12, "bold"),
+            command=self.crear_sistema_2x2,
+        ).pack(side="left", padx=(8, 0))
+
         ctk.CTkLabel(
             fila,
-            text="Puedes escribir enteros, decimales o fracciones como 3/2.",
+            text="Enteros, decimales o fracciones como 3/2.",
             font=FUENTE_PEQUENA,
             text_color=PALETA["texto_3"],
-        ).pack(side="left", padx=18)
+        ).pack(side="left", padx=14)
+
+    def crear_sistema_2x2(self):
+        """Crea rápidamente un sistema de 2 ecuaciones con 2 variables."""
+        self.entrada_m.delete(0, "end")
+        self.entrada_m.insert(0, "2")
+        self.entrada_n.delete(0, "end")
+        self.entrada_n.insert(0, "2")
+        self.matrix_panel.crear_matriz(2, 2)
+
+        # Ejemplo sencillo para que el usuario vea inmediatamente
+        # cómo se organiza [A | b] en un sistema 2x2.
+        ejemplo = [
+            ["2", "1", "5"],
+            ["1", "-1", "1"],
+        ]
+        for i, fila in enumerate(ejemplo):
+            for j, valor in enumerate(fila):
+                self.matrix_panel.entradas[i][j].delete(0, "end")
+                self.matrix_panel.entradas[i][j].insert(0, valor)
+
+        self.process_panel.mostrar_placeholder()
+        self.result_panel.mostrar_placeholder()
+
 
     def crear_sistema(self):
         try:

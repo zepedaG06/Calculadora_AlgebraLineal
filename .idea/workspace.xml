@@ -7,7 +7,8 @@
     <option name="selectedModelId" value="auto" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="b063673a-242a-44d1-834c-a3b57751a65a" name="Changes" comment="&quot;feat: documentacion&quot;">
+    <list default="true" id="b063673a-242a-44d1-834c-a3b57751a65a" name="Changes" comment="&quot;feat: sin documentacion intellij&quot;">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Programa 1_Grupo3.py" beforeDir="false" afterPath="$PROJECT_DIR$/Programa 1_Grupo3.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -145,7 +146,8 @@
     <MESSAGE value="&quot;feat:Cambios en interfaz&quot;" />
     <MESSAGE value="&quot;feat: Varios cambios, sistema determina si es homogeneo,etc&quot;" />
     <MESSAGE value="&quot;feat: documentacion&quot;" />
-    <option name="LAST_COMMIT_MESSAGE" value="&quot;feat: documentacion&quot;" />
+    <MESSAGE value="&quot;feat: sin documentacion intellij&quot;" />
+    <option name="LAST_COMMIT_MESSAGE" value="&quot;feat: sin documentacion intellij&quot;" />
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />
