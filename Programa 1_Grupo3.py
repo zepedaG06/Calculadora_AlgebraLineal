@@ -1598,48 +1598,12 @@ class AplicacionAlgebraLineal(ctk.CTk):
             command=self.crear_sistema,
         ).pack(side="left")
 
-        ctk.CTkButton(
-            fila,
-            text="2 × 2",
-            width=80,
-            height=40,
-            corner_radius=8,
-            fg_color=PALETA["secundario"],
-            hover_color=PALETA["secundario_hover"],
-            text_color=PALETA["texto"],
-            font=("Segoe UI", 12, "bold"),
-            command=self.crear_sistema_2x2,
-        ).pack(side="left", padx=(8, 0))
-
         ctk.CTkLabel(
             fila,
             text="Enteros, decimales o fracciones como 3/2.",
             font=FUENTE_PEQUENA,
             text_color=PALETA["texto_3"],
         ).pack(side="left", padx=14)
-
-    def crear_sistema_2x2(self):
-        """Crea rápidamente un sistema de 2 ecuaciones con 2 variables."""
-        self.entrada_m.delete(0, "end")
-        self.entrada_m.insert(0, "2")
-        self.entrada_n.delete(0, "end")
-        self.entrada_n.insert(0, "2")
-        self.matrix_panel.crear_matriz(2, 2)
-
-        # Ejemplo sencillo para que el usuario vea inmediatamente
-        # cómo se organiza [A | b] en un sistema 2x2.
-        ejemplo = [
-            ["2", "1", "5"],
-            ["1", "-1", "1"],
-        ]
-        for i, fila in enumerate(ejemplo):
-            for j, valor in enumerate(fila):
-                self.matrix_panel.entradas[i][j].delete(0, "end")
-                self.matrix_panel.entradas[i][j].insert(0, valor)
-
-        self.process_panel.mostrar_placeholder()
-        self.result_panel.mostrar_placeholder()
-
 
     def crear_sistema(self):
         try:
