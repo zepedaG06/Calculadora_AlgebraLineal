@@ -779,8 +779,20 @@ class MatrixInputPanel(ctk.CTkFrame):
         self.entradas = []
         self.dimension_label.configure(text=f"{m} ecuaciones x {n} variables")
 
-        ctk.CTkLabel(self.grid_host, text="A", font=FUENTE_PEQUENA, text_color=PALETA["primario"]).grid(row=0, column=0, columnspan=n, pady=(4, 8))
-        ctk.CTkLabel(self.grid_host, text="b", font=FUENTE_PEQUENA, text_color=PALETA["primario"]).grid(row=0, column=n + 1, pady=(4, 8))
+        for j in range(n):
+            ctk.CTkLabel(
+                self.grid_host,
+                text=f"x{j + 1}",
+                font=("Segoe UI", 12, "bold"),
+                text_color=PALETA["primario"],
+            ).grid(row=0, column=j, padx=4, pady=(4, 8))
+
+        ctk.CTkLabel(
+            self.grid_host,
+            text="b",
+            font=("Segoe UI", 12, "bold"),
+            text_color=PALETA["primario"],
+        ).grid(row=0, column=n + 1, padx=4, pady=(4, 8))
 
         for i in range(m):
             fila = []
