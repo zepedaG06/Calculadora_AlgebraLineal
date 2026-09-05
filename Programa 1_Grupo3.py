@@ -194,7 +194,7 @@ def gauss_jordan(matriz_aumentada, num_variables):
                     explicacion=(
                         f"Se intercambian F{fila_pivote + 1} y F{fila_encontrada + 1} "
                         f"para colocar en la posición pivote un valor no nulo "
-                        f"de la columna {columna + 1}."
+                        f"de la columna {columna + 1} (variable x{columna + 1})."
                     ),
                     matriz=copiar_matriz(matriz),
                     tipo="intercambio",
@@ -211,7 +211,8 @@ def gauss_jordan(matriz_aumentada, num_variables):
             if inverso == -1:
                 op_str = f"F{fila_pivote + 1} → -F{fila_pivote + 1}"
             else:
-                op_str = f"F{fila_pivote + 1} → {formatear_numero(inverso)}F{fila_pivote + 1}"
+                k_inv = str(inverso.numerator) if inverso.denominator == 1 else f"({formatear_numero(inverso)})"
+                op_str = f"F{fila_pivote + 1} → {k_inv}F{fila_pivote + 1}"
 
             pasos.append(
                 PasoEliminacion(
@@ -219,7 +220,7 @@ def gauss_jordan(matriz_aumentada, num_variables):
                     explicacion=(
                         f"Se multiplica F{fila_pivote + 1} por "
                         f"{formatear_numero(inverso)} para convertir el pivote "
-                        f"de la columna {columna + 1} en 1."
+                        f"de la columna {columna + 1} (variable x{columna + 1}) en 1."
                     ),
                     matriz=copiar_matriz(matriz),
                     tipo="escalado",
@@ -238,22 +239,17 @@ def gauss_jordan(matriz_aumentada, num_variables):
             sumar_multiplo_fila(matriz, fila, fila_pivote, -factor)
 
             factor_abs = abs(factor)
+            k_str = str(factor_abs.numerator) if factor_abs.denominator == 1 else f"({formatear_numero(factor_abs)})"
             if factor > 0:
                 if factor_abs == 1:
                     op_str = f"F{fila + 1} → F{fila + 1} - F{fila_pivote + 1}"
                 else:
-                    op_str = (
-                        f"F{fila + 1} → F{fila + 1} - "
-                        f"({formatear_numero(factor_abs)})F{fila_pivote + 1}"
-                    )
+                    op_str = f"F{fila + 1} → F{fila + 1} - {k_str}F{fila_pivote + 1}"
             else:
                 if factor_abs == 1:
                     op_str = f"F{fila + 1} → F{fila + 1} + F{fila_pivote + 1}"
                 else:
-                    op_str = (
-                        f"F{fila + 1} → F{fila + 1} + "
-                        f"({formatear_numero(factor_abs)})F{fila_pivote + 1}"
-                    )
+                    op_str = f"F{fila + 1} → F{fila + 1} + {k_str}F{fila_pivote + 1}"
 
             posicion = "debajo" if fila > fila_pivote else "arriba"
             pasos.append(
@@ -261,7 +257,7 @@ def gauss_jordan(matriz_aumentada, num_variables):
                     operacion=op_str,
                     explicacion=(
                         f"Se hace cero el elemento de F{fila + 1} en la columna "
-                        f"{columna + 1}, {posicion} del pivote, usando F{fila_pivote + 1}."
+                        f"{columna + 1} (variable x{columna + 1}), {posicion} del pivote, usando F{fila_pivote + 1}."
                     ),
                     matriz=copiar_matriz(matriz),
                     tipo="eliminacion",
