@@ -1553,7 +1553,7 @@ class AplicacionAlgebraLineal(ctk.CTk):
             ("Variables libres", "Las variables sin columna pivote; su valor se deja como parametro (t, s, r, ...)."),
             ("Sistema consistente", "Tiene al menos una solucion (determinado: unica, o indeterminado: infinitas)."),
             ("Sistema inconsistente", "No tiene solucion; aparece una fila equivalente a 0 = k con k distinto de cero."),
-            ("Sistema homogeneo", "Aquel en el que todos los terminos independientes (b) son cero; siempre es consistente porque x = 0 es una solucion."),
+            ("Sistema homogeneo", "Aquel en el que todos los terminos independientes (b) son cero; siempre es consistente porque la solucion trivial (x1 = x2 = ... = 0) siempre lo satisface."),
         ]
 
         tarjeta_conceptos = ctk.CTkFrame(cuerpo, fg_color=PALETA["panel"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
