@@ -30,7 +30,9 @@ EPSILON = Fraction(0)
 # Carpeta donde vive este archivo, para poder cargar el logo sin importar
 # desde donde se ejecute el programa.
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-RUTA_LOGO = os.path.join(BASE_DIR, "logo_uam.png")
+RUTA_LOGO = os.path.join(BASE_DIR, "universidad_americana.png")
+if not os.path.exists(RUTA_LOGO):
+    RUTA_LOGO = os.path.join(BASE_DIR, "logo_uam.png")
 
 
 # -----------------------------------------------------------------------------
