@@ -305,18 +305,30 @@ def obtener_solucion_unica(matriz_rref, columnas_pivote, num_variables):
 
 
 def nombres_parametros(cantidad):
-    """Genera nombres simples para variables libres."""
-    base = ["t", "s", "r", "u", "v", "w"]
+    """
+    Genera nombres estándar para variables libres.
+    - Para 1 variable libre: ['t']
+    - Para 2 variables libres: ['s', 't']
+    - Para 3 variables libres: ['r', 's', 't']
+    - Para más variables libres: ['r', 's', 't', 'u', ...] o ['t1', 't2', ...]
+    """
+    if cantidad == 1:
+        return ["t"]
+    elif cantidad == 2:
+        return ["s", "t"]
+    elif cantidad == 3:
+        return ["r", "s", "t"]
+    base = ["r", "s", "t", "u", "v", "w"]
     if cantidad <= len(base):
         return base[:cantidad]
-    return base + [f"p{i}" for i in range(1, cantidad - len(base) + 1)]
+    return [f"t{i + 1}" for i in range(cantidad)]
 
 
 def obtener_solucion_parametrica(matriz_rref, columnas_pivote, num_variables):
     """
-    Expresa variables basicas en funcion de variables libres.
+    Expresa variables básicas en función de variables libres.
 
-    Si una columna no es pivote, su variable queda libre y recibe un parametro.
+    Si una columna no es pivote, su variable queda libre y recibe un parámetro.
     """
     variables_libres = [c for c in range(num_variables) if c not in columnas_pivote]
     parametros = dict(zip(variables_libres, nombres_parametros(len(variables_libres))))
@@ -347,7 +359,8 @@ def obtener_solucion_parametrica(matriz_rref, columnas_pivote, num_variables):
 
         expresiones[columna_pivote] = " + ".join(terminos).replace("+ -", "- ") if terminos else "0"
 
-    return expresiones, variables_libres, parametros
+    expresiones_ordenadas = {i: expresiones[i] for i in range(num_variables)}
+    return expresiones_ordenadas, variables_libres, parametros
 
 
 def obtener_nombres_variables(num_variables):
