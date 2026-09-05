@@ -351,13 +351,7 @@ def obtener_solucion_parametrica(matriz_rref, columnas_pivote, num_variables):
 
 
 def obtener_nombres_variables(num_variables):
-    """Genera nombres de variables intuitivos (x, y, z, w o x1, x2, ...)."""
-    if num_variables == 2:
-        return ["x", "y"]
-    elif num_variables == 3:
-        return ["x", "y", "z"]
-    elif num_variables == 4:
-        return ["x", "y", "z", "w"]
+    """Genera nombres de variables consistentes: x1, x2, x3, ..."""
     return [f"x{i + 1}" for i in range(num_variables)]
 
 
