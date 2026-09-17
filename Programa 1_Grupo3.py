@@ -20,9 +20,10 @@ except ModuleNotFoundError:
     ctk = None
 
 try:
-    from PIL import Image
+    from PIL import Image, ImageTk
 except ModuleNotFoundError:
     Image = None
+    ImageTk = None
 
 
 EPSILON = Fraction(0)
@@ -656,19 +657,42 @@ def resolver_color(par):
 
 
 def cargar_logo(tamano=(96, 96)):
-    """Carga el logo de la UAM como CTkImage, si esta disponible. Imprime info de depuración."""
-    if ctk is None or Image is None:
-        print("cargar_logo: customtkinter o PIL no disponibles (ctk, Image):", bool(ctk), bool(Image))
-        return None
-    print("cargar_logo: buscando logo en:", RUTA_LOGO, "->", os.path.exists(RUTA_LOGO))
+    """Carga el logo de la UAM.
+
+    Intenta crear un CTkImage usando PIL (si PIL y customtkinter están disponibles).
+    Si eso falla, intenta ImageTk.PhotoImage. Como último recurso usa
+    tkinter.PhotoImage (depende del soporte PNG en la build de Tk).
+    """
     if not os.path.exists(RUTA_LOGO):
+        print("cargar_logo: no existe el archivo de logo:", RUTA_LOGO)
         return None
+
+    # 1) CTkImage con PIL (ideal cuando customtkinter + Pillow están presentes)
+    if Image is not None and ctk is not None:
+        try:
+            imagen = Image.open(RUTA_LOGO).convert("RGBA")
+            logo = ctk.CTkImage(light_image=imagen, dark_image=imagen, size=tamano)
+            return logo
+        except Exception as e:
+            print("cargar_logo: fallo creando CTkImage con PIL:", e)
+
+    # 2) ImageTk.PhotoImage (si Pillow está instalado con ImageTk)
+    if Image is not None and 'ImageTk' in globals() and ImageTk is not None:
+        try:
+            imagen = Image.open(RUTA_LOGO).convert("RGBA")
+            # Redimensionar para que PhotoImage tenga el tamaño esperado
+            imagen = imagen.resize(tamano, Image.LANCZOS)
+            photo = ImageTk.PhotoImage(imagen)
+            return photo
+        except Exception as e:
+            print("cargar_logo: fallo creando ImageTk.PhotoImage:", e)
+
+    # 3) Fallback a tkinter.PhotoImage (puede fallar según la build de Tk)
     try:
-        imagen = Image.open(RUTA_LOGO).convert("RGBA")
-        logo = ctk.CTkImage(light_image=imagen, dark_image=imagen, size=tamano)
-        return logo
+        photo = tk.PhotoImage(file=RUTA_LOGO)
+        return photo
     except Exception as e:
-        print("Error cargando logo:", e)
+        print("cargar_logo: fallo creando PhotoImage:", e)
         return None
 
 
@@ -1315,12 +1339,15 @@ class AplicacionAlgebraLineal(ctk.CTk):
 
     def _configurar_icono_ventana(self):
         """Usa el logo de la UAM como icono de la ventana (si esta disponible)."""
-        if Image is None or not os.path.exists(RUTA_LOGO):
+        if not os.path.exists(RUTA_LOGO):
             return
         try:
+            # tkinter puede cargar PNG directamente con PhotoImage; no requerimos PIL para el icono.
             self._icono_tk = tk.PhotoImage(file=RUTA_LOGO)
             self.iconphoto(True, self._icono_tk)
-        except Exception:
+        except Exception as e:
+            # No es crítico; registrar para depuración si falla.
+            print("_configurar_icono_ventana: fallo al establecer icono:", e)
             pass
 
     def crear_sidebar(self):
@@ -1348,7 +1375,8 @@ class AplicacionAlgebraLineal(ctk.CTk):
 
         self.nav_botones = {}
         self.nav_botones["calculadora"] = self._nav_item(sidebar, "Calculadora", "calculadora", activo=True)
-        self.nav_botones["vectorial"] = self._nav_item(sidebar, "Ecuaciones Vectoriales", "vectorial")
+        self.nav_botones["vectorial"] = self._nav_item(sidebar, "Combinaciones Lineales", "vectorial")
+        self.nav_botones["axb"] = self._nav_item(sidebar, "Ecuacion Matricial Ax=b", "axb")
         self.nav_botones["metodo"] = self._nav_item(sidebar, "Metodo de Eliminacion", "metodo")
         self.nav_botones["ayuda"] = self._nav_item(sidebar, "Ayuda", "ayuda")
 
@@ -1395,6 +1423,7 @@ class AplicacionAlgebraLineal(ctk.CTk):
         self.paginas = {
             "calculadora": self._crear_pagina_calculadora(contenedor),
             "vectorial": self._crear_pagina_vectorial(contenedor),
+            "axb": self._crear_pagina_axb(contenedor),
             "metodo": self._crear_pagina_metodo(contenedor),
             "ayuda": self._crear_pagina_ayuda(contenedor),
         }
@@ -1472,48 +1501,53 @@ class AplicacionAlgebraLineal(ctk.CTk):
         return pagina
 
     def _crear_pagina_vectorial(self, parent):
-        """Pagina para resolver ecuaciones vectoriales mediante combinaciones lineales."""
         pagina = ctk.CTkFrame(parent, fg_color=PALETA["fondo"], corner_radius=0)
         pagina.grid_columnconfigure(0, weight=1)
         pagina.grid_rowconfigure(1, weight=1)
 
         self._crear_encabezado(
             pagina,
-            "Ecuaciones Vectoriales",
-            "Resuelve combinaciones lineales de vectores usando eliminacion por filas",
+            "Combinaciones Lineales",
+            "Verifica si un vector pertenece al espacio generado por 2 o mas vectores",
         )
 
         cuerpo = ctk.CTkScrollableFrame(pagina, fg_color="transparent")
         cuerpo.grid(row=1, column=0, sticky="nsew", padx=28, pady=(0, 24))
 
-        # Configuracion
         config = ctk.CTkFrame(cuerpo, fg_color=PALETA["panel"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
         config.pack(fill="x", pady=(0, 14))
         ctk.CTkLabel(config, text="Configuracion", font=FUENTE_SECCION, text_color=PALETA["texto"]).pack(anchor="w", padx=16, pady=(14, 8))
 
         fila_config = ctk.CTkFrame(config, fg_color="transparent")
-        fila_config.pack(fill="x", padx=16, pady=(0, 14))
+        fila_config.pack(fill="x", padx=16, pady=(0, 10))
+
         ctk.CTkLabel(fila_config, text="Dimension", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(side="left", padx=(0, 8))
         self.vector_dimension = ctk.CTkEntry(fila_config, width=70, height=38, justify="center", fg_color=PALETA["entrada"], border_color=PALETA["borde"])
         self.vector_dimension.insert(0, "3")
-        self.vector_dimension.pack(side="left", padx=(0, 12))
+        self.vector_dimension.pack(side="left", padx=(0, 16))
+
+        ctk.CTkLabel(fila_config, text="Cantidad de vectores", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(side="left", padx=(0, 8))
+        self.vector_cantidad = ctk.CTkEntry(fila_config, width=70, height=38, justify="center", fg_color=PALETA["entrada"], border_color=PALETA["borde"])
+        self.vector_cantidad.insert(0, "3")
+        self.vector_cantidad.pack(side="left", padx=(0, 16))
+
         ctk.CTkButton(
-            fila_config, text="Crear ecuacion", width=150, height=40, corner_radius=8,
+            fila_config, text="Crear combinacion", width=160, height=40, corner_radius=8,
             fg_color=PALETA["primario"], hover_color=PALETA["primario_hover"],
             text_color="#04191A", font=("Segoe UI", 13, "bold"),
-            command=self.crear_ecuacion_vectorial,
+            command=self.crear_combinacion_lineal,
         ).pack(side="left")
 
         ctk.CTkLabel(
             config,
-            text="Ejemplo: a·u + b·v = w. Los valores ingresados se convierten en un sistema A·x = b.",
+            text="Se resolvera c1·v1 + c2·v2 + ... + cn·vn = w mediante el sistema A·c = w.",
             font=FUENTE_PEQUENA, text_color=PALETA["texto_3"],
         ).pack(anchor="w", padx=16, pady=(0, 14))
 
         self.vector_input_card = ctk.CTkFrame(cuerpo, fg_color=PALETA["panel"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
         self.vector_input_card.pack(fill="x", pady=(0, 14))
         self.vector_inputs = []
-        self.crear_ecuacion_vectorial()
+        self.crear_combinacion_lineal()
 
         self.vector_result_card = ctk.CTkFrame(cuerpo, fg_color=PALETA["panel"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
         self.vector_result_card.pack(fill="x")
@@ -1521,13 +1555,14 @@ class AplicacionAlgebraLineal(ctk.CTk):
 
         return pagina
 
-    def crear_ecuacion_vectorial(self):
+    def crear_combinacion_lineal(self):
         try:
             dimension = int(self.vector_dimension.get())
-            if dimension <= 0 or dimension > 10:
+            cantidad = int(self.vector_cantidad.get())
+            if not 1 <= dimension <= 10 or not 2 <= cantidad <= 10:
                 raise ValueError
         except ValueError:
-            messagebox.showerror("Entrada invalida", "La dimension debe ser un entero entre 1 y 10.")
+            messagebox.showerror("Entrada invalida", "La dimension debe estar entre 1 y 10 y la cantidad de vectores entre 2 y 10.")
             return
 
         for widget in self.vector_input_card.winfo_children():
@@ -1536,34 +1571,34 @@ class AplicacionAlgebraLineal(ctk.CTk):
 
         ctk.CTkLabel(
             self.vector_input_card,
-            text="a·u + b·v = w",
+            text="c1·v1 + c2·v2 + ... + cn·vn = w",
             font=("Segoe UI", 17, "bold"), text_color=PALETA["primario"]
         ).pack(anchor="w", padx=16, pady=(14, 4))
         ctk.CTkLabel(
             self.vector_input_card,
-            text="Ingresa los componentes de los vectores u, v y w. El programa calcula los escalares a y b.",
+            text="Ingresa los componentes de cada vector y del vector objetivo w.",
             font=FUENTE_PEQUENA, text_color=PALETA["texto_3"]
         ).pack(anchor="w", padx=16, pady=(0, 12))
 
         tabla = ctk.CTkFrame(self.vector_input_card, fg_color=PALETA["panel_2"], corner_radius=8)
         tabla.pack(fill="x", padx=16, pady=(0, 12))
 
-        encabezados = ["Componente", "u", "v", "w"]
+        encabezados = ["Componente"] + [f"v{i + 1}" for i in range(cantidad)] + ["w"]
         for j, texto in enumerate(encabezados):
-            ctk.CTkLabel(tabla, text=texto, font=("Segoe UI", 12, "bold"), text_color=PALETA["primario"]).grid(row=0, column=j, padx=8, pady=8)
+            ctk.CTkLabel(tabla, text=texto, font=("Segoe UI", 12, "bold"), text_color=PALETA["primario"]).grid(row=0, column=j, padx=6, pady=8)
 
         for i in range(dimension):
-            ctk.CTkLabel(tabla, text=f"{i + 1}", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).grid(row=i + 1, column=0, padx=8, pady=4)
+            ctk.CTkLabel(tabla, text=f"{i + 1}", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).grid(row=i + 1, column=0, padx=6, pady=4)
             fila = []
-            for j in range(3):
-                entrada = ctk.CTkEntry(tabla, width=100, height=36, justify="center", fg_color=PALETA["entrada"], border_color=PALETA["borde"])
+            for j in range(cantidad + 1):
+                entrada = ctk.CTkEntry(tabla, width=82, height=36, justify="center", fg_color=PALETA["entrada"], border_color=PALETA["borde"])
                 entrada.insert(0, "0")
-                entrada.grid(row=i + 1, column=j + 1, padx=8, pady=4)
+                entrada.grid(row=i + 1, column=j + 1, padx=5, pady=4)
                 fila.append(entrada)
             self.vector_inputs.append(fila)
 
         ctk.CTkButton(
-            self.vector_input_card, text="Resolver ecuacion vectorial", height=42, corner_radius=8,
+            self.vector_input_card, text="Resolver combinacion lineal", height=42, corner_radius=8,
             fg_color=PALETA["primario"], hover_color=PALETA["primario_hover"],
             text_color="#04191A", font=("Segoe UI", 13, "bold"),
             command=self.resolver_vectorial,
@@ -1574,35 +1609,38 @@ class AplicacionAlgebraLineal(ctk.CTk):
             widget.destroy()
         ctk.CTkLabel(self.vector_result_card, text="Resultado", font=FUENTE_SECCION, text_color=PALETA["texto"]).pack(anchor="w", padx=16, pady=(14, 8))
         if datos is None:
-            ctk.CTkLabel(
-                self.vector_result_card,
-                text="Ingresa los vectores y presiona 'Resolver ecuacion vectorial'.",
-                font=FUENTE_NORMAL, text_color=PALETA["texto_3"]
-            ).pack(anchor="w", padx=16, pady=(0, 16))
+            ctk.CTkLabel(self.vector_result_card, text="Ingresa los vectores y presiona 'Resolver combinacion lineal'.", font=FUENTE_NORMAL, text_color=PALETA["texto_3"]).pack(anchor="w", padx=16, pady=(0, 16))
             return
 
         resultado = datos
         clasificacion = resultado["clasificacion"]
         color = self._estado_color_vectorial(clasificacion)
-        ctk.CTkLabel(
-            self.vector_result_card, text=clasificacion, font=("Segoe UI", 15, "bold"), text_color=color
-        ).pack(anchor="w", padx=16, pady=(0, 4))
-        ctk.CTkLabel(
-            self.vector_result_card, text=resultado["descripcion"], font=FUENTE_NORMAL, text_color=PALETA["texto_2"]
-        ).pack(anchor="w", padx=16, pady=(0, 10))
+        ctk.CTkLabel(self.vector_result_card, text=clasificacion, font=("Segoe UI", 15, "bold"), text_color=color).pack(anchor="w", padx=16, pady=(0, 4))
+        ctk.CTkLabel(self.vector_result_card, text=resultado["descripcion"], font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(anchor="w", padx=16, pady=(0, 10))
 
+        nombres = resultado["nombres_variables"]
         if resultado["solucion"] is not None:
-            sol = resultado["solucion"]
-            texto = ", ".join(f"{chr(97+i)} = {formatear_numero(v)}" for i, v in enumerate(sol))
-            ctk.CTkLabel(self.vector_result_card, text=f"Escalares: {texto}", font=FUENTE_MONO, text_color=PALETA["primario"]).pack(anchor="w", padx=16, pady=(0, 8))
-            ctk.CTkLabel(self.vector_result_card, text="La combinación lineal encontrada reproduce el vector w.", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(anchor="w", padx=16, pady=(0, 14))
+            texto = ", ".join(f"{nombres[i]} = {formatear_numero(v)}" for i, v in enumerate(resultado["solucion"]))
+            ctk.CTkLabel(self.vector_result_card, text=f"Coeficientes: {texto}", font=FUENTE_MONO, text_color=PALETA["primario"]).pack(anchor="w", padx=16, pady=(0, 8))
+            self._mostrar_verificacion_combinacion(resultado)
         elif resultado["expresiones"] is not None:
             expr = resultado["expresiones"]
-            texto = ", ".join(f"{chr(97+i)} = {expr[i]}" for i in range(len(expr)))
-            ctk.CTkLabel(self.vector_result_card, text=f"Solución parametrica: {texto}", font=FUENTE_MONO, text_color=PALETA["advertencia"]).pack(anchor="w", padx=16, pady=(0, 8))
-            ctk.CTkLabel(self.vector_result_card, text="Existen infinitas combinaciones de escalares que producen w.", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(anchor="w", padx=16, pady=(0, 14))
+            texto = ", ".join(f"{nombres[i]} = {expr[i]}" for i in range(len(expr)))
+            ctk.CTkLabel(self.vector_result_card, text=f"Solucion parametrica: {texto}", font=FUENTE_MONO, text_color=PALETA["advertencia"]).pack(anchor="w", padx=16, pady=(0, 8))
+            ctk.CTkLabel(self.vector_result_card, text="Existen infinitas combinaciones de coeficientes que producen w.", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(anchor="w", padx=16, pady=(0, 14))
         else:
-            ctk.CTkLabel(self.vector_result_card, text="No existe una combinación de los vectores u y v que produzca w.", font=FUENTE_NORMAL, text_color=PALETA["error"]).pack(anchor="w", padx=16, pady=(0, 14))
+            ctk.CTkLabel(self.vector_result_card, text="No existe una combinacion lineal de los vectores dados que produzca w.", font=FUENTE_NORMAL, text_color=PALETA["error"]).pack(anchor="w", padx=16, pady=(0, 14))
+
+    def _mostrar_verificacion_combinacion(self, resultado):
+        verificacion = resultado.get("verificacion")
+        if not verificacion:
+            return
+        correcta, detalles = verificacion
+        color = PALETA["exito"] if correcta else PALETA["error"]
+        texto = "Verificacion: todas las ecuaciones se cumplen." if correcta else "Verificacion: alguna ecuacion no se cumple."
+        ctk.CTkLabel(self.vector_result_card, text=texto, font=("Segoe UI", 12, "bold"), text_color=color).pack(anchor="w", padx=16, pady=(0, 8))
+        for detalle in detalles:
+            ctk.CTkLabel(self.vector_result_card, text=f"Ecuacion {detalle.indice}: {detalle.suma_obtenida} = {detalle.esperado}", font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=24, pady=1)
 
     def _estado_color_vectorial(self, clasificacion):
         if "inconsistente" in clasificacion.lower():
@@ -1615,14 +1653,140 @@ class AplicacionAlgebraLineal(ctk.CTk):
         try:
             if not self.vector_inputs:
                 return
+            cantidad = len(self.vector_inputs[0]) - 1
             A = []
             b = []
             for fila in self.vector_inputs:
-                u, v, w = [convertir_numero(entrada.get()) for entrada in fila]
-                A.append([u, v])
-                b.append(w)
+                valores = [convertir_numero(entrada.get()) for entrada in fila]
+                A.append(valores[:cantidad])
+                b.append(valores[cantidad])
             resultado = resolver_sistema(A, b)
             self.mostrar_resultado_vectorial(resultado)
+        except Exception as error:
+            messagebox.showerror("Error", str(error))
+
+    def _crear_pagina_axb(self, parent):
+        pagina = ctk.CTkFrame(parent, fg_color=PALETA["fondo"], corner_radius=0)
+        pagina.grid_columnconfigure(0, weight=1)
+        pagina.grid_rowconfigure(1, weight=1)
+
+        self._crear_encabezado(pagina, "Ecuacion Matricial Ax = b", "Resuelve sistemas matriciales generales mediante Gauss-Jordan")
+        cuerpo = ctk.CTkScrollableFrame(pagina, fg_color="transparent")
+        cuerpo.grid(row=1, column=0, sticky="nsew", padx=28, pady=(0, 24))
+
+        config = ctk.CTkFrame(cuerpo, fg_color=PALETA["panel"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
+        config.pack(fill="x", pady=(0, 14))
+        ctk.CTkLabel(config, text="Configuracion de Ax = b", font=FUENTE_SECCION, text_color=PALETA["texto"]).pack(anchor="w", padx=16, pady=(14, 8))
+        fila_config = ctk.CTkFrame(config, fg_color="transparent")
+        fila_config.pack(fill="x", padx=16, pady=(0, 14))
+
+        ctk.CTkLabel(fila_config, text="Filas (m)", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(side="left", padx=(0, 8))
+        self.axb_m = ctk.CTkEntry(fila_config, width=70, height=38, justify="center", fg_color=PALETA["entrada"], border_color=PALETA["borde"])
+        self.axb_m.insert(0, "3")
+        self.axb_m.pack(side="left", padx=(0, 16))
+        ctk.CTkLabel(fila_config, text="Columnas (n)", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(side="left", padx=(0, 8))
+        self.axb_n = ctk.CTkEntry(fila_config, width=70, height=38, justify="center", fg_color=PALETA["entrada"], border_color=PALETA["borde"])
+        self.axb_n.insert(0, "3")
+        self.axb_n.pack(side="left", padx=(0, 16))
+        ctk.CTkButton(fila_config, text="Crear matriz", width=140, height=40, corner_radius=8, fg_color=PALETA["primario"], hover_color=PALETA["primario_hover"], text_color="#04191A", font=("Segoe UI", 13, "bold"), command=self.crear_matriz_axb).pack(side="left")
+        ctk.CTkLabel(config, text="Acepta matrices rectangulares y valores enteros, decimales o fracciones como 3/2.", font=FUENTE_PEQUENA, text_color=PALETA["texto_3"]).pack(anchor="w", padx=16, pady=(0, 14))
+
+        self.axb_input_card = ctk.CTkFrame(cuerpo, fg_color=PALETA["panel"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
+        self.axb_input_card.pack(fill="x", pady=(0, 14))
+        self.axb_inputs = []
+        self.crear_matriz_axb()
+        self.axb_result_card = ctk.CTkFrame(cuerpo, fg_color=PALETA["panel"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
+        self.axb_result_card.pack(fill="x")
+        self.mostrar_resultado_axb(None)
+        return pagina
+
+    def crear_matriz_axb(self):
+        try:
+            m = int(self.axb_m.get())
+            n = int(self.axb_n.get())
+            if not 1 <= m <= 10 or not 1 <= n <= 10:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Entrada invalida", "Filas y columnas deben ser enteros entre 1 y 10.")
+            return
+
+        for widget in self.axb_input_card.winfo_children():
+            widget.destroy()
+        self.axb_inputs = []
+        ctk.CTkLabel(self.axb_input_card, text="Matriz A y vector b", font=("Segoe UI", 17, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=16, pady=(14, 4))
+        ctk.CTkLabel(self.axb_input_card, text="La ultima columna corresponde al vector de terminos independientes b.", font=FUENTE_PEQUENA, text_color=PALETA["texto_3"]).pack(anchor="w", padx=16, pady=(0, 12))
+        tabla = ctk.CTkFrame(self.axb_input_card, fg_color=PALETA["panel_2"], corner_radius=8)
+        tabla.pack(fill="x", padx=16, pady=(0, 12))
+
+        for j in range(n):
+            ctk.CTkLabel(tabla, text=f"x{j + 1}", font=("Segoe UI", 12, "bold"), text_color=PALETA["primario"]).grid(row=0, column=j, padx=6, pady=8)
+        ctk.CTkLabel(tabla, text="b", font=("Segoe UI", 12, "bold"), text_color=PALETA["primario"]).grid(row=0, column=n, padx=6, pady=8)
+
+        for i in range(m):
+            fila = []
+            for j in range(n + 1):
+                entrada = ctk.CTkEntry(tabla, width=82, height=36, justify="center", fg_color=PALETA["entrada"], border_color=PALETA["borde"])
+                entrada.insert(0, "0")
+                entrada.grid(row=i + 1, column=j, padx=5, pady=4)
+                fila.append(entrada)
+            self.axb_inputs.append(fila)
+
+        ctk.CTkButton(self.axb_input_card, text="Resolver Ax = b", height=42, corner_radius=8, fg_color=PALETA["primario"], hover_color=PALETA["primario_hover"], text_color="#04191A", font=("Segoe UI", 13, "bold"), command=self.resolver_axb).pack(anchor="w", padx=16, pady=(0, 16))
+
+    def mostrar_resultado_axb(self, datos):
+        for widget in self.axb_result_card.winfo_children():
+            widget.destroy()
+        ctk.CTkLabel(self.axb_result_card, text="Resultado", font=FUENTE_SECCION, text_color=PALETA["texto"]).pack(anchor="w", padx=16, pady=(14, 8))
+        if datos is None:
+            ctk.CTkLabel(self.axb_result_card, text="Ingresa A y b y presiona 'Resolver Ax = b'.", font=FUENTE_NORMAL, text_color=PALETA["texto_3"]).pack(anchor="w", padx=16, pady=(0, 16))
+            return
+
+        resultado = datos
+        clasificacion = resultado["clasificacion"]
+        color = self._estado_color_vectorial(clasificacion)
+        ctk.CTkLabel(self.axb_result_card, text=clasificacion, font=("Segoe UI", 15, "bold"), text_color=color).pack(anchor="w", padx=16, pady=(0, 4))
+        ctk.CTkLabel(self.axb_result_card, text=resultado["descripcion"], font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(anchor="w", padx=16, pady=(0, 10))
+
+        nombres = resultado["nombres_variables"]
+        if resultado["solucion"] is not None:
+            texto = ", ".join(f"{nombres[i]} = {formatear_numero(v)}" for i, v in enumerate(resultado["solucion"]))
+            ctk.CTkLabel(self.axb_result_card, text=f"Solucion: {texto}", font=FUENTE_MONO, text_color=PALETA["primario"]).pack(anchor="w", padx=16, pady=(0, 8))
+            self._mostrar_verificacion_axb(resultado)
+        elif resultado["expresiones"] is not None:
+            expr = resultado["expresiones"]
+            texto = ", ".join(f"{nombres[i]} = {expr[i]}" for i in range(len(expr)))
+            ctk.CTkLabel(self.axb_result_card, text=f"Solucion parametrica: {texto}", font=FUENTE_MONO, text_color=PALETA["advertencia"]).pack(anchor="w", padx=16, pady=(0, 8))
+            if resultado.get("solucion_particular") is not None:
+                particular = ", ".join(f"{nombres[i]} = {formatear_numero(v)}" for i, v in enumerate(resultado["solucion_particular"]))
+                ctk.CTkLabel(self.axb_result_card, text=f"Solucion particular: {particular}", font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=16, pady=(0, 8))
+            self._mostrar_verificacion_axb(resultado)
+        else:
+            ctk.CTkLabel(self.axb_result_card, text="El sistema Ax = b no tiene solucion.", font=FUENTE_NORMAL, text_color=PALETA["error"]).pack(anchor="w", padx=16, pady=(0, 14))
+
+    def _mostrar_verificacion_axb(self, resultado):
+        verificacion = resultado.get("verificacion")
+        if not verificacion:
+            return
+        correcta, detalles = verificacion
+        color = PALETA["exito"] if correcta else PALETA["error"]
+        texto = "✓ Verificacion correcta" if correcta else "✗ La verificacion fallo"
+        ctk.CTkLabel(self.axb_result_card, text=texto, font=("Segoe UI", 12, "bold"), text_color=color).pack(anchor="w", padx=16, pady=(0, 6))
+        for detalle in detalles:
+            estado = "OK" if detalle.coincide else "ERROR"
+            ctk.CTkLabel(self.axb_result_card, text=f"Ecuacion {detalle.indice}: {detalle.suma_obtenida} = {detalle.esperado} [{estado}]", font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=24, pady=1)
+
+    def resolver_axb(self):
+        try:
+            if not self.axb_inputs:
+                return
+            A = []
+            b = []
+            for fila in self.axb_inputs:
+                valores = [convertir_numero(entrada.get()) for entrada in fila]
+                A.append(valores[:-1])
+                b.append(valores[-1])
+            resultado = resolver_sistema(A, b)
+            self.mostrar_resultado_axb(resultado)
         except Exception as error:
             messagebox.showerror("Error", str(error))
 
