@@ -1564,8 +1564,14 @@ class AplicacionAlgebraLineal(ctk.CTk):
         self.crear_combinacion_lineal()
 
         self.vector_result_card = ctk.CTkFrame(cuerpo, fg_color=PALETA["panel"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
-        self.vector_result_card.pack(fill="x")
+        self.vector_result_card.pack(fill="x", pady=(0, 14))
         self.mostrar_resultado_vectorial(None)
+
+        proceso = ctk.CTkFrame(cuerpo, fg_color=PALETA["panel"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
+        proceso.pack(fill="both", expand=True)
+        ctk.CTkLabel(proceso, text="Procedimiento paso a paso", font=FUENTE_SECCION, text_color=PALETA["texto"]).pack(anchor="w", padx=16, pady=(14, 8))
+        self.vector_process_panel = ProcessPanel(proceso)
+        self.vector_process_panel.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
         return pagina
 
@@ -1676,6 +1682,7 @@ class AplicacionAlgebraLineal(ctk.CTk):
                 b.append(valores[cantidad])
             resultado = resolver_sistema(A, b)
             self.mostrar_resultado_vectorial(resultado)
+            self.vector_process_panel.mostrar_pasos(resultado["pasos"])
         except Exception as error:
             messagebox.showerror("Error", str(error))
 
@@ -1710,8 +1717,15 @@ class AplicacionAlgebraLineal(ctk.CTk):
         self.axb_inputs = []
         self.crear_matriz_axb()
         self.axb_result_card = ctk.CTkFrame(cuerpo, fg_color=PALETA["panel"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
-        self.axb_result_card.pack(fill="x")
+        self.axb_result_card.pack(fill="x", pady=(0, 14))
         self.mostrar_resultado_axb(None)
+
+        proceso = ctk.CTkFrame(cuerpo, fg_color=PALETA["panel"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
+        proceso.pack(fill="both", expand=True)
+        ctk.CTkLabel(proceso, text="Procedimiento paso a paso", font=FUENTE_SECCION, text_color=PALETA["texto"]).pack(anchor="w", padx=16, pady=(14, 8))
+        self.axb_process_panel = ProcessPanel(proceso)
+        self.axb_process_panel.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
         return pagina
 
     def crear_matriz_axb(self):
@@ -1801,6 +1815,7 @@ class AplicacionAlgebraLineal(ctk.CTk):
                 b.append(valores[-1])
             resultado = resolver_sistema(A, b)
             self.mostrar_resultado_axb(resultado)
+            self.axb_process_panel.mostrar_pasos(resultado["pasos"])
         except Exception as error:
             messagebox.showerror("Error", str(error))
 
@@ -1861,7 +1876,19 @@ class AplicacionAlgebraLineal(ctk.CTk):
             cuerpo, fg_color=PALETA["panel"], corner_radius=10,
             border_width=1, border_color=PALETA["borde"]
         )
-        self.independencia_resultado.pack(fill="x")
+        self.independencia_resultado.pack(fill="x", pady=(0, 14))
+
+        proceso = ctk.CTkFrame(
+            cuerpo, fg_color=PALETA["panel"], corner_radius=10,
+            border_width=1, border_color=PALETA["borde"]
+        )
+        proceso.pack(fill="both", expand=True)
+        ctk.CTkLabel(
+            proceso, text="Procedimiento paso a paso",
+            font=FUENTE_SECCION, text_color=PALETA["texto"]
+        ).pack(anchor="w", padx=16, pady=(14, 8))
+        self.independencia_process_panel = ProcessPanel(proceso)
+        self.independencia_process_panel.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
         self._mostrar_placeholder_independencia()
         return pagina
@@ -1883,6 +1910,9 @@ class AplicacionAlgebraLineal(ctk.CTk):
             text="El resultado aparecera aqui.",
             font=FUENTE_NORMAL, text_color=PALETA["texto_3"]
         ).pack(padx=16, pady=24)
+
+        if hasattr(self, "independencia_process_panel"):
+            self.independencia_process_panel.mostrar_placeholder()
 
     def crear_matriz_independencia(self):
         try:
@@ -1951,6 +1981,7 @@ class AplicacionAlgebraLineal(ctk.CTk):
             ]
 
             resultado = analizar_independencia(A)
+            self.independencia_process_panel.mostrar_pasos(resultado["pasos"])
 
             for w in self.independencia_resultado.winfo_children():
                 w.destroy()
@@ -2200,4 +2231,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

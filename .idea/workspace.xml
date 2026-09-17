@@ -7,7 +7,10 @@
     <option name="selectedModelId" value="auto" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="b063673a-242a-44d1-834c-a3b57751a65a" name="Changes" comment="&quot;feat: Se implementaron las combinaciones lineales y las ecuaciones matriciales ax=b&quot;" />
+    <list default="true" id="b063673a-242a-44d1-834c-a3b57751a65a" name="Changes" comment="&quot;feat: Se anadio la independencia lineal&quot;">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Programa 1_Grupo3.py" beforeDir="false" afterPath="$PROJECT_DIR$/Programa 1_Grupo3.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -147,7 +150,8 @@
     <MESSAGE value="&quot;feat: Mejoras en las verificaciones y sistemas 2x2&quot;" />
     <MESSAGE value="&quot;feat: Se implementaron las ecuaciones vectoriales&quot;" />
     <MESSAGE value="&quot;feat: Se implementaron las combinaciones lineales y las ecuaciones matriciales ax=b&quot;" />
-    <option name="LAST_COMMIT_MESSAGE" value="&quot;feat: Se implementaron las combinaciones lineales y las ecuaciones matriciales ax=b&quot;" />
+    <MESSAGE value="&quot;feat: Se anadio la independencia lineal&quot;" />
+    <option name="LAST_COMMIT_MESSAGE" value="&quot;feat: Se anadio la independencia lineal&quot;" />
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />
