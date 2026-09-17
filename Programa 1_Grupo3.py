@@ -597,6 +597,18 @@ def resolver_sistema(A, b):
     return resultado
 
 
+def analizar_independencia(A):
+    if not A or not A[0]:
+        raise ValueError("La matriz no puede estar vacia.")
+    b = [Fraction(0) for _ in A]
+    resultado = resolver_sistema(A, b)
+    resultado["independiente"] = (
+            resultado["clasificacion"] == "Sistema consistente determinado"
+            and all(x == 0 for x in (resultado["solucion"] or []))
+    )
+    return resultado
+
+
 # -----------------------------------------------------------------------------
 # Configuracion visual
 # -----------------------------------------------------------------------------
@@ -1377,6 +1389,7 @@ class AplicacionAlgebraLineal(ctk.CTk):
         self.nav_botones["calculadora"] = self._nav_item(sidebar, "Calculadora", "calculadora", activo=True)
         self.nav_botones["vectorial"] = self._nav_item(sidebar, "Combinaciones Lineales", "vectorial")
         self.nav_botones["axb"] = self._nav_item(sidebar, "Ecuacion Matricial Ax=b", "axb")
+        self.nav_botones["independencia"] = self._nav_item(sidebar, "Independencia Lineal", "independencia")
         self.nav_botones["metodo"] = self._nav_item(sidebar, "Metodo de Eliminacion", "metodo")
         self.nav_botones["ayuda"] = self._nav_item(sidebar, "Ayuda", "ayuda")
 
@@ -1424,6 +1437,7 @@ class AplicacionAlgebraLineal(ctk.CTk):
             "calculadora": self._crear_pagina_calculadora(contenedor),
             "vectorial": self._crear_pagina_vectorial(contenedor),
             "axb": self._crear_pagina_axb(contenedor),
+            "independencia": self._crear_pagina_independencia(contenedor),
             "metodo": self._crear_pagina_metodo(contenedor),
             "ayuda": self._crear_pagina_ayuda(contenedor),
         }
@@ -1790,6 +1804,220 @@ class AplicacionAlgebraLineal(ctk.CTk):
         except Exception as error:
             messagebox.showerror("Error", str(error))
 
+    def _crear_pagina_independencia(self, parent):
+        pagina = ctk.CTkFrame(parent, fg_color=PALETA["fondo"], corner_radius=0)
+        pagina.grid_columnconfigure(0, weight=1)
+        pagina.grid_rowconfigure(1, weight=1)
+
+        self._crear_encabezado(
+            pagina,
+            "Independencia Lineal",
+            "Determina si un conjunto de vectores es linealmente independiente o dependiente",
+        )
+
+        cuerpo = ctk.CTkScrollableFrame(pagina, fg_color="transparent")
+        cuerpo.grid(row=1, column=0, sticky="nsew", padx=28, pady=(0, 24))
+
+        config = ctk.CTkFrame(cuerpo, fg_color=PALETA["panel"], corner_radius=10,
+                              border_width=1, border_color=PALETA["borde"])
+        config.pack(fill="x", pady=(0, 14))
+
+        ctk.CTkLabel(config, text="Configuracion", font=("Segoe UI", 15, "bold"),
+                     text_color=PALETA["primario"]).pack(anchor="w", padx=16, pady=(14, 8))
+
+        fila = ctk.CTkFrame(config, fg_color="transparent")
+        fila.pack(fill="x", padx=16, pady=(0, 10))
+
+        ctk.CTkLabel(fila, text="Dimension:", font=FUENTE_NORMAL,
+                     text_color=PALETA["texto"]).pack(side="left")
+        self.entrada_ind_dim = ctk.CTkEntry(fila, width=80)
+        self.entrada_ind_dim.insert(0, "3")
+        self.entrada_ind_dim.pack(side="left", padx=(8, 18))
+
+        ctk.CTkLabel(fila, text="Cantidad de vectores:", font=FUENTE_NORMAL,
+                     text_color=PALETA["texto"]).pack(side="left")
+        self.entrada_ind_vectores = ctk.CTkEntry(fila, width=80)
+        self.entrada_ind_vectores.insert(0, "3")
+        self.entrada_ind_vectores.pack(side="left", padx=(8, 18))
+
+        ctk.CTkButton(
+            fila, text="Crear vectores", width=140, height=38,
+            fg_color=PALETA["primario"], hover_color=PALETA["primario_hover"],
+            text_color="#04191A", command=self.crear_matriz_independencia
+        ).pack(side="left")
+
+        ctk.CTkLabel(
+            config, text="Se analiza c1·v1 + c2·v2 + ... + cn·vn = 0.",
+            font=FUENTE_PEQUENA, text_color=PALETA["texto_3"]
+        ).pack(anchor="w", padx=16, pady=(0, 14))
+
+        self.independencia_panel = ctk.CTkFrame(
+            cuerpo, fg_color=PALETA["panel"], corner_radius=10,
+            border_width=1, border_color=PALETA["borde"]
+        )
+        self.independencia_panel.pack(fill="x", pady=(0, 14))
+
+        self.independencia_resultado = ctk.CTkFrame(
+            cuerpo, fg_color=PALETA["panel"], corner_radius=10,
+            border_width=1, border_color=PALETA["borde"]
+        )
+        self.independencia_resultado.pack(fill="x")
+
+        self._mostrar_placeholder_independencia()
+        return pagina
+
+    def _mostrar_placeholder_independencia(self):
+        for w in self.independencia_panel.winfo_children():
+            w.destroy()
+        for w in self.independencia_resultado.winfo_children():
+            w.destroy()
+
+        ctk.CTkLabel(
+            self.independencia_panel,
+            text="Configura la dimension y la cantidad de vectores.",
+            font=FUENTE_NORMAL, text_color=PALETA["texto_3"]
+        ).pack(padx=16, pady=24)
+
+        ctk.CTkLabel(
+            self.independencia_resultado,
+            text="El resultado aparecera aqui.",
+            font=FUENTE_NORMAL, text_color=PALETA["texto_3"]
+        ).pack(padx=16, pady=24)
+
+    def crear_matriz_independencia(self):
+        try:
+            dimension = int(self.entrada_ind_dim.get())
+            cantidad = int(self.entrada_ind_vectores.get())
+            if not (1 <= dimension <= 10 and 1 <= cantidad <= 10):
+                raise ValueError
+        except ValueError:
+            messagebox.showerror(
+                "Entrada invalida",
+                "La dimension y la cantidad de vectores deben ser enteros entre 1 y 10."
+            )
+            return
+
+        for w in self.independencia_panel.winfo_children():
+            w.destroy()
+
+        self.ind_dim = dimension
+        self.ind_cantidad = cantidad
+        self.ind_entries = [[None] * cantidad for _ in range(dimension)]
+
+        ctk.CTkLabel(
+            self.independencia_panel, text="Componentes de los vectores",
+            font=("Segoe UI", 15, "bold"), text_color=PALETA["primario"]
+        ).pack(anchor="w", padx=16, pady=(14, 10))
+
+        tabla = ctk.CTkFrame(self.independencia_panel, fg_color="transparent")
+        tabla.pack(padx=16, pady=(0, 12), fill="x")
+
+        ctk.CTkLabel(
+            tabla, text="Componente", width=100,
+            font=("Segoe UI", 12, "bold"), text_color=PALETA["texto"]
+        ).grid(row=0, column=0, padx=4, pady=4)
+
+        for j in range(cantidad):
+            ctk.CTkLabel(
+                tabla, text=f"v{j+1}", width=85,
+                font=("Segoe UI", 12, "bold"), text_color=PALETA["primario"]
+            ).grid(row=0, column=j+1, padx=4, pady=4)
+
+        for i in range(dimension):
+            ctk.CTkLabel(
+                tabla, text=f"x{i+1}", width=100,
+                font=FUENTE_NORMAL, text_color=PALETA["texto"]
+            ).grid(row=i+1, column=0, padx=4, pady=4)
+
+            for j in range(cantidad):
+                entry = ctk.CTkEntry(tabla, width=85, justify="center")
+                entry.insert(0, "0")
+                entry.grid(row=i+1, column=j+1, padx=4, pady=4)
+                self.ind_entries[i][j] = entry
+
+        ctk.CTkButton(
+            self.independencia_panel, text="Analizar independencia",
+            width=210, height=40, fg_color=PALETA["primario"],
+            hover_color=PALETA["primario_hover"], text_color="#04191A",
+            command=self.resolver_independencia
+        ).pack(anchor="w", padx=16, pady=(4, 16))
+
+    def resolver_independencia(self):
+        try:
+            A = [
+                [convertir_numero(self.ind_entries[i][j].get())
+                 for j in range(self.ind_cantidad)]
+                for i in range(self.ind_dim)
+            ]
+
+            resultado = analizar_independencia(A)
+
+            for w in self.independencia_resultado.winfo_children():
+                w.destroy()
+
+            titulo = (
+                "Los vectores son linealmente independientes."
+                if resultado["independiente"]
+                else "Los vectores son linealmente dependientes."
+            )
+
+            ctk.CTkLabel(
+                self.independencia_resultado, text=titulo,
+                font=("Segoe UI", 16, "bold"),
+                text_color=PALETA["primario"]
+            ).pack(anchor="w", padx=16, pady=(14, 6))
+
+            descripcion = (
+                "La unica solucion de c1·v1 + ... + cn·vn = 0 "
+                "es la solucion trivial: todos los coeficientes son 0."
+                if resultado["independiente"]
+                else
+                "Existe una solucion no trivial para los coeficientes, "
+                "por lo que existe una dependencia lineal."
+            )
+
+            ctk.CTkLabel(
+                self.independencia_resultado, text=descripcion,
+                font=FUENTE_NORMAL, text_color=PALETA["texto_2"],
+                wraplength=780, justify="left"
+            ).pack(anchor="w", padx=16, pady=(0, 8))
+
+            if resultado["independiente"] and resultado.get("solucion"):
+                valores = ", ".join(
+                    f"c{i+1} = {formatear_numero(v)}"
+                    for i, v in enumerate(resultado["solucion"])
+                )
+                ctk.CTkLabel(
+                    self.independencia_resultado,
+                    text=f"Solucion: {valores}",
+                    font=FUENTE_NORMAL, text_color=PALETA["texto_2"]
+                ).pack(anchor="w", padx=16, pady=4)
+
+            elif not resultado["independiente"] and resultado.get("expresiones"):
+                ctk.CTkLabel(
+                    self.independencia_resultado,
+                    text="Relacion entre los coeficientes:",
+                    font=("Segoe UI", 13, "bold"),
+                    text_color=PALETA["texto"]
+                ).pack(anchor="w", padx=16, pady=(8, 4))
+
+                for indice, expresion in resultado["expresiones"].items():
+                    ctk.CTkLabel(
+                        self.independencia_resultado,
+                        text=f"c{indice+1} = {expresion}",
+                        font=FUENTE_NORMAL, text_color=PALETA["texto_2"]
+                    ).pack(anchor="w", padx=28, pady=2)
+
+            ctk.CTkLabel(
+                self.independencia_resultado,
+                text="Se utiliza el sistema homogeneo A·c = 0.",
+                font=FUENTE_PEQUENA, text_color=PALETA["texto_3"]
+            ).pack(anchor="w", padx=16, pady=(12, 16))
+
+        except Exception as error:
+            messagebox.showerror("Error", str(error))
+
+
     def _crear_pagina_metodo(self, parent):
         pagina = ctk.CTkFrame(parent, fg_color=PALETA["fondo"], corner_radius=0)
         pagina.grid_columnconfigure(0, weight=1)
@@ -1972,3 +2200,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
