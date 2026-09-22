@@ -3,6 +3,16 @@ import pathlib
 import unittest
 from fractions import Fraction
 
+from logica.operaciones_elementales import (
+    multiplicar_matrices,
+    multiplicar_matriz_por_escalar,
+    multiplicar_vector_por_escalar,
+    restar_matrices,
+    restar_vectores,
+    sumar_matrices,
+    sumar_vectores,
+)
+
 
 RUTA_PROGRAMA = pathlib.Path(__file__).with_name("Programa 1_Grupo3.py")
 spec = importlib.util.spec_from_file_location("programa_algebra", RUTA_PROGRAMA)
@@ -378,6 +388,22 @@ class PruebasEliminacionPorFilas(unittest.TestCase):
         self.assertEqual(res_3x5["expresiones"][3], "s")
         self.assertEqual(res_3x5["expresiones"][4], "t")
         self.assertTrue(res_3x5["verificacion"][0])
+
+
+    def test_operaciones_elementales_vectores_y_matrices(self):
+        self.assertEqual(sumar_vectores([1, 2, 3], [4, 5, 6]), [5, 7, 9])
+        self.assertEqual(restar_vectores([5, 7, 9], [1, 2, 3]), [4, 5, 6])
+        self.assertEqual(multiplicar_vector_por_escalar([1, 2, 3], 2), [2, 4, 6])
+
+        A = [[1, 2], [3, 4]]
+        B = [[5, 6], [7, 8]]
+        self.assertEqual(sumar_matrices(A, B), [[6, 8], [10, 12]])
+        self.assertEqual(restar_matrices(A, B), [[-4, -4], [-4, -4]])
+        self.assertEqual(multiplicar_matriz_por_escalar(A, 3), [[3, 6], [9, 12]])
+
+        C = [[1, 2, 3], [4, 5, 6]]
+        D = [[7, 8], [9, 10], [11, 12]]
+        self.assertEqual(multiplicar_matrices(C, D), [[58, 64], [139, 154]])
 
 
 if __name__ == "__main__":
