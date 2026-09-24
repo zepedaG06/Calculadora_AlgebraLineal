@@ -597,6 +597,15 @@ def resolver_sistema(A, b):
     return resultado
 
 
+def multiplicar_matriz_vector(A, x):
+    """Calcula el producto matriz-vector A*x usando fracciones exactas."""
+    if not A or not A[0]:
+        raise ValueError("La matriz no puede estar vacia.")
+    if len(A[0]) != len(x):
+        raise ValueError("La cantidad de columnas de A debe coincidir con la dimension del vector.")
+    return [sum(A[i][j] * x[j] for j in range(len(x))) for i in range(len(A))]
+
+
 def analizar_independencia(A):
     if not A or not A[0]:
         raise ValueError("La matriz no puede estar vacia.")
@@ -1389,6 +1398,7 @@ class AplicacionAlgebraLineal(ctk.CTk):
         self.nav_botones["calculadora"] = self._nav_item(sidebar, "Calculadora", "calculadora", activo=True)
         self.nav_botones["vectorial"] = self._nav_item(sidebar, "Combinaciones Lineales", "vectorial")
         self.nav_botones["axb"] = self._nav_item(sidebar, "Ecuacion Matricial Ax=b", "axb")
+        self.nav_botones["propiedades_ax"] = self._nav_item(sidebar, "Propiedades de Ax", "propiedades_ax")
         self.nav_botones["independencia"] = self._nav_item(sidebar, "Independencia Lineal", "independencia")
         self.nav_botones["metodo"] = self._nav_item(sidebar, "Metodo de Eliminacion", "metodo")
         self.nav_botones["ayuda"] = self._nav_item(sidebar, "Ayuda", "ayuda")
@@ -1437,6 +1447,7 @@ class AplicacionAlgebraLineal(ctk.CTk):
             "calculadora": self._crear_pagina_calculadora(contenedor),
             "vectorial": self._crear_pagina_vectorial(contenedor),
             "axb": self._crear_pagina_axb(contenedor),
+            "propiedades_ax": self._crear_pagina_propiedades_ax(contenedor),
             "independencia": self._crear_pagina_independencia(contenedor),
             "metodo": self._crear_pagina_metodo(contenedor),
             "ayuda": self._crear_pagina_ayuda(contenedor),
@@ -1816,6 +1827,269 @@ class AplicacionAlgebraLineal(ctk.CTk):
             resultado = resolver_sistema(A, b)
             self.mostrar_resultado_axb(resultado)
             self.axb_process_panel.mostrar_pasos(resultado["pasos"])
+        except Exception as error:
+            messagebox.showerror("Error", str(error))
+
+    def _crear_pagina_propiedades_ax(self, parent):
+        pagina = ctk.CTkFrame(parent, fg_color=PALETA["fondo"], corner_radius=0)
+        pagina.grid_columnconfigure(0, weight=1)
+        pagina.grid_rowconfigure(1, weight=1)
+
+        self._crear_encabezado(
+            pagina,
+            "Propiedades del producto matriz - vector Ax",
+            "Calcula productos matriz-vector y verifica A(u + v) = Au + Av y A(cu) = c(Au)",
+        )
+
+        cuerpo = ctk.CTkScrollableFrame(pagina, fg_color="transparent")
+        cuerpo.grid(row=1, column=0, sticky="nsew", padx=28, pady=(0, 24))
+
+        config = ctk.CTkFrame(
+            cuerpo, fg_color=PALETA["panel"], corner_radius=10,
+            border_width=1, border_color=PALETA["borde"]
+        )
+        config.pack(fill="x", pady=(0, 14))
+
+        ctk.CTkLabel(
+            config, text="Configuracion de A",
+            font=FUENTE_SECCION, text_color=PALETA["texto"]
+        ).pack(anchor="w", padx=16, pady=(14, 8))
+
+        fila = ctk.CTkFrame(config, fg_color="transparent")
+        fila.pack(fill="x", padx=16, pady=(0, 10))
+
+        ctk.CTkLabel(fila, text="Filas (m)", font=FUENTE_NORMAL,
+                     text_color=PALETA["texto_2"]).pack(side="left", padx=(0, 8))
+        self.axp_m = ctk.CTkEntry(fila, width=70, height=38, justify="center",
+                                  fg_color=PALETA["entrada"], border_color=PALETA["borde"])
+        self.axp_m.insert(0, "2")
+        self.axp_m.pack(side="left", padx=(0, 16))
+
+        ctk.CTkLabel(fila, text="Columnas (n)", font=FUENTE_NORMAL,
+                     text_color=PALETA["texto_2"]).pack(side="left", padx=(0, 8))
+        self.axp_n = ctk.CTkEntry(fila, width=70, height=38, justify="center",
+                                  fg_color=PALETA["entrada"], border_color=PALETA["borde"])
+        self.axp_n.insert(0, "2")
+        self.axp_n.pack(side="left", padx=(0, 16))
+
+        ctk.CTkButton(
+            fila, text="Crear ejercicio", width=150, height=40, corner_radius=8,
+            fg_color=PALETA["primario"], hover_color=PALETA["primario_hover"],
+            text_color="#04191A", font=("Segoe UI", 13, "bold"),
+            command=self.crear_ejercicio_propiedades_ax,
+        ).pack(side="left")
+
+        ctk.CTkLabel(
+            config,
+            text="A es m×n y los vectores u y v tienen n componentes.",
+            font=FUENTE_PEQUENA, text_color=PALETA["texto_3"]
+        ).pack(anchor="w", padx=16, pady=(0, 14))
+
+        self.axp_input_card = ctk.CTkFrame(
+            cuerpo, fg_color=PALETA["panel"], corner_radius=10,
+            border_width=1, border_color=PALETA["borde"]
+        )
+        self.axp_input_card.pack(fill="x", pady=(0, 14))
+
+        self.axp_result_card = ctk.CTkFrame(
+            cuerpo, fg_color=PALETA["panel"], corner_radius=10,
+            border_width=1, border_color=PALETA["borde"]
+        )
+        self.axp_result_card.pack(fill="x", pady=(0, 14))
+
+        self.axp_procedure_card = ctk.CTkFrame(
+            cuerpo, fg_color=PALETA["panel"], corner_radius=10,
+            border_width=1, border_color=PALETA["borde"]
+        )
+        self.axp_procedure_card.pack(fill="x", pady=(0, 14))
+
+        self.axp_A_entries = []
+        self.axp_u_entries = []
+        self.axp_v_entries = []
+        self._mostrar_placeholder_propiedades_ax()
+        self.crear_ejercicio_propiedades_ax()
+        return pagina
+
+    def _mostrar_placeholder_propiedades_ax(self):
+        for panel in (self.axp_input_card, self.axp_result_card, self.axp_procedure_card):
+            for widget in panel.winfo_children():
+                widget.destroy()
+
+        ctk.CTkLabel(
+            self.axp_input_card,
+            text="Configura el tamaño de la matriz A y presiona Crear ejercicio.",
+            font=FUENTE_NORMAL, text_color=PALETA["texto_3"]
+        ).pack(anchor="w", padx=16, pady=24)
+        ctk.CTkLabel(
+            self.axp_result_card,
+            text="Aquí aparecerán los productos y las verificaciones.",
+            font=FUENTE_NORMAL, text_color=PALETA["texto_3"]
+        ).pack(anchor="w", padx=16, pady=24)
+        ctk.CTkLabel(
+            self.axp_procedure_card,
+            text="Aquí aparecerá el procedimiento paso a paso.",
+            font=FUENTE_NORMAL, text_color=PALETA["texto_3"]
+        ).pack(anchor="w", padx=16, pady=24)
+
+    def crear_ejercicio_propiedades_ax(self):
+        try:
+            m = int(self.axp_m.get())
+            n = int(self.axp_n.get())
+            if not (1 <= m <= 10 and 1 <= n <= 10):
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Entrada invalida", "Filas y columnas deben ser enteros entre 1 y 10.")
+            return
+
+        for panel in (self.axp_input_card, self.axp_result_card, self.axp_procedure_card):
+            for widget in panel.winfo_children():
+                widget.destroy()
+
+        self.axp_m_value = m
+        self.axp_n_value = n
+        self.axp_A_entries = [[None] * n for _ in range(m)]
+        self.axp_u_entries = [None] * n
+        self.axp_v_entries = [None] * n
+
+        ctk.CTkLabel(
+            self.axp_input_card, text="Ingresa la matriz A y los vectores u, v",
+            font=FUENTE_SECCION, text_color=PALETA["texto"]
+        ).pack(anchor="w", padx=16, pady=(14, 10))
+
+        tabla = ctk.CTkFrame(self.axp_input_card, fg_color="transparent")
+        tabla.pack(padx=16, pady=(0, 8), fill="x")
+
+        ctk.CTkLabel(tabla, text="A", width=55, font=("Segoe UI", 12, "bold"),
+                     text_color=PALETA["primario"]).grid(row=0, column=0, padx=4, pady=4)
+        for j in range(n):
+            ctk.CTkLabel(tabla, text=f"x{j+1}", width=70, font=("Segoe UI", 11, "bold"),
+                         text_color=PALETA["texto_2"]).grid(row=0, column=j+1, padx=4, pady=4)
+
+        for i in range(m):
+            ctk.CTkLabel(tabla, text=f"fila {i+1}", width=55, font=FUENTE_PEQUENA,
+                         text_color=PALETA["texto_3"]).grid(row=i+1, column=0, padx=4, pady=4)
+            for j in range(n):
+                entry = ctk.CTkEntry(tabla, width=70, justify="center")
+                entry.insert(0, "0")
+                entry.grid(row=i+1, column=j+1, padx=4, pady=4)
+                self.axp_A_entries[i][j] = entry
+
+        ctk.CTkLabel(self.axp_input_card, text="Vector u", font=("Segoe UI", 13, "bold"),
+                     text_color=PALETA["primario"]).pack(anchor="w", padx=16, pady=(8, 4))
+        fila_u = ctk.CTkFrame(self.axp_input_card, fg_color="transparent")
+        fila_u.pack(anchor="w", padx=16, pady=(0, 8))
+        for j in range(n):
+            entry = ctk.CTkEntry(fila_u, width=70, justify="center")
+            entry.insert(0, "0")
+            entry.pack(side="left", padx=4)
+            self.axp_u_entries[j] = entry
+
+        ctk.CTkLabel(self.axp_input_card, text="Vector v", font=("Segoe UI", 13, "bold"),
+                     text_color=PALETA["primario"]).pack(anchor="w", padx=16, pady=(8, 4))
+        fila_v = ctk.CTkFrame(self.axp_input_card, fg_color="transparent")
+        fila_v.pack(anchor="w", padx=16, pady=(0, 8))
+        for j in range(n):
+            entry = ctk.CTkEntry(fila_v, width=70, justify="center")
+            entry.insert(0, "0")
+            entry.pack(side="left", padx=4)
+            self.axp_v_entries[j] = entry
+
+        fila_c = ctk.CTkFrame(self.axp_input_card, fg_color="transparent")
+        fila_c.pack(fill="x", padx=16, pady=(8, 14))
+        ctk.CTkLabel(fila_c, text="Escalar c", font=FUENTE_NORMAL,
+                     text_color=PALETA["texto_2"]).pack(side="left", padx=(0, 8))
+        self.axp_c_entry = ctk.CTkEntry(fila_c, width=80, justify="center")
+        self.axp_c_entry.insert(0, "2")
+        self.axp_c_entry.pack(side="left", padx=(0, 16))
+
+        ctk.CTkButton(
+            fila_c, text="Resolver propiedades", width=190, height=40,
+            fg_color=PALETA["primario"], hover_color=PALETA["primario_hover"],
+            text_color="#04191A", font=("Segoe UI", 13, "bold"),
+            command=self.resolver_propiedades_ax
+        ).pack(side="left")
+
+    def _formatear_vector_ax(self, vector):
+        return "(" + ", ".join(formatear_numero(x) for x in vector) + ")"
+
+    def _mostrar_linea_ax(self, parent, texto, color=None, negrita=False):
+        ctk.CTkLabel(
+            parent, text=texto,
+            font=("Segoe UI", 12, "bold") if negrita else FUENTE_NORMAL,
+            text_color=color or PALETA["texto_2"],
+            wraplength=900, justify="left"
+        ).pack(anchor="w", padx=16, pady=3)
+
+    def resolver_propiedades_ax(self):
+        try:
+            A = [
+                [convertir_numero(self.axp_A_entries[i][j].get()) for j in range(self.axp_n_value)]
+                for i in range(self.axp_m_value)
+            ]
+            u = [convertir_numero(entry.get()) for entry in self.axp_u_entries]
+            v = [convertir_numero(entry.get()) for entry in self.axp_v_entries]
+            c = convertir_numero(self.axp_c_entry.get())
+
+            u_mas_v = [u[i] + v[i] for i in range(self.axp_n_value)]
+            Au = multiplicar_matriz_vector(A, u)
+            Av = multiplicar_matriz_vector(A, v)
+            A_u_mas_v = multiplicar_matriz_vector(A, u_mas_v)
+            Au_mas_Av = [Au[i] + Av[i] for i in range(self.axp_m_value)]
+            cu = [c * x for x in u]
+            A_cu = multiplicar_matriz_vector(A, cu)
+            c_Au = [c * x for x in Au]
+
+            propiedad_a = A_u_mas_v == Au_mas_Av
+            propiedad_b = A_cu == c_Au
+
+            for widget in self.axp_result_card.winfo_children():
+                widget.destroy()
+            for widget in self.axp_procedure_card.winfo_children():
+                widget.destroy()
+
+            ctk.CTkLabel(
+                self.axp_result_card, text="Resultados",
+                font=FUENTE_SECCION, text_color=PALETA["texto"]
+            ).pack(anchor="w", padx=16, pady=(14, 8))
+
+            self._mostrar_linea_ax(self.axp_result_card, f"A·u = {self._formatear_vector_ax(Au)}")
+            self._mostrar_linea_ax(self.axp_result_card, f"A·v = {self._formatear_vector_ax(Av)}")
+            self._mostrar_linea_ax(self.axp_result_card, f"A·(u+v) = {self._formatear_vector_ax(A_u_mas_v)}")
+            self._mostrar_linea_ax(self.axp_result_card, f"A·u + A·v = {self._formatear_vector_ax(Au_mas_Av)}")
+            self._mostrar_linea_ax(
+                self.axp_result_card,
+                "✓ Propiedad a) A(u + v) = Au + Av se cumple." if propiedad_a else "✗ Propiedad a) no se cumple.",
+                PALETA["exito"] if propiedad_a else PALETA["error"], True
+            )
+            self._mostrar_linea_ax(self.axp_result_card, f"A·(cu) = {self._formatear_vector_ax(A_cu)}")
+            self._mostrar_linea_ax(self.axp_result_card, f"c(A·u) = {self._formatear_vector_ax(c_Au)}")
+            self._mostrar_linea_ax(
+                self.axp_result_card,
+                "✓ Propiedad b) A(cu) = c(Au) se cumple." if propiedad_b else "✗ Propiedad b) no se cumple.",
+                PALETA["exito"] if propiedad_b else PALETA["error"], True
+            )
+            ctk.CTkLabel(self.axp_result_card, text="", height=8).pack()
+
+            ctk.CTkLabel(
+                self.axp_procedure_card, text="Procedimiento paso a paso",
+                font=FUENTE_SECCION, text_color=PALETA["texto"]
+            ).pack(anchor="w", padx=16, pady=(14, 8))
+
+            pasos = [
+                f"1. Se identifican A de tamaño {self.axp_m_value}×{self.axp_n_value}, u = {self._formatear_vector_ax(u)}, v = {self._formatear_vector_ax(v)} y c = {formatear_numero(c)}.",
+                f"2. Se suma u + v = {self._formatear_vector_ax(u_mas_v)}.",
+                f"3. Se calcula A(u + v) = {self._formatear_vector_ax(A_u_mas_v)}.",
+                f"4. Se calculan Au = {self._formatear_vector_ax(Au)} y Av = {self._formatear_vector_ax(Av)}.",
+                f"5. Se suma Au + Av = {self._formatear_vector_ax(Au_mas_Av)}.",
+                "6. Se comparan A(u + v) y Au + Av: son iguales." if propiedad_a else "6. Se comparan A(u + v) y Au + Av: son diferentes.",
+                f"7. Se calcula cu = {self._formatear_vector_ax(cu)}.",
+                f"8. Se calcula A(cu) = {self._formatear_vector_ax(A_cu)}.",
+                f"9. Se calcula c(Au) = {self._formatear_vector_ax(c_Au)}.",
+                "10. Se comparan A(cu) y c(Au): son iguales." if propiedad_b else "10. Se comparan A(cu) y c(Au): son diferentes.",
+            ]
+            for paso in pasos:
+                self._mostrar_linea_ax(self.axp_procedure_card, paso)
+
         except Exception as error:
             messagebox.showerror("Error", str(error))
 
