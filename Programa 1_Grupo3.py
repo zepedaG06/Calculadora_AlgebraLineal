@@ -188,6 +188,24 @@ class PasoEliminacion(dict):
         return super().__getitem__(key)
 
 
+def texto_resta_de_filas(destino, origen, factor):
+    """Texto de la operacion Fdestino -> Fdestino - factor*Forigen, por ejemplo 'F2 → F2 - 2F1'."""
+    factor_abs = abs(factor)
+    k_str = "" if factor_abs == 1 else (
+        str(factor_abs.numerator) if factor_abs.denominator == 1 else f"({formatear_numero(factor_abs)})"
+    )
+    signo = "-" if factor > 0 else "+"
+    return f"F{destino + 1} → F{destino + 1} {signo} {k_str}F{origen + 1}"
+
+
+def _texto_intercambio(fila_pivote, fila_encontrada, variable):
+    return (
+        f"En la posición pivote de la {variable} hay un 0, así que se "
+        f"intercambia F{fila_pivote + 1} con F{fila_encontrada + 1}, la primera "
+        f"fila de abajo con un valor distinto de cero."
+    )
+
+
 def gauss_jordan(matriz_aumentada, num_variables, nombres_variables=None):
     """
     Reduce [A | b] a forma escalonada reducida por filas.
@@ -229,11 +247,7 @@ def gauss_jordan(matriz_aumentada, num_variables, nombres_variables=None):
             pasos.append(
                 PasoEliminacion(
                     operacion=f"F{fila_pivote + 1} ↔ F{fila_encontrada + 1}",
-                    explicacion=(
-                        f"En la posición pivote de la {variable} hay un 0, así que se "
-                        f"intercambia F{fila_pivote + 1} con F{fila_encontrada + 1}, la primera "
-                        f"fila de abajo con un valor distinto de cero."
-                    ),
+                    explicacion=_texto_intercambio(fila_pivote, fila_encontrada, variable),
                     matriz=copiar_matriz(matriz),
                     tipo="intercambio",
                     filas=(fila_pivote, fila_encontrada),
@@ -279,17 +293,10 @@ def gauss_jordan(matriz_aumentada, num_variables, nombres_variables=None):
 
             sumar_multiplo_fila(matriz, fila, fila_pivote, -factor)
 
-            factor_abs = abs(factor)
-            k_str = "" if factor_abs == 1 else (
-                str(factor_abs.numerator) if factor_abs.denominator == 1 else f"({formatear_numero(factor_abs)})"
-            )
-            signo = "-" if factor > 0 else "+"
-            op_str = f"F{fila + 1} → F{fila + 1} {signo} {k_str}F{fila_pivote + 1}"
-
             posicion = "debajo" if fila > fila_pivote else "arriba"
             pasos.append(
                 PasoEliminacion(
-                    operacion=op_str,
+                    operacion=texto_resta_de_filas(fila, fila_pivote, factor),
                     explicacion=(
                         f"Se hace cero el elemento de F{fila + 1} en la {variable}, "
                         f"{posicion} del pivote, usando F{fila_pivote + 1}."
@@ -323,6 +330,97 @@ def gauss_jordan(matriz_aumentada, num_variables, nombres_variables=None):
         )
     )
 
+    return matriz, columnas_pivote, pasos
+
+
+def forma_escalonada(matriz_aumentada, num_variables, nombres_variables=None, explicacion_inicial=None):
+    """
+    Reduce [A | b] a una forma escalonada por filas (eliminacion gaussiana).
+
+    A diferencia de Gauss-Jordan, solo se hacen ceros DEBAJO de cada pivote y
+    los pivotes no se convierten en 1. Devuelve (matriz, columnas_pivote, pasos).
+    """
+    nombres = nombres_variables or obtener_nombres_variables(num_variables)
+    matriz = copiar_matriz(matriz_aumentada)
+    pasos = [
+        PasoEliminacion(
+            operacion="Matriz aumentada inicial",
+            explicacion=explicacion_inicial or "Se plantea la matriz aumentada [A | b].",
+            matriz=copiar_matriz(matriz),
+            tipo="inicial",
+        )
+    ]
+
+    columnas_pivote = []
+    fila_pivote = 0
+    num_filas = len(matriz)
+
+    for columna in range(num_variables):
+        if fila_pivote >= num_filas:
+            break
+
+        fila_encontrada = buscar_fila_pivote(matriz, fila_pivote, columna)
+        if fila_encontrada is None:
+            continue
+
+        variable = f"columna {columna + 1} (variable {nombres[columna]})"
+        pivote = [(fila_pivote, columna)]
+
+        if fila_encontrada != fila_pivote:
+            intercambiar_filas(matriz, fila_pivote, fila_encontrada)
+            pasos.append(
+                PasoEliminacion(
+                    operacion=f"F{fila_pivote + 1} ↔ F{fila_encontrada + 1}",
+                    explicacion=_texto_intercambio(fila_pivote, fila_encontrada, variable),
+                    matriz=copiar_matriz(matriz),
+                    tipo="intercambio",
+                    filas=(fila_pivote, fila_encontrada),
+                    pivotes=pivote,
+                )
+            )
+
+        valor_pivote = matriz[fila_pivote][columna]
+        for fila in range(fila_pivote + 1, num_filas):
+            if matriz[fila][columna] == 0:
+                continue
+            factor = matriz[fila][columna] / valor_pivote
+            sumar_multiplo_fila(matriz, fila, fila_pivote, -factor)
+            pasos.append(
+                PasoEliminacion(
+                    operacion=texto_resta_de_filas(fila, fila_pivote, factor),
+                    explicacion=(
+                        f"Se hace cero el elemento de F{fila + 1} en la {variable}, debajo del pivote "
+                        f"{formatear_numero(valor_pivote)}, usando F{fila_pivote + 1} con multiplicador "
+                        f"{formatear_numero(factor)}."
+                    ),
+                    matriz=copiar_matriz(matriz),
+                    tipo="eliminacion",
+                    filas=(fila,),
+                    pivotes=pivote,
+                    fila_origen=fila_pivote,
+                )
+            )
+
+        columnas_pivote.append(columna)
+        fila_pivote += 1
+
+    if columnas_pivote:
+        columnas = ", ".join(str(c + 1) for c in columnas_pivote)
+        resumen = (
+            f"Se obtuvo la forma escalonada por filas: debajo de cada pivote solo hay ceros. "
+            f"Hay {len(columnas_pivote)} pivote(s), en las columnas {columnas}."
+        )
+    else:
+        resumen = "La matriz de coeficientes no tiene pivotes: todas sus entradas son cero."
+    pasos.append(
+        PasoEliminacion(
+            operacion="Forma escalonada por filas",
+            explicacion=resumen,
+            matriz=copiar_matriz(matriz),
+            tipo="final",
+            pivotes=list(enumerate(columnas_pivote)),
+        )
+    )
     return matriz, columnas_pivote, pasos
 
 
@@ -437,6 +535,14 @@ def obtener_forma_vectorial(matriz_rref, columnas_pivote, num_variables):
             vector[columna] = -matriz_rref[fila][libre]
         direcciones.append((parametro, vector))
     return particular, direcciones
+
+
+SUPERINDICES = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
+
+
+def espacio_real(n):
+    """Nombre del espacio R^n con superindice: espacio_real(3) -> 'R³'."""
+    return "R" + str(n).translate(SUPERINDICES)
 
 
 def obtener_nombres_variables(num_variables, prefijo="x"):
@@ -705,19 +811,71 @@ def formatear_combinacion_lineal(coeficientes, simbolos):
     return unir_terminos(zip(coeficientes, simbolos), union="·")
 
 
+def _plural(cantidad, singular, plural):
+    return f"{cantidad} {singular if cantidad == 1 else plural}"
+
+
 def analizar_independencia(A):
     """
-    Estudia si las columnas de A son linealmente independientes resolviendo
-    el sistema homogeneo A·c = 0.
+    Estudia si las columnas de A (los vectores v1, ..., vp de Rn) son linealmente
+    independientes:
+    1. Construye el sistema homogeneo [A | 0].
+    2. Lo reduce a forma escalonada por filas y cuenta pivotes y variables libres.
+    3. Veredicto: L.I. si hay un pivote en cada columna (sin variables libres),
+       L.D. en caso contrario.
+    Ademas resuelve A·c = 0 por Gauss-Jordan para dar una relacion de dependencia.
     """
     if not A or not A[0]:
         raise ValueError("La matriz no puede estar vacia.")
     num_componentes = len(A)
     num_vectores = len(A[0])
     b = [Fraction(0) for _ in A]
-    resultado = resolver_sistema(A, b, obtener_nombres_variables(num_vectores, "c"))
-    independiente = resultado["clasificacion"] == "Sistema consistente determinado"
-    resultado["independiente"] = independiente
+    nombres = obtener_nombres_variables(num_vectores, "c")
+
+    homogenea = crear_matriz_aumentada(A, b)
+    escalonada, columnas_pivote, pasos = forma_escalonada(
+        homogenea, num_vectores, nombres,
+        explicacion_inicial=(
+            "Se construye el sistema homogéneo [A | 0]: cada vector es una columna de A "
+            "y la última columna es de ceros."
+        ),
+    )
+    num_pivotes = len(columnas_pivote)
+    libres = [nombres[c] for c in range(num_vectores) if c not in columnas_pivote]
+    independiente = not libres
+
+    resultado = resolver_sistema(A, b, nombres)
+    resultado.update(
+        matriz_homogenea=homogenea,
+        matriz_escalonada=escalonada,
+        pasos_gauss_jordan=resultado["pasos"],
+        pasos=pasos,
+        columnas_pivote=columnas_pivote,
+        num_pivotes=num_pivotes,
+        num_libres=len(libres),
+        nombres_libres=libres,
+        independiente=independiente,
+    )
+
+    pivotes_texto = _plural(num_pivotes, "pivote", "pivotes")
+    if independiente:
+        resultado["veredicto"] = "Linealmente Independiente (L.I.)"
+        resultado["justificacion"] = (
+            f"La forma escalonada tiene {pivotes_texto} y hay {_plural(num_vectores, 'vector', 'vectores')}: "
+            f"cada columna tiene pivote, así que no hay variables libres. El sistema homogéneo "
+            f"A·c = 0 solo tiene la solución trivial c = 0."
+        )
+    else:
+        resultado["veredicto"] = "Linealmente Dependiente (L.D.)"
+        resultado["justificacion"] = (
+            f"La forma escalonada tiene {pivotes_texto} para {num_vectores} vectores, así que hay "
+            f"{_plural(len(libres), 'variable libre', 'variables libres')} ({', '.join(libres)}). "
+            f"El sistema homogéneo A·c = 0 tiene infinitas soluciones, entre ellas soluciones no triviales."
+        )
+    resultado["teorema"] = (
+        "Teorema: v1, …, vp son linealmente independientes si y solo si A·c = 0 tiene únicamente "
+        "la solución trivial, es decir, si hay un pivote en cada columna de A (pivotes = p)."
+    )
 
     observaciones = []
     if num_vectores > num_componentes:
@@ -735,6 +893,30 @@ def analizar_independencia(A):
     if not independiente:
         resultado["relacion"] = combinacion_no_trivial(resultado["forma_vectorial"][1])
     return resultado
+
+
+def informe_independencia(resultado):
+    """Lineas de texto con la salida pedida: matriz reducida, pivotes y veredicto."""
+    num_vectores = len(resultado["nombres_variables"])
+    columnas = ", ".join(str(c + 1) for c in resultado["columnas_pivote"]) or "ninguna"
+    lineas = [
+        "Sistema homogéneo [A | 0]:",
+        matriz_a_texto(resultado["matriz_homogenea"]),
+        "",
+        "Forma escalonada por filas:",
+        matriz_a_texto(resultado["matriz_escalonada"]),
+        "",
+        f"Número de pivotes: {resultado['num_pivotes']} (columnas pivote: {columnas})",
+        f"Variables libres: {resultado['num_libres']}"
+        + (f" ({', '.join(resultado['nombres_libres'])})" if resultado["nombres_libres"] else ""),
+        "",
+        f"Veredicto: {resultado['veredicto']}",
+        resultado["justificacion"],
+    ]
+    if resultado["relacion"] is not None:
+        simbolos = [f"v{j + 1}" for j in range(num_vectores)]
+        lineas.append(f"Relación de dependencia: {formatear_combinacion_lineal(resultado['relacion'], simbolos)} = 0")
+    return lineas
 
 
 def sistema_aleatorio(m, n, generador=None):
@@ -2725,7 +2907,7 @@ class PaginaCombinaciones(PaginaSistema):
         }
 
     def texto_dimension(self, filas, columnas):
-        return f"{columnas} vectores de R{filas}"
+        return f"{columnas} vectores de {espacio_real(filas)}"
 
     def construir_previa(self, parent, valores):
         n = len(valores[0]) - 1
@@ -2789,19 +2971,21 @@ class PaginaCombinaciones(PaginaSistema):
 
 class PaginaIndependencia(PaginaSistema):
     titulo = "Independencia lineal"
-    subtitulo = "Analiza si c1·v1 + … + cn·vn = 0 solo tiene la solución trivial"
-    etiqueta_filas = "Componentes"
-    etiqueta_columnas = "Vectores"
-    titulo_datos = "Vectores v1 … vn"
+    subtitulo = "Reduce [A | 0] a forma escalonada por filas, cuenta pivotes y variables libres y da el veredicto"
+    etiqueta_filas = "Dimensión (n)"
+    etiqueta_columnas = "Vectores (p)"
+    titulo_datos = "Vectores v1 … vp de Rⁿ"
     texto_boton = "Analizar independencia"
     ejemplos = {
         "Independientes (base de R³)": (3, 3, [[1, 0, 0], [0, 1, 0], [0, 0, 1]]),
+        "Independientes en R⁴": (4, 3, [[1, 0, 2], [2, 1, 0], [0, 3, 1], [1, 1, 1]]),
         "Dependientes": (3, 3, [[1, 4, 7], [2, 5, 8], [3, 6, 9]]),
-        "Más vectores que componentes": (2, 3, [[1, 0, 2], [0, 1, 3]]),
+        "Más vectores que dimensión": (2, 3, [[1, 0, 2], [0, 1, 3]]),
         "Con vector cero": (3, 2, [[1, 0], [2, 0], [3, 0]]),
     }
     ejemplo_inicial = "Dependientes"
     vacio_resultado = "Escribe los vectores como columnas y presiona «Analizar independencia»."
+    vacio_pasos = "Aquí aparecerá la reducción de [A | 0] a forma escalonada por filas."
 
     def configuracion_rejilla(self, filas, columnas):
         return {
@@ -2812,56 +2996,64 @@ class PaginaIndependencia(PaginaSistema):
         }
 
     def texto_dimension(self, filas, columnas):
-        return f"{columnas} vectores de R{filas}"
+        return f"p = {columnas} vectores de {espacio_real(filas)}"
 
     def valores_aleatorios(self, filas, columnas):
         return [[random.randint(-5, 5) for _ in range(columnas)] for _ in range(filas)]
 
     def construir_previa(self, parent, valores):
-        n = len(valores[0])
+        p = len(valores[0])
         partes = []
-        for j in range(n):
+        for j in range(p):
             partes += [f"{'' if j == 0 else '+ '}c{j + 1}·", [fila[j] for fila in valores]]
         partes += ["=", [0] * len(valores)]
         dibujar_expresion(parent, partes, tamano=12).pack(anchor="w")
-        etiqueta(parent, "Se resuelve el sistema homogéneo A·c = 0 con los vectores como columnas de A.",
-                 FUENTE_PEQUENA, "texto_3", ajustar=48).pack(anchor="w", pady=(6, 0))
+        etiqueta(parent, "SISTEMA HOMOGÉNEO [A | 0]", FUENTE_PEQUENA_NEGRITA, "primario").pack(
+            anchor="w", pady=(10, 2))
+        if all(v is not None for fila in valores for v in fila):
+            dibujar_matriz(parent, [fila + [Fraction(0)] for fila in valores], tamano=12).pack(anchor="w")
+        else:
+            etiqueta(parent, "Corrige las casillas en rojo para ver [A | 0].", FUENTE_PEQUENA, "error").pack(
+                anchor="w")
 
     def calcular(self, matriz):
         return analizar_independencia(matriz)
 
     def construir_resultado(self, resultado):
-        A = [fila[:-1] for fila in resultado["matriz_inicial"]]
+        A = [fila[:-1] for fila in resultado["matriz_homogenea"]]
         vectores = columnas_de(A)
         simbolos = [f"v{j + 1}" for j in range(len(vectores))]
         ceros = [0] * len(A)
+        independiente = resultado["independiente"]
 
-        if resultado["independiente"]:
-            estado = ("Los vectores son linealmente independientes",
-                      "La única solución de c1·v1 + … + cn·vn = 0 es la trivial: todos los coeficientes son 0.",
+        if independiente:
+            estado = ("Linealmente Independiente (L.I.)",
+                      "Hay un pivote en cada columna: la única solución de A·c = 0 es la trivial.",
                       PALETA["exito"], "✓")
         else:
-            estado = ("Los vectores son linealmente dependientes",
-                      "Existen coeficientes no todos nulos con c1·v1 + … + cn·vn = 0.",
+            estado = ("Linealmente Dependiente (L.D.)",
+                      "Hay variables libres: A·c = 0 tiene soluciones no triviales.",
                       PALETA["advertencia"], "!")
 
         constructores = [
             lambda p: tarjeta_estado(p, *estado),
             lambda p: fila_indicadores(p, [
-                (resultado["rango"], "Rango"),
-                (len(vectores), "Vectores"),
-                (len(A), "Componentes"),
-                (len(resultado["variables_libres"]), "Coeficientes libres"),
+                (resultado["num_pivotes"], "Pivotes"),
+                (resultado["num_libres"], "Variables libres"),
+                (len(vectores), "Vectores (p)"),
+                (len(A), "Dimensión (n)"),
             ]),
+            lambda p: self._tarjeta_reduccion(p, resultado),
+            lambda p: self._tarjeta_veredicto(p, resultado),
         ]
         if resultado["observaciones"]:
             constructores.append(lambda p: tarjeta_mensajes(p, "Observaciones", resultado["observaciones"]))
 
-        if resultado["independiente"]:
+        if independiente:
             def trivial(parent):
                 tarjeta = tarjeta_seccion(parent, "Solución trivial")
                 dibujar_expresion(tarjeta, ["c =", resultado["solucion"]]).pack(anchor="w", padx=14)
-                etiqueta(tarjeta, "Cada columna tiene un pivote: ningún vector se puede escribir con los demás.",
+                etiqueta(tarjeta, "Ningún vector se puede escribir como combinación lineal de los demás.",
                          FUENTE_NORMAL, "texto_2", ajustar=44).pack(anchor="w", padx=16, pady=(6, 16))
             constructores.append(trivial)
         else:
@@ -2884,10 +3076,45 @@ class PaginaIndependencia(PaginaSistema):
                 p, resultado, simbolo="c", titulo="Todas las soluciones de A·c = 0"))
         return constructores
 
+    @staticmethod
+    def _tarjeta_reduccion(parent, resultado):
+        tarjeta = tarjeta_seccion(parent, "Matriz reducida",
+                                  "Del sistema homogéneo [A | 0] a su forma escalonada por filas "
+                                  "(el procedimiento completo está en la pestaña Procedimiento).")
+        etiqueta(tarjeta, "SISTEMA HOMOGÉNEO [A | 0]", FUENTE_PEQUENA_NEGRITA, "texto_3").pack(anchor="w", padx=16)
+        dibujar_matriz(tarjeta, resultado["matriz_homogenea"]).pack(anchor="w", padx=8, pady=(2, 10))
+        etiqueta(tarjeta, "FORMA ESCALONADA POR FILAS", FUENTE_PEQUENA_NEGRITA, "texto_3").pack(anchor="w", padx=16)
+        dibujar_matriz(tarjeta, resultado["matriz_escalonada"],
+                       pivotes=list(enumerate(resultado["columnas_pivote"]))).pack(anchor="w", padx=8, pady=(2, 8))
+        columnas = ", ".join(str(c + 1) for c in resultado["columnas_pivote"]) or "ninguna"
+        libres = ", ".join(resultado["nombres_libres"]) or "ninguna"
+        etiqueta(tarjeta, f"Columnas pivote: {columnas}      Variables libres: {libres}",
+                 FUENTE_NEGRITA, "texto", ajustar=44).pack(anchor="w", padx=16, pady=(0, 16))
+        return tarjeta
+
+    @staticmethod
+    def _tarjeta_veredicto(parent, resultado):
+        independiente = resultado["independiente"]
+        tarjeta = tarjeta_seccion(parent, "Veredicto teórico")
+        fila = ctk.CTkFrame(tarjeta, fg_color="transparent")
+        fila.pack(fill="x", padx=16, pady=(0, 8))
+        chip(fila, "L.I." if independiente else "L.D.", "exito" if independiente else "advertencia",
+             TEXTO_SOBRE_PRIMARIO, (FAMILIA, 15, "bold")).pack(side="left")
+        etiqueta(fila, resultado["veredicto"], FUENTE_SECCION, "texto").pack(side="left", padx=(12, 0))
+        etiqueta(tarjeta, resultado["justificacion"], FUENTE_NORMAL, "texto_2", ajustar=44).pack(
+            anchor="w", padx=16)
+        etiqueta(tarjeta, resultado["teorema"], FUENTE_PEQUENA, "texto_3", ajustar=44).pack(
+            anchor="w", padx=16, pady=(8, 16))
+        return tarjeta
+
+    def texto_copiar(self, resultado):
+        return "\n".join(informe_independencia(resultado))
+
     def mensaje_resuelto(self, resultado):
-        if resultado["independiente"]:
-            return "Los vectores son linealmente independientes.", "exito"
-        return "Los vectores son linealmente dependientes.", "aviso"
+        mensaje = (f"Veredicto: {resultado['veredicto']} · "
+                   f"{_plural(resultado['num_pivotes'], 'pivote', 'pivotes')}, "
+                   f"{_plural(resultado['num_libres'], 'variable libre', 'variables libres')}.")
+        return mensaje, "exito" if resultado["independiente"] else "aviso"
 
 
 class PaginaPropiedades(PaginaSistema):
@@ -2937,7 +3164,7 @@ class PaginaPropiedades(PaginaSistema):
         self.area_pasos.pack(fill="both", expand=True)
 
     def texto_dimension(self, filas, columnas):
-        return f"A es {filas} × {columnas}; u, v ∈ R{columnas}"
+        return f"A es {filas} × {columnas}; u, v ∈ {espacio_real(columnas)}"
 
     def configurar_entradas(self, filas, columnas, valores):
         A = uv = None
@@ -3171,11 +3398,13 @@ class PaginaAyuda(PaginaInformativa):
         ("Matriz aumentada", "La matriz [A | b] que combina los coeficientes del sistema con los términos independientes."),
         ("Operación elemental", "Intercambiar filas, multiplicar una fila por un escalar no nulo o sumar a una fila un múltiplo de otra."),
         ("Pivote", "El primer valor distinto de cero de una fila, usado para eliminar el resto de su columna."),
+        ("Forma escalonada por filas", "Debajo de cada pivote solo hay ceros y cada pivote queda a la derecha del de la fila anterior."),
         ("Forma escalonada reducida", "Cada pivote vale 1 y es el único valor distinto de cero en su columna."),
         ("Rango", "La cantidad de pivotes. Si rango(A) < rango([A | b]) el sistema es inconsistente."),
         ("Variables básicas y libres", "Básicas: columnas con pivote. Libres: columnas sin pivote, se expresan con parámetros."),
         ("Combinación lineal", "Un vector de la forma c1·v1 + … + cn·vn. w ∈ Gen{v1, …, vn} si existe tal combinación igual a w."),
-        ("Independencia lineal", "Los vectores son independientes si c1·v1 + … + cn·vn = 0 solo se cumple con todos los ci = 0."),
+        ("Independencia lineal", "Los vectores son L.I. si c1·v1 + … + cp·vp = 0 solo se cumple con todos los ci = 0: "
+                                 "en la forma escalonada de [A | 0] hay un pivote en cada columna."),
         ("Sistema homogéneo", "Todos los términos independientes son 0 (Ax = 0). Siempre tiene al menos la solución trivial."),
         ("Linealidad de Ax", "Para toda matriz A: A(u + v) = Au + Av y A(cu) = c(Au)."),
     ]
@@ -3390,11 +3619,73 @@ class AplicacionAlgebraLineal(_Ventana):
 # Inicio del programa
 # -----------------------------------------------------------------------------
 
+# -----------------------------------------------------------------------------
+# Modo consola: independencia lineal solo con la biblioteca estandar de Python
+# -----------------------------------------------------------------------------
+
+def _pedir_entero(mensaje, minimo=1, entrada=input):
+    while True:
+        try:
+            valor = int(entrada(mensaje).strip())
+            if valor >= minimo:
+                return valor
+        except ValueError:
+            pass
+        print(f"  Escribe un número entero mayor o igual que {minimo}.")
+
+
+def independencia_consola(entrada=input):
+    """
+    Pide la cantidad de vectores p y su dimension n, lee los vectores, construye el
+    sistema homogeneo [A | 0], lo reduce a forma escalonada por filas y muestra la
+    matriz reducida, el numero de pivotes y el veredicto (L.I. o L.D.).
+    """
+    print("=" * 64)
+    print("Independencia lineal por reducción a forma escalonada por filas")
+    print("=" * 64)
+    p = _pedir_entero("Cantidad de vectores p: ", entrada=entrada)
+    n = _pedir_entero("Dimensión n (componentes de cada vector): ", entrada=entrada)
+    print(f"Escribe cada vector de {espacio_real(n)} con sus {n} componentes separadas por espacios "
+          f"(se aceptan 3, -1/2 o 0.5).")
+
+    vectores = []
+    for j in range(p):
+        while True:
+            partes = entrada(f"  v{j + 1} = ").replace(";", " ").split()
+            try:
+                if len(partes) != n:
+                    raise ValueError(f"se esperaban {n} componentes y se recibieron {len(partes)}.")
+                vectores.append([convertir_numero(texto) for texto in partes])
+                break
+            except ValueError as error:
+                print(f"    Error: {error}")
+
+    A = [[vectores[j][i] for j in range(p)] for i in range(n)]
+    resultado = analizar_independencia(A)
+
+    print()
+    print("Operaciones elementales aplicadas:")
+    operaciones = [paso["operacion"] for paso in resultado["pasos"] if paso["tipo"] not in ("inicial", "final")]
+    for numero, operacion in enumerate(operaciones, start=1):
+        print(f"  {numero}. {operacion}")
+    if not operaciones:
+        print("  (ninguna: la matriz ya estaba en forma escalonada)")
+    print()
+    for linea in informe_independencia(resultado):
+        print(linea)
+    return resultado
+
+
 def main():
-    if ctk is None:
-        raise SystemExit(
-            "CustomTkinter no esta instalado. Ejecuta: pip install -r requirements.txt"
-        )
+    if "--consola" in sys.argv[1:] or ctk is None:
+        if ctk is None:
+            print("CustomTkinter no está instalado; se abre el modo consola.")
+            print("Para la interfaz gráfica ejecuta: pip install -r requirements.txt\n")
+        try:
+            independencia_consola()
+        except (KeyboardInterrupt, EOFError):
+            print("\nPrograma terminado.")
+        return
     configurar_customtkinter()
     app = AplicacionAlgebraLineal()
     app.mainloop()

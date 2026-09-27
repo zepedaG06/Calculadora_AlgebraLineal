@@ -8,7 +8,7 @@ Proyecto universitario del Grupo 3 (Universidad Americana) para resolver problem
 - **Combinaciones lineales**: indica si w pertenece a Gen{v1, …, vn} y con qué coeficientes.
 - **Ecuación Ax = b**: vista matricial del sistema, forma vectorial paramétrica y comprobación de A·x = b.
 - **Propiedades de Ax**: comprueba A(u + v) = Au + Av y A(cu) = c(Au) fila por fila.
-- **Independencia lineal**: resuelve A·c = 0 y, si los vectores son dependientes, muestra una relación de dependencia.
+- **Independencia lineal**: pide la cantidad de vectores p y su dimensión n, construye el sistema homogéneo [A | 0], lo reduce a forma escalonada por filas, cuenta pivotes y variables libres y da el veredicto (L.I. o L.D.). Si son dependientes, también muestra una relación de dependencia.
 - **Método** y **Ayuda**: explicación del algoritmo con un ejemplo resuelto, atajos y conceptos clave.
 
 Cada sección permite cargar ejemplos, generar datos aleatorios y ver el procedimiento completo o paso a paso (con reproducción automática). La fila que cambia se resalta y el pivote aparece encerrado en cada matriz.
@@ -52,6 +52,16 @@ macOS / Linux:
 ```bash
 python3 "Programa 1_Grupo3.py"
 ```
+
+### Modo consola (sin librerías externas)
+
+El análisis de independencia lineal también funciona en la terminal, usando solo Python estándar:
+
+```bash
+python3 "Programa 1_Grupo3.py" --consola
+```
+
+Pide p, n y los vectores, y muestra el sistema [A | 0], las operaciones elementales, la forma escalonada por filas, el número de pivotes y el veredicto. Si CustomTkinter no está instalado, el programa abre este modo automáticamente.
 
 ## Cómo usar
 

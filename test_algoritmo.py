@@ -499,6 +499,58 @@ class PruebasOtrasSecciones(unittest.TestCase):
         self.assertIn("más vectores que componentes", texto)
         self.assertIn("v2 es el vector cero", texto)
 
+    def test_forma_escalonada_por_filas(self):
+        A = [
+            [Fraction(1), Fraction(4), Fraction(7)],
+            [Fraction(2), Fraction(5), Fraction(8)],
+            [Fraction(3), Fraction(6), Fraction(9)],
+        ]
+        homogenea = programa.crear_matriz_aumentada(A, [Fraction(0)] * 3)
+        escalonada, columnas_pivote, pasos = programa.forma_escalonada(homogenea, 3)
+        self.assertEqual(escalonada, [[1, 4, 7, 0], [0, -3, -6, 0], [0, 0, 0, 0]])
+        self.assertEqual(columnas_pivote, [0, 1])
+        # Solo eliminacion hacia abajo: no hay escalamientos y los pivotes no se vuelven 1.
+        self.assertNotIn("escalado", [p["tipo"] for p in pasos])
+        self.assertEqual(pasos[-1]["operacion"], "Forma escalonada por filas")
+
+    def test_forma_escalonada_con_pivote_cero(self):
+        matriz = [[Fraction(0), Fraction(2), Fraction(0)], [Fraction(3), Fraction(1), Fraction(0)]]
+        escalonada, columnas_pivote, pasos = programa.forma_escalonada(matriz, 2)
+        self.assertEqual(escalonada, [[3, 1, 0], [0, 2, 0]])
+        self.assertEqual(pasos[1]["operacion"], "F1 ↔ F2")
+        self.assertEqual(columnas_pivote, [0, 1])
+
+    def test_independencia_pivotes_y_veredicto(self):
+        dependientes = programa.analizar_independencia(
+            [[Fraction(1), Fraction(4), Fraction(7)],
+             [Fraction(2), Fraction(5), Fraction(8)],
+             [Fraction(3), Fraction(6), Fraction(9)]])
+        self.assertEqual(dependientes["num_pivotes"], 2)
+        self.assertEqual(dependientes["num_libres"], 1)
+        self.assertEqual(dependientes["nombres_libres"], ["c3"])
+        self.assertEqual(dependientes["veredicto"], "Linealmente Dependiente (L.D.)")
+        self.assertEqual([fila[-1] for fila in dependientes["matriz_homogenea"]], [0, 0, 0])
+
+        independientes = programa.analizar_independencia(
+            [[Fraction(1), Fraction(0)], [Fraction(2), Fraction(1)], [Fraction(0), Fraction(3)]])
+        self.assertEqual(independientes["num_pivotes"], 2)
+        self.assertEqual(independientes["num_libres"], 0)
+        self.assertEqual(independientes["veredicto"], "Linealmente Independiente (L.I.)")
+
+    def test_modo_consola(self):
+        import contextlib
+        import io
+        respuestas = iter(["3", "abc", "3", "1 2 3", "4 5 6", "7 8", "7 8 9"])
+        salida = io.StringIO()
+        with contextlib.redirect_stdout(salida):
+            resultado = programa.independencia_consola(entrada=lambda _mensaje: next(respuestas))
+        texto = salida.getvalue()
+        self.assertFalse(resultado["independiente"])
+        self.assertIn("se esperaban 3 componentes", texto)
+        self.assertIn("Forma escalonada por filas:", texto)
+        self.assertIn("Número de pivotes: 2", texto)
+        self.assertIn("Veredicto: Linealmente Dependiente (L.D.)", texto)
+
     def test_propiedades_del_producto_ax(self):
         A = [[Fraction(1), Fraction(2)], [Fraction(3), Fraction(4)]]
         u = [Fraction(1), Fraction(2)]
