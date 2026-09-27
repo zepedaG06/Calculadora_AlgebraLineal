@@ -1,6 +1,17 @@
 # Programa 1 - Calculadora de Algebra Lineal
 
-Proyecto universitario del Grupo 3 para resolver sistemas de ecuaciones lineales por eliminacion por filas.
+Proyecto universitario del Grupo 3 (Universidad Americana) para resolver problemas de álgebra lineal por eliminación por filas (Gauss-Jordan).
+
+## Secciones
+
+- **Calculadora**: sistemas de ecuaciones lineales de hasta 10 × 10, con clasificación, rango, solución única o paramétrica y verificación.
+- **Combinaciones lineales**: indica si w pertenece a Gen{v1, …, vn} y con qué coeficientes.
+- **Ecuación Ax = b**: vista matricial del sistema, forma vectorial paramétrica y comprobación de A·x = b.
+- **Propiedades de Ax**: comprueba A(u + v) = Au + Av y A(cu) = c(Au) fila por fila.
+- **Independencia lineal**: resuelve A·c = 0 y, si los vectores son dependientes, muestra una relación de dependencia.
+- **Método** y **Ayuda**: explicación del algoritmo con un ejemplo resuelto, atajos y conceptos clave.
+
+Cada sección permite cargar ejemplos, generar datos aleatorios y ver el procedimiento completo o paso a paso (con reproducción automática). La fila que cambia se resalta y el pivote aparece encerrado en cada matriz.
 
 ## Restricciones
 
@@ -10,40 +21,52 @@ No se usa:
 - NumPy
 - SciPy
 
-El algoritmo de eliminacion por filas esta implementado manualmente. La interfaz usa CustomTkinter, que es una capa visual moderna basada en Tkinter.
+El algoritmo de eliminación por filas está implementado manualmente con fracciones exactas (`fractions.Fraction`). La interfaz usa CustomTkinter, una capa visual moderna basada en Tkinter.
 
-## Instalar dependencia visual
+## Instalar dependencias
+
+Windows:
 
 ```powershell
 py -m pip install -r requirements.txt
 ```
 
-Tambien puedes instalarla directamente:
+macOS / Linux:
 
-```powershell
-py -m pip install customtkinter
+```bash
+python3 -m pip install -r requirements.txt
 ```
 
-## Como ejecutar
+Pillow se usa para mostrar el logo de la UAM (el archivo está en formato WebP). Si no está instalado, el programa funciona igual pero sin logo.
 
-En Visual Studio Code, abre esta carpeta y ejecuta:
+## Cómo ejecutar
+
+Windows:
 
 ```powershell
 py "Programa 1_Grupo3.py"
 ```
 
-Si tu instalacion reconoce `python`, tambien funciona:
+macOS / Linux:
 
-```powershell
-python "Programa 1_Grupo3.py"
+```bash
+python3 "Programa 1_Grupo3.py"
 ```
 
-## Como probar
+## Cómo usar
 
-```powershell
-py -m unittest test_algoritmo.py
+- Ajusta el tamaño con los botones − y +; los valores ya escritos se conservan.
+- Se aceptan enteros (`3`), decimales (`0.5` o `0,5`) y fracciones (`3/2`). Una casilla con borde rojo tiene un valor no válido.
+- `Enter` pasa a la siguiente casilla, `↑`/`↓` cambian de fila y `Ctrl + Enter` (`⌘ + Enter` en macOS) resuelve.
+
+## Cómo probar
+
+```bash
+python3 -m unittest test_algoritmo.py
 ```
+
+En Windows usa `py` en lugar de `python3`.
 
 ## Framework elegido
 
-Se usa CustomTkinter porque permite una interfaz de escritorio moderna con modo oscuro, tarjetas, botones estilizados y entradas claras para matrices. No resuelve operaciones matematicas: solo mejora la presentacion visual y se conecta con el algoritmo manual del programa.
+Se usa CustomTkinter porque permite una interfaz de escritorio moderna con modo oscuro, tarjetas, botones estilizados y entradas claras para matrices. No resuelve operaciones matemáticas: solo mejora la presentación visual y se conecta con el algoritmo manual del programa. Las matrices de cada paso se dibujan en un `Canvas` de Tkinter para que incluso un sistema de 10 × 10 (unos 100 pasos) se muestre con fluidez.

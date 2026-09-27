@@ -380,6 +380,146 @@ class PruebasEliminacionPorFilas(unittest.TestCase):
         self.assertTrue(res_3x5["verificacion"][0])
 
 
+class PruebasEntradaYFormato(unittest.TestCase):
+    def test_convertir_numero_formatos_aceptados(self):
+        self.assertEqual(programa.convertir_numero(" 3/2 "), Fraction(3, 2))
+        self.assertEqual(programa.convertir_numero("2,5"), Fraction(5, 2))
+        self.assertEqual(programa.convertir_numero("0.25"), Fraction(1, 4))
+        self.assertEqual(programa.convertir_numero("−3"), Fraction(-3))
+
+    def test_convertir_numero_errores_en_espanol(self):
+        with self.assertRaisesRegex(ValueError, "vacía"):
+            programa.convertir_numero("  ")
+        with self.assertRaisesRegex(ValueError, "no es un número válido"):
+            programa.convertir_numero("abc")
+        with self.assertRaisesRegex(ValueError, "división entre cero"):
+            programa.convertir_numero("1/0")
+
+    def test_coeficientes_fraccionarios_entre_parentesis(self):
+        fila = [Fraction(1, 2), Fraction(-1)]
+        self.assertEqual(
+            programa.formatear_ecuacion_original(fila, Fraction(1), ["x1", "x2"]),
+            "(1/2)x1 - x2 = 1",
+        )
+        self.assertEqual(
+            programa.formatear_sustitucion(fila, Fraction(1), [Fraction(4), Fraction(1)]),
+            "(1/2)(4) - (1) = 1",
+        )
+
+    def test_parametro_con_coeficiente_fraccionario(self):
+        resultado = programa.resolver_sistema([[Fraction(2), Fraction(1)]], [Fraction(4)])
+        self.assertEqual(resultado["expresiones"][0], "2 - (1/2)t")
+
+    def test_formatear_combinacion_lineal(self):
+        texto = programa.formatear_combinacion_lineal(
+            [Fraction(2), Fraction(-1), Fraction(0), Fraction(1, 2)], ["v1", "v2", "v3", "v4"]
+        )
+        self.assertEqual(texto, "2·v1 - v2 + (1/2)·v4")
+
+
+class PruebasGaussJordanDetallado(unittest.TestCase):
+    def test_no_intercambia_si_el_pivote_no_es_cero(self):
+        A = [[Fraction(1), Fraction(2)], [Fraction(3), Fraction(4)]]
+        b = [Fraction(5), Fraction(6)]
+        resultado = programa.resolver_sistema(A, b)
+        operaciones = [paso["operacion"] for paso in resultado["pasos"]]
+        self.assertFalse(any("↔" in op for op in operaciones))
+        self.assertEqual(resultado["solucion"], [Fraction(-4), Fraction(9, 2)])
+
+    def test_pasos_guardan_filas_y_pivotes(self):
+        A = [[Fraction(1), Fraction(1)], [Fraction(2), Fraction(-1)]]
+        b = [Fraction(3), Fraction(0)]
+        pasos = programa.resolver_sistema(A, b)["pasos"]
+        eliminacion = next(p for p in pasos if p["tipo"] == "eliminacion")
+        self.assertEqual(eliminacion["filas"], [1])
+        self.assertEqual(eliminacion["fila_origen"], 0)
+        self.assertEqual(eliminacion["pivotes"], [(0, 0)])
+        self.assertEqual(eliminacion.operacion, "F2 → F2 - 2F1")
+        self.assertEqual(pasos[-1]["tipo"], "final")
+        self.assertEqual(pasos[-1]["pivotes"], [(0, 0), (1, 1)])
+
+    def test_rango_de_sistema_inconsistente(self):
+        A = [[Fraction(1), Fraction(1)], [Fraction(1), Fraction(1)]]
+        b = [Fraction(2), Fraction(5)]
+        resultado = programa.resolver_sistema(A, b)
+        self.assertEqual(resultado["rango"], 1)
+        self.assertEqual(resultado["rango_aumentada"], 2)
+        self.assertEqual(resultado["filas_inconsistentes"], [1])
+
+    def test_forma_vectorial_parametrica(self):
+        A = [
+            [Fraction(1), Fraction(2), Fraction(0), Fraction(1)],
+            [Fraction(0), Fraction(1), Fraction(1), Fraction(2)],
+        ]
+        b = [Fraction(5), Fraction(4)]
+        particular, direcciones = programa.resolver_sistema(A, b)["forma_vectorial"]
+        self.assertEqual(particular, [-3, 4, 0, 0])
+        self.assertEqual(direcciones, [("s", [2, -1, 1, 0]), ("t", [3, -2, 0, 1])])
+        # Cada vector direccion resuelve el sistema homogeneo A·v = 0.
+        for _, vector in direcciones:
+            self.assertEqual(programa.multiplicar_matriz_vector(A, vector), [0, 0])
+
+    def test_sistema_aleatorio_es_consistente(self):
+        import random
+        generador = random.Random(7)
+        for _ in range(20):
+            A, b = programa.sistema_aleatorio(3, 4, generador)
+            A = [[Fraction(v) for v in fila] for fila in A]
+            resultado = programa.resolver_sistema(A, [Fraction(v) for v in b])
+            self.assertNotEqual(resultado["clasificacion"], "Sistema inconsistente")
+
+
+class PruebasOtrasSecciones(unittest.TestCase):
+    def test_independencia_dependientes_con_relacion(self):
+        A = [
+            [Fraction(1), Fraction(4), Fraction(7)],
+            [Fraction(2), Fraction(5), Fraction(8)],
+            [Fraction(3), Fraction(6), Fraction(9)],
+        ]
+        resultado = programa.analizar_independencia(A)
+        self.assertFalse(resultado["independiente"])
+        relacion = resultado["relacion"]
+        self.assertTrue(any(c != 0 for c in relacion))
+        self.assertTrue(all(c.denominator == 1 for c in relacion))
+        self.assertEqual(programa.multiplicar_matriz_vector(A, relacion), [0, 0, 0])
+        self.assertEqual(resultado["nombres_variables"], ["c1", "c2", "c3"])
+
+    def test_independencia_base_canonica(self):
+        A = [[Fraction(int(i == j)) for j in range(3)] for i in range(3)]
+        resultado = programa.analizar_independencia(A)
+        self.assertTrue(resultado["independiente"])
+        self.assertIsNone(resultado["relacion"])
+        self.assertEqual(resultado["observaciones"], [])
+
+    def test_independencia_observaciones(self):
+        A = [[Fraction(1), Fraction(0), Fraction(2)], [Fraction(0), Fraction(0), Fraction(3)]]
+        resultado = programa.analizar_independencia(A)
+        self.assertFalse(resultado["independiente"])
+        texto = " ".join(resultado["observaciones"])
+        self.assertIn("más vectores que componentes", texto)
+        self.assertIn("v2 es el vector cero", texto)
+
+    def test_propiedades_del_producto_ax(self):
+        A = [[Fraction(1), Fraction(2)], [Fraction(3), Fraction(4)]]
+        u = [Fraction(1), Fraction(2)]
+        v = [Fraction(-1), Fraction(0)]
+        datos = programa.verificar_propiedades_producto(A, u, v, Fraction(3))
+        self.assertEqual(datos["Au"], [5, 11])
+        self.assertEqual(datos["Av"], [-1, -3])
+        self.assertEqual(datos["A_u_mas_v"], [4, 8])
+        self.assertEqual(datos["A_cu"], [15, 33])
+        self.assertTrue(datos["propiedad_a"])
+        self.assertTrue(datos["propiedad_b"])
+
+    def test_detalle_producto_matriz_vector(self):
+        A = [[Fraction(1), Fraction(2)], [Fraction(0), Fraction(-3)]]
+        x = [Fraction(1), Fraction(-1)]
+        self.assertEqual(
+            programa.detalle_producto_matriz_vector(A, x),
+            ["Fila 1:  (1) + 2(-1) = -1", "Fila 2:  -3(-1) = 3"],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
 
