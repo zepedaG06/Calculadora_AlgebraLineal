@@ -19,32 +19,41 @@ Proyecto universitario del **Grupo 3 (Universidad Americana - UAM)** para el cur
    - Verificación sustitutiva detallada ecuación por ecuación.
    - **Interpretación como combinación lineal de columnas:** muestra explícitamente $x_1 \mathbf{a}_1 + \dots + x_n \mathbf{a}_n = \mathbf{b}$.
 
-2. **Módulo de Vectores en $\mathbb{R}^n$:**
+2. **Propiedades del Producto Matriz-Vector (Ax):**
+   - Demostración y comprobación rigurosa de las dos propiedades fundamentales del material didáctico:
+     1. $A(\mathbf{u} + \mathbf{v}) = A\mathbf{u} + A\mathbf{v}$ (propiedad distributiva respecto a la adición vectorial).
+     2. $A(c\mathbf{u}) = c(A\mathbf{u})$ (propiedad de homogeneidad / asociatividad con escalar).
+   - Cálculo manual independiente de cada miembro: $\mathbf{u} + \mathbf{v}$, $A(\mathbf{u} + \mathbf{v})$, $A\mathbf{u}$, $A\mathbf{v}$, $A\mathbf{u} + A\mathbf{v}$, $c\mathbf{u}$, $A(c\mathbf{u})$, $c(A\mathbf{u})$.
+   - Desglose componente a componente del producto punto fila por vector.
+   - Comparación formal y explícita confirmando la igualdad matemática (`✓ Se cumple: ...`).
+   - Validación estricta de dimensiones ($n_A = \text{dim}(\mathbf{u}) = \text{dim}(\mathbf{v})$) con mensajes claros ante incompatibilidades.
+
+3. **Módulo de Vectores en $\mathbb{R}^n$:**
    - Suma y resta de vectores componente a componente.
    - Multiplicación de vector por escalar ($k \cdot \mathbf{v}$).
    - Validación de dimensiones compatibles en $\mathbb{R}^n$.
    - Procedimiento algebraico detallado paso a paso.
 
-3. **Combinación Lineal y Ecuación Vectorial:**
+4. **Combinación Lineal y Ecuación Vectorial:**
    - Análisis de $c_1 \mathbf{v}_1 + c_2 \mathbf{v}_2 + \dots + c_k \mathbf{v}_k = \mathbf{b}$.
    - Construcción automática del sistema $[A \mid \mathbf{b}]$ donde cada columna es un vector $\mathbf{v}_j$.
    - Nomenclatura consistente de coeficientes $c_1, c_2, \dots, c_k$.
    - Determinación analítica de soluciones únicas, infinitas o inexistentes.
    - Verificación vectorial formal: $(c_1)\mathbf{v}_1 + (c_2)\mathbf{v}_2 + \dots = \mathbf{b}_{\text{calc}} = \mathbf{b}$.
 
-4. **Independencia Lineal:**
+5. **Independencia Lineal:**
    - Determinación rigurosa de si un conjunto $\{\mathbf{v}_1, \dots, \mathbf{v}_k\}$ es **Linealmente Independiente (LI)** o **Linealmente Dependiente (LD)**.
    - Planteamiento y resolución del sistema homogéneo $[\mathbf{v}_1 \dots \mathbf{v}_k \mid \mathbf{0}]$.
    - Análisis de pivotes vs variables libres: solución trivial única (LI) vs soluciones no triviales (LD).
    - Relación de dependencia no trivial explícita en caso LD.
 
-5. **Operaciones Básicas con Matrices:**
+6. **Operaciones Básicas con Matrices:**
    - Suma ($A + B$) y resta ($A - B$) con validación estricta de dimensiones idénticas.
    - Multiplicación por escalar ($k \cdot A$).
    - Multiplicación matricial $A(m \times n) \cdot B(n \times p)$ implementada manualmente con bucles anidados y comprobación estricta de compatibilidad ($n_A = m_B$).
    - Desglose componente a componente del producto punto.
 
-6. **Método de Eliminación y Ayuda:**
+7. **Método de Eliminación y Ayuda:**
    - Glosario, conceptos teóricos y guía didáctica de uso.
 
 ## Instalar dependencias visuales
@@ -73,7 +82,7 @@ python "Programa 1_Grupo3.py"
 
 ## Pruebas automatizadas
 
-El proyecto cuenta con 40 pruebas unitarias automatizadas (incluyendo los 22 tests obligatorios de la Tarea 3):
+El proyecto cuenta con 47 pruebas unitarias automatizadas (incluyendo los 22 tests obligatorios de la Tarea 3 y las 7 pruebas obligatorias de las propiedades de $Ax$):
 
 ```powershell
 py -m unittest test_algoritmo.py -v

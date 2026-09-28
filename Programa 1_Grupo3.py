@@ -807,6 +807,305 @@ def matriz_simple_a_texto(matriz):
 
 
 # -----------------------------------------------------------------------------
+# Modulo de Propiedades del Producto Matriz-Vector Ax (Tarea 3)
+# -----------------------------------------------------------------------------
+
+def multiplicar_matriz_vector(A, x):
+    """
+    Multiplicación matriz-vector A(m x n) * x(n x 1) = y(m x 1)
+    implementada manualmente mediante bucles estándar y regla fila por vector (sin librerías externas).
+
+    Procedimiento algebraico:
+    Cada componente y[i] del vector resultante es el producto punto entre la fila i de A y el vector x:
+    y[i] = sum_{j=0}^{n-1} A[i][j] * x[j].
+
+    Validaciones algebraicas:
+    - Valida que A sea una matriz no vacía y bien formada (validar_matriz).
+    - Valida que x sea un vector numérico/Fraction no vacío (validar_vector).
+    - Valida que el número de columnas de A coincida exactamente con la dimensión del vector x (nA == len(x)).
+    """
+    validar_matriz(A, "A")
+    validar_vector(x, "x")
+    mA, nA = dimensiones_matriz(A)
+    nx = len(x)
+
+    if nA != nx:
+        raise ValueError(
+            f"Dimensiones incompatibles para el producto matriz-vector Ax: "
+            f"la matriz A tiene {nA} columnas pero el vector x pertenece a R^{nx}. "
+            f"Para realizar el producto Ax, el número de columnas de A ({nA}) "
+            f"debe ser exactamente igual a la dimensión del vector x ({nx})."
+        )
+
+    resultado = []
+    for i in range(mA):
+        suma = Fraction(0)
+        for j in range(nA):
+            suma += A[i][j] * x[j]
+        resultado.append(suma)
+    return resultado
+
+
+def desglosar_producto_matriz_vector(A, x, nombre_matriz="A", nombre_vector="x"):
+    """
+    Retorna los pasos algebraicos del producto punto fila por vector para cada componente de Ax.
+    """
+    mA, nA = dimensiones_matriz(A)
+    pasos = []
+    for i in range(mA):
+        terminos = [f"({formatear_numero(A[i][j])}) · ({formatear_numero(x[j])})" for j in range(nA)]
+        suma = sum(A[i][j] * x[j] for j in range(nA))
+        linea = f"({nombre_matriz} · {nombre_vector})[{i + 1}] = {' + '.join(terminos)} = {formatear_numero(suma)}"
+        pasos.append(linea)
+    return pasos
+
+
+def obtener_columnas_matriz(A):
+    """
+    Retorna la lista de vectores columna [a1, a2, ..., an] de la matriz A.
+    Cada columna aj es un vector en R^m.
+    """
+    validar_matriz(A, "A")
+    mA, nA = dimensiones_matriz(A)
+    return [[A[i][j] for i in range(mA)] for j in range(nA)]
+
+
+def formatear_vector_columna(v):
+    """Retorna la representación textual alineada de un vector columna."""
+    txts = [formatear_numero(val) for val in v]
+    max_w = max(len(t) for t in txts) if txts else 1
+    max_w = max(max_w, 3)
+    lineas = [f"[ {t:>{max_w}} ]" for t in txts]
+    return "\n".join(lineas)
+
+
+def calcular_producto_matriz_vector(A, x):
+    """
+    Calcula el producto matriz-vector Ax manualmente mediante Python estándar y fracciones exactas.
+    Genera simultáneamente:
+    1. Procedimiento fila por vector (regla del producto punto).
+    2. Interpretación como combinación lineal de las columnas de A (Ax = c1*a1 + ... + cn*an).
+    """
+    validar_matriz(A, "A")
+    validar_vector(x, "x")
+    mA, nA = dimensiones_matriz(A)
+    nx = len(x)
+
+    if nA != nx:
+        raise ValueError(
+            f"Dimensiones incompatibles para el producto matriz-vector Ax: "
+            f"la matriz A tiene {nA} columnas pero el vector x pertenece a R^{nx}. "
+            f"Para realizar el producto Ax, el número de columnas de A ({nA}) "
+            f"debe ser exactamente igual a la dimensión del vector x ({nx})."
+        )
+
+    # 1. Multiplicación fila por vector manual
+    resultado = multiplicar_matriz_vector(A, x)
+
+    # 2. Desglose detallado de cada fila
+    pasos_filas = []
+    for i in range(mA):
+        prods_str = []
+        prods_frac = []
+        for j in range(nA):
+            aij = A[i][j]
+            xj = x[j]
+            prod = aij * xj
+            prods_str.append(f"({formatear_numero(aij)})({formatear_numero(xj)})")
+            prods_frac.append(prod)
+
+        terminos_no_cero = [formatear_numero(p) for p in prods_frac if p != 0]
+        if not terminos_no_cero:
+            intermedio = "0"
+        elif len(terminos_no_cero) == 1:
+            intermedio = terminos_no_cero[0]
+        else:
+            intermedio = " + ".join(terminos_no_cero)
+
+        paso = {
+            "fila": i + 1,
+            "productos_str": prods_str,
+            "terminos_frac": prods_frac,
+            "intermedio": intermedio,
+            "valor": resultado[i],
+            "linea": f"Fila {i + 1}:\n   {' + '.join(prods_str)}\n   = {intermedio}\n   = {formatear_numero(resultado[i])}",
+        }
+        pasos_filas.append(paso)
+
+    # 3. Interpretación como combinación lineal de columnas
+    columnas = obtener_columnas_matriz(A)
+    escalares = [x[j] for j in range(nA)]
+
+    terminos_comb = []
+    for j in range(nA):
+        c_str = formatear_numero(escalares[j])
+        terminos_comb.append(f"{c_str}·a{j + 1}")
+    expresion_combinacion = " + ".join(terminos_comb)
+
+    columnas_escaladas = [
+        multiplicar_vector_escalar(escalares[j], columnas[j])
+        for j in range(nA)
+    ]
+
+    vector_combinacion = [Fraction(0) for _ in range(mA)]
+    for col_esc in columnas_escaladas:
+        vector_combinacion = sumar_vectores(vector_combinacion, col_esc)
+
+    coincide = (vector_combinacion == resultado)
+
+    return {
+        "A": A,
+        "x": x,
+        "resultado": resultado,
+        "dimensiones": {"mA": mA, "nA": nA, "dim_x": nx, "dim_resultado": mA},
+        "pasos_filas": pasos_filas,
+        "columnas": columnas,
+        "escalares": escalares,
+        "expresion_combinacion": expresion_combinacion,
+        "columnas_escaladas": columnas_escaladas,
+        "vector_combinacion": vector_combinacion,
+        "coincide_combinacion": coincide,
+    }
+
+
+def analizar_propiedades_ax(A, u, v, c):
+    """
+    Verifica y demuestra formalmente las propiedades fundamentales del producto matriz-vector Ax:
+    1. Propiedad Distributiva: A(u + v) = Au + Av
+    2. Propiedad de Homogeneidad / Asociatividad Escalar: A(cu) = c(Au)
+
+    Calcula de manera separada:
+    Para la propiedad 1:
+      - u + v
+      - A(u + v)
+      - Au
+      - Av
+      - Au + Av
+      - Comprobación de igualdad A(u + v) == Au + Av
+    Para la propiedad 2:
+      - cu
+      - A(cu)
+      - Au
+      - c(Au)
+      - Comprobación de igualdad A(cu) == c(Au)
+    """
+    validar_matriz(A, "A")
+    validar_vector(u, "u")
+    validar_vector(v, "v")
+    c_frac = c if isinstance(c, Fraction) else Fraction(c)
+
+    mA, nA = dimensiones_matriz(A)
+    if len(u) != nA:
+        raise ValueError(
+            f"Dimensión incompatible para vector u: la matriz A tiene {nA} columnas "
+            f"pero el vector u pertenece a R^{len(u)}. Para multiplicar Au, el número "
+            f"de columnas de A debe coincidir con la dimensión de u ({nA} != {len(u)})."
+        )
+    if len(v) != nA:
+        raise ValueError(
+            f"Dimensión incompatible para vector v: la matriz A tiene {nA} columnas "
+            f"pero el vector v pertenece a R^{len(v)}. Para multiplicar Av, el número "
+            f"de columnas de A debe coincidir con la dimensión de v ({nA} != {len(v)})."
+        )
+    if len(u) != len(v):
+        raise ValueError(
+            f"Dimensiones incompatibles entre vectores u y v: u pertenece a R^{len(u)} "
+            f"y v pertenece a R^{len(v)}. Para calcular u + v, ambos vectores deben tener "
+            f"la misma dimensión."
+        )
+
+    # Propiedad 1: A(u + v) = Au + Av
+    u_mas_v = sumar_vectores(u, v)
+    A_u_mas_v = multiplicar_matriz_vector(A, u_mas_v)
+    Au = multiplicar_matriz_vector(A, u)
+    Av = multiplicar_matriz_vector(A, v)
+    Au_mas_Av = sumar_vectores(Au, Av)
+    se_cumple_distributiva = (A_u_mas_v == Au_mas_Av)
+
+    desglose_u_mas_v = [
+        f"(u + v)[{i + 1}] = ({formatear_numero(u[i])}) + ({formatear_numero(v[i])}) = {formatear_numero(u_mas_v[i])}"
+        for i in range(nA)
+    ]
+    desglose_A_u_mas_v = desglosar_producto_matriz_vector(A, u_mas_v, "A", "(u+v)")
+    desglose_Au = desglosar_producto_matriz_vector(A, u, "A", "u")
+    desglose_Av = desglosar_producto_matriz_vector(A, v, "A", "v")
+    desglose_Au_mas_Av = [
+        f"(Au + Av)[{i + 1}] = ({formatear_numero(Au[i])}) + ({formatear_numero(Av[i])}) = {formatear_numero(Au_mas_Av[i])}"
+        for i in range(mA)
+    ]
+
+    # Propiedad 2: A(cu) = c(Au)
+    cu = multiplicar_vector_escalar(c_frac, u)
+    A_cu = multiplicar_matriz_vector(A, cu)
+    c_Au = multiplicar_vector_escalar(c_frac, Au)
+    se_cumple_escalar = (A_cu == c_Au)
+
+    desglose_cu = [
+        f"(cu)[{i + 1}] = ({formatear_numero(c_frac)}) · ({formatear_numero(u[i])}) = {formatear_numero(cu[i])}"
+        for i in range(nA)
+    ]
+    desglose_A_cu = desglosar_producto_matriz_vector(A, cu, "A", "(cu)")
+    desglose_c_Au = [
+        f"(c(Au))[{i + 1}] = ({formatear_numero(c_frac)}) · ({formatear_numero(Au[i])}) = {formatear_numero(c_Au[i])}"
+        for i in range(mA)
+    ]
+
+    return {
+        "A": A,
+        "u": u,
+        "v": v,
+        "c": c_frac,
+        "dimensiones": {"mA": mA, "nA": nA, "dim_u": len(u), "dim_v": len(v)},
+        "propiedad_1": {
+            "nombre": "A(u + v) = Au + Av",
+            "u_mas_v": u_mas_v,
+            "A_u_mas_v": A_u_mas_v,
+            "Au": Au,
+            "Av": Av,
+            "Au_mas_Av": Au_mas_Av,
+            "se_cumple": se_cumple_distributiva,
+            "desglose_u_mas_v": desglose_u_mas_v,
+            "desglose_A_u_mas_v": desglose_A_u_mas_v,
+            "desglose_Au": desglose_Au,
+            "desglose_Av": desglose_Av,
+            "desglose_Au_mas_Av": desglose_Au_mas_Av,
+        },
+        "propiedad_2": {
+            "nombre": "A(cu) = c(Au)",
+            "cu": cu,
+            "A_cu": A_cu,
+            "Au": Au,
+            "c_Au": c_Au,
+            "se_cumple": se_cumple_escalar,
+            "desglose_cu": desglose_cu,
+            "desglose_A_cu": desglose_A_cu,
+            "desglose_Au": desglose_Au,
+            "desglose_c_Au": desglose_c_Au,
+        },
+        "se_cumplen_todas": se_cumple_distributiva and se_cumple_escalar,
+    }
+
+
+def demostrar_propiedad_distributiva_ax(A, u, v):
+    """Demuestra formalmente y paso a paso que A(u + v) = Au + Av."""
+    validar_matriz(A, "A")
+    validar_vector(u, "u")
+    validar_vector(v, "v")
+    res = analizar_propiedades_ax(A, u, v, Fraction(1))
+    return res["propiedad_1"]
+
+
+def demostrar_propiedad_escalar_ax(A, c, u):
+    """Demuestra formalmente y paso a paso que A(cu) = c(Au)."""
+    validar_matriz(A, "A")
+    validar_vector(u, "u")
+    mA, nA = dimensiones_matriz(A)
+    v_cero = [Fraction(0) for _ in range(nA)]
+    res = analizar_propiedades_ax(A, u, v_cero, c)
+    return res["propiedad_2"]
+
+
+# -----------------------------------------------------------------------------
 # Modulo de Combinacion Lineal y Ecuacion Vectorial (Tarea 3)
 # -----------------------------------------------------------------------------
 
@@ -1810,6 +2109,7 @@ class AplicacionAlgebraLineal(ctk.CTk):
 
         self.nav_botones = {}
         self.nav_botones["ax_b"] = self._nav_item(sidebar, "Ecuación Matricial (Ax=b)", "ax_b", activo=True)
+        self.nav_botones["propiedades_ax"] = self._nav_item(sidebar, "Propiedades de Ax", "propiedades_ax")
         self.nav_botones["vectores"] = self._nav_item(sidebar, "Vectores en R^n", "vectores")
         self.nav_botones["combinacion"] = self._nav_item(sidebar, "Combinación Lineal", "combinacion")
         self.nav_botones["independencia"] = self._nav_item(sidebar, "Independencia Lineal", "independencia")
@@ -1862,6 +2162,7 @@ class AplicacionAlgebraLineal(ctk.CTk):
 
         self.paginas = {
             "ax_b": self._crear_pagina_calculadora(contenedor),
+            "propiedades_ax": self._crear_pagina_propiedades_ax(contenedor),
             "vectores": self._crear_pagina_vectores(contenedor),
             "combinacion": self._crear_pagina_combinacion(contenedor),
             "independencia": self._crear_pagina_independencia(contenedor),
@@ -1944,8 +2245,514 @@ class AplicacionAlgebraLineal(ctk.CTk):
         return pagina
 
     # -------------------------------------------------------------------------
+    # Pagina: Propiedades del Producto Matriz-Vector Ax (Tarea 3)
+    # -------------------------------------------------------------------------
+
+    def _crear_pagina_propiedades_ax(self, parent):
+        pagina = ctk.CTkFrame(parent, fg_color=PALETA["fondo"], corner_radius=0)
+        pagina.grid_columnconfigure(0, weight=1)
+        pagina.grid_rowconfigure(1, weight=1)
+
+        self._crear_encabezado(
+            pagina,
+            "Propiedades del Producto Matriz-Vector Ax",
+            "Demostración pedagógica de A(u + v) = Au + Av y A(cu) = c(Au) con procedimiento paso a paso",
+        )
+
+        contenido = ctk.CTkFrame(pagina, fg_color="transparent")
+        contenido.grid(row=1, column=0, sticky="nsew", padx=28, pady=(0, 24))
+        contenido.grid_columnconfigure(0, weight=2)
+        contenido.grid_columnconfigure(1, weight=3)
+        contenido.grid_rowconfigure(1, weight=1)
+
+        # Columna izquierda
+        izq = ctk.CTkFrame(contenido, fg_color="transparent")
+        izq.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 14))
+
+        # Tarjeta 1: Dimensiones de A (m x n)
+        cfg_dim = crear_tarjeta(izq, "Dimensiones de la Matriz A (m × n)")
+        cfg_dim.pack(fill="x", pady=(0, 12))
+        fila_dim = ctk.CTkFrame(cfg_dim, fg_color="transparent")
+        fila_dim.pack(fill="x", padx=18, pady=(0, 14))
+
+        ctk.CTkLabel(fila_dim, text="Filas m:", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(side="left", padx=(0, 4))
+        self.ent_m_prop_ax = ctk.CTkEntry(fila_dim, width=46, height=34, justify="center", fg_color=PALETA["entrada"], border_color=PALETA["borde"])
+        self.ent_m_prop_ax.insert(0, "2")
+        self.ent_m_prop_ax.pack(side="left", padx=(0, 10))
+
+        ctk.CTkLabel(fila_dim, text="Columnas n:", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(side="left", padx=(0, 4))
+        self.ent_n_prop_ax = ctk.CTkEntry(fila_dim, width=46, height=34, justify="center", fg_color=PALETA["entrada"], border_color=PALETA["borde"])
+        self.ent_n_prop_ax.insert(0, "2")
+        self.ent_n_prop_ax.pack(side="left", padx=(0, 14))
+
+        ctk.CTkButton(
+            fila_dim,
+            text="Configurar",
+            width=90,
+            height=34,
+            corner_radius=8,
+            fg_color=PALETA["primario"],
+            hover_color=PALETA["primario_hover"],
+            text_color="#04191A",
+            font=("Segoe UI", 12, "bold"),
+            command=self._generar_entradas_propiedades_ax,
+        ).pack(side="left")
+
+        # Tarjeta 2: Propiedad a demostrar
+        cfg_modo = crear_tarjeta(izq, "Propiedades a Demostrar")
+        cfg_modo.pack(fill="x", pady=(0, 12))
+        self.seg_op_prop_ax = ctk.CTkSegmentedButton(
+            cfg_modo,
+            values=["Ambas propiedades", "A(u + v) = Au + Av", "A(cu) = c(Au)"],
+            selected_color=PALETA["primario"],
+            selected_hover_color=PALETA["primario_hover"],
+        )
+        self.seg_op_prop_ax.set("Ambas propiedades")
+        self.seg_op_prop_ax.pack(fill="x", padx=18, pady=(0, 14))
+
+        # Tarjeta 3: Entradas de Matriz A, Vectores u, v y Escalar c
+        tarjeta_entradas = crear_tarjeta(izq, "Entradas: Matriz A, Vectores u, v y Escalar c")
+        tarjeta_entradas.pack(fill="both", expand=True, pady=(0, 12))
+
+        self.canvas_prop_frame = ctk.CTkFrame(tarjeta_entradas, fg_color=PALETA["panel_2"], corner_radius=10)
+        self.canvas_prop_frame.pack(fill="both", expand=True, padx=14, pady=(0, 10))
+
+        self.canvas_prop = tk.Canvas(self.canvas_prop_frame, bg=resolver_color(PALETA["panel_2"]), highlightthickness=0, height=210)
+        self.scroll_y_prop = ctk.CTkScrollbar(self.canvas_prop_frame, orientation="vertical", command=self.canvas_prop.yview, button_color=PALETA["primario"])
+        self.scroll_x_prop = ctk.CTkScrollbar(self.canvas_prop_frame, orientation="horizontal", command=self.canvas_prop.xview, button_color=PALETA["primario"])
+        self.canvas_prop.configure(yscrollcommand=self.scroll_y_prop.set, xscrollcommand=self.scroll_x_prop.set)
+
+        self.canvas_prop.grid(row=0, column=0, sticky="nsew", padx=(10, 4), pady=(10, 4))
+        self.scroll_y_prop.grid(row=0, column=1, sticky="ns", pady=(10, 4), padx=(0, 6))
+        self.scroll_x_prop.grid(row=1, column=0, sticky="ew", padx=(10, 4), pady=(0, 6))
+        self.canvas_prop_frame.grid_rowconfigure(0, weight=1)
+        self.canvas_prop_frame.grid_columnconfigure(0, weight=1)
+
+        self.grid_host_prop_ax = ctk.CTkFrame(self.canvas_prop, fg_color="transparent")
+        self.canvas_prop_window = self.canvas_prop.create_window((0, 0), window=self.grid_host_prop_ax, anchor="nw")
+        self.grid_host_prop_ax.bind("<Configure>", lambda e: self.canvas_prop.configure(scrollregion=self.canvas_prop.bbox("all")))
+
+        # Escalar c
+        frame_esc = ctk.CTkFrame(tarjeta_entradas, fg_color="transparent")
+        frame_esc.pack(fill="x", padx=14, pady=(0, 8))
+        ctk.CTkLabel(frame_esc, text="Escalar c:", font=("Segoe UI", 12, "bold"), text_color=PALETA["primario"]).pack(side="left", padx=(0, 8))
+        self.entrada_c_prop_ax = ctk.CTkEntry(frame_esc, width=75, height=34, justify="center", fg_color=PALETA["entrada"], border_color=PALETA["borde"])
+        self.entrada_c_prop_ax.insert(0, "3")
+        self.entrada_c_prop_ax.pack(side="left")
+
+        # Botones de accion
+        frame_acc = ctk.CTkFrame(tarjeta_entradas, fg_color="transparent")
+        frame_acc.pack(fill="x", padx=14, pady=(0, 14))
+
+        ctk.CTkButton(
+            frame_acc,
+            text="Demostrar Propiedades",
+            height=40,
+            corner_radius=8,
+            fg_color=PALETA["primario"],
+            hover_color=PALETA["primario_hover"],
+            text_color="#04191A",
+            font=("Segoe UI", 13, "bold"),
+            command=self._resolver_propiedades_ax,
+        ).pack(side="left")
+
+        ctk.CTkButton(
+            frame_acc,
+            text="Limpiar",
+            height=40,
+            corner_radius=8,
+            fg_color=PALETA["secundario"],
+            hover_color=PALETA["secundario_hover"],
+            command=self._limpiar_propiedades_ax,
+        ).pack(side="left", padx=10)
+
+        # Columna derecha (Resultados y procedimiento)
+        self.tarjeta_res_prop_ax = ctk.CTkScrollableFrame(contenido, fg_color=PALETA["panel"], corner_radius=12, border_width=1, border_color=PALETA["borde"])
+        self.tarjeta_res_prop_ax.grid(row=0, column=1, rowspan=2, sticky="nsew")
+        self._mostrar_placeholder_propiedades_ax()
+
+        self.entradas_A_prop_ax = []
+        self.entradas_u_prop_ax = []
+        self.entradas_v_prop_ax = []
+        self._generar_entradas_propiedades_ax()
+
+        return pagina
+
+    def _generar_entradas_propiedades_ax(self):
+        for w in self.grid_host_prop_ax.winfo_children():
+            w.destroy()
+
+        try:
+            m = int(self.ent_m_prop_ax.get())
+            n = int(self.ent_n_prop_ax.get())
+            if m <= 0 or n <= 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Error", "Las dimensiones de A (filas y columnas) deben ser enteros positivos.")
+            return
+
+        self.entradas_A_prop_ax = []
+        self.entradas_u_prop_ax = []
+        self.entradas_v_prop_ax = []
+
+        defaults_A = [["1", "2"], ["3", "4"]]
+        defaults_u = ["1", "2"]
+        defaults_v = ["3", "1"]
+
+        # Seccion 1: Matriz A (m x n)
+        ctk.CTkLabel(
+            self.grid_host_prop_ax,
+            text=f"Matriz A ({m}×{n}):",
+            font=("Segoe UI", 12, "bold"),
+            text_color=PALETA["primario"]
+        ).grid(row=0, column=0, columnspan=max(n + 1, 2), sticky="w", padx=6, pady=(4, 6))
+
+        for j in range(n):
+            ctk.CTkLabel(
+                self.grid_host_prop_ax,
+                text=f"x{j + 1}",
+                font=("Segoe UI", 10, "bold"),
+                text_color=PALETA["texto_3"],
+                width=58
+            ).grid(row=1, column=j + 1, padx=3, pady=2)
+
+        for i in range(m):
+            ctk.CTkLabel(
+                self.grid_host_prop_ax,
+                text=f"fila {i + 1}",
+                font=FUENTE_PEQUENA,
+                text_color=PALETA["texto_3"]
+            ).grid(row=i + 2, column=0, padx=(4, 6), pady=3, sticky="e")
+
+            fila_e = []
+            for j in range(n):
+                e = ctk.CTkEntry(
+                    self.grid_host_prop_ax,
+                    width=58,
+                    height=32,
+                    justify="center",
+                    fg_color=PALETA["entrada"],
+                    border_color=PALETA["borde"]
+                )
+                e.grid(row=i + 2, column=j + 1, padx=3, pady=3)
+                val_init = defaults_A[i][j] if (m == 2 and n == 2) else "0"
+                e.insert(0, val_init)
+                fila_e.append(e)
+            self.entradas_A_prop_ax.append(fila_e)
+
+        fila_curr = m + 3
+
+        # Seccion 2: Vector u (n x 1)
+        ctk.CTkLabel(
+            self.grid_host_prop_ax,
+            text=f"Vector u en R^{n} (dimensión {n}):",
+            font=("Segoe UI", 12, "bold"),
+            text_color=PALETA["primario"]
+        ).grid(row=fila_curr, column=0, columnspan=max(n + 1, 2), sticky="w", padx=6, pady=(10, 4))
+        fila_curr += 1
+
+        for j in range(n):
+            ctk.CTkLabel(
+                self.grid_host_prop_ax,
+                text=f"u{j + 1}",
+                font=("Segoe UI", 10, "bold"),
+                text_color=PALETA["texto_3"],
+                width=58
+            ).grid(row=fila_curr, column=j + 1, padx=3, pady=2)
+        fila_curr += 1
+
+        for j in range(n):
+            e = ctk.CTkEntry(
+                self.grid_host_prop_ax,
+                width=58,
+                height=32,
+                justify="center",
+                fg_color=PALETA["entrada"],
+                border_color=PALETA["borde"]
+            )
+            e.grid(row=fila_curr, column=j + 1, padx=3, pady=3)
+            val_u = defaults_u[j] if (n == 2) else "0"
+            e.insert(0, val_u)
+            self.entradas_u_prop_ax.append(e)
+        fila_curr += 1
+
+        # Seccion 3: Vector v (n x 1)
+        ctk.CTkLabel(
+            self.grid_host_prop_ax,
+            text=f"Vector v en R^{n} (dimensión {n}):",
+            font=("Segoe UI", 12, "bold"),
+            text_color=PALETA["primario"]
+        ).grid(row=fila_curr, column=0, columnspan=max(n + 1, 2), sticky="w", padx=6, pady=(10, 4))
+        fila_curr += 1
+
+        for j in range(n):
+            ctk.CTkLabel(
+                self.grid_host_prop_ax,
+                text=f"v{j + 1}",
+                font=("Segoe UI", 10, "bold"),
+                text_color=PALETA["texto_3"],
+                width=58
+            ).grid(row=fila_curr, column=j + 1, padx=3, pady=2)
+        fila_curr += 1
+
+        for j in range(n):
+            e = ctk.CTkEntry(
+                self.grid_host_prop_ax,
+                width=58,
+                height=32,
+                justify="center",
+                fg_color=PALETA["entrada"],
+                border_color=PALETA["borde"]
+            )
+            e.grid(row=fila_curr, column=j + 1, padx=3, pady=3)
+            val_v = defaults_v[j] if (n == 2) else "0"
+            e.insert(0, val_v)
+            self.entradas_v_prop_ax.append(e)
+
+        self.canvas_prop.configure(scrollregion=self.canvas_prop.bbox("all"))
+
+    def _limpiar_propiedades_ax(self):
+        for fila in self.entradas_A_prop_ax:
+            for e in fila:
+                e.delete(0, "end")
+                e.insert(0, "0")
+        for e in self.entradas_u_prop_ax:
+            e.delete(0, "end")
+            e.insert(0, "0")
+        for e in self.entradas_v_prop_ax:
+            e.delete(0, "end")
+            e.insert(0, "0")
+        self.entrada_c_prop_ax.delete(0, "end")
+        self.entrada_c_prop_ax.insert(0, "3")
+        self._mostrar_placeholder_propiedades_ax()
+
+    def _mostrar_placeholder_propiedades_ax(self):
+        for w in self.tarjeta_res_prop_ax.winfo_children():
+            w.destroy()
+        tarjeta = ctk.CTkFrame(self.tarjeta_res_prop_ax, fg_color=PALETA["panel_2"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
+        tarjeta.pack(fill="x", pady=10)
+        ctk.CTkLabel(tarjeta, text="Propiedades del Producto Matriz-Vector Ax", font=("Segoe UI", 15, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=16, pady=(14, 6))
+        explicacion = (
+            "Este módulo demuestra formalmente las dos propiedades fundamentales del producto Ax:\n\n"
+            "1. Propiedad Distributiva respecto a la suma vectorial:\n"
+            "   A(u + v) = Au + Av\n"
+            "   El producto de la matriz A por la suma vectorial u + v es exactamente igual a la suma de los productos individuales Au y Av.\n\n"
+            "2. Propiedad de Homogeneidad / Asociatividad con Escalar:\n"
+            "   A(cu) = c(Au)\n"
+            "   Escalar el vector u por un factor c y luego multiplicarlo por A produce el mismo resultado que multiplicar el vector transformado Au por c.\n\n"
+            "Instrucciones:\n"
+            "1. Configura las dimensiones de A (filas m y columnas n).\n"
+            "2. Los vectores u y v se dimensionan automáticamente en R^n para garantizar compatibilidad con Ax.\n"
+            "3. Ingresa los coeficientes de A, las componentes de u y v, y el escalar c (admite enteros, decimales y fracciones como '1/2').\n"
+            "4. Pulsa 'Demostrar Propiedades' para ver el procedimiento paso a paso y la comprobación formal."
+        )
+        ctk.CTkLabel(
+            tarjeta,
+            text=explicacion,
+            font=FUENTE_NORMAL,
+            text_color=PALETA["texto_2"],
+            wraplength=550,
+            justify="left",
+        ).pack(anchor="w", padx=16, pady=(0, 16))
+
+    def _resolver_propiedades_ax(self):
+        try:
+            m = int(self.ent_m_prop_ax.get())
+            n = int(self.ent_n_prop_ax.get())
+            if m <= 0 or n <= 0:
+                raise ValueError("Las dimensiones deben ser enteros positivos mayores a cero.")
+
+            A = [[convertir_numero(self.entradas_A_prop_ax[i][j].get()) for j in range(n)] for i in range(m)]
+            u = [convertir_numero(self.entradas_u_prop_ax[j].get()) for j in range(n)]
+            v = [convertir_numero(self.entradas_v_prop_ax[j].get()) for j in range(n)]
+            c = convertir_numero(self.entrada_c_prop_ax.get())
+
+            res = analizar_propiedades_ax(A, u, v, c)
+            modo = self.seg_op_prop_ax.get()
+            self._mostrar_resultados_propiedades_ax(res, modo)
+        except Exception as error:
+            for w in self.tarjeta_res_prop_ax.winfo_children():
+                w.destroy()
+            t_err = ctk.CTkFrame(self.tarjeta_res_prop_ax, fg_color=PALETA["panel_2"], corner_radius=10, border_width=2, border_color=PALETA["error"])
+            t_err.pack(fill="x", pady=(0, 12))
+            ctk.CTkLabel(t_err, text="✗ Error en Propiedades de Ax", font=("Segoe UI", 14, "bold"), text_color=PALETA["error"]).pack(anchor="w", padx=16, pady=(12, 4))
+            ctk.CTkLabel(t_err, text=str(error), font=FUENTE_NORMAL, text_color=PALETA["texto"], wraplength=580, justify="left").pack(anchor="w", padx=16, pady=(0, 12))
+            messagebox.showerror("Error en Propiedades de Ax", str(error))
+
+    def _mostrar_resultados_propiedades_ax(self, res, modo):
+        for w in self.tarjeta_res_prop_ax.winfo_children():
+            w.destroy()
+
+        A = res["A"]
+        u = res["u"]
+        v = res["v"]
+        c = res["c"]
+        mA = res["dimensiones"]["mA"]
+        nA = res["dimensiones"]["nA"]
+        p1 = res["propiedad_1"]
+        p2 = res["propiedad_2"]
+
+        # 1. Resumen de parámetros ingresados
+        t_resumen = ctk.CTkFrame(self.tarjeta_res_prop_ax, fg_color=PALETA["panel_2"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
+        t_resumen.pack(fill="x", pady=(0, 12))
+        ctk.CTkLabel(t_resumen, text="Parámetros ingresados del producto Ax", font=("Segoe UI", 15, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=16, pady=(12, 4))
+
+        ctk.CTkLabel(t_resumen, text=f"• Matriz A ({mA}×{nA}):\n{matriz_simple_a_texto(A)}", font=FUENTE_MONO, text_color=PALETA["texto"], justify="left").pack(anchor="w", padx=16, pady=4)
+        ctk.CTkLabel(t_resumen, text=f"• Vector u (en R^{len(u)}): {formatear_vector(u)}", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(anchor="w", padx=16, pady=2)
+        ctk.CTkLabel(t_resumen, text=f"• Vector v (en R^{len(v)}): {formatear_vector(v)}", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(anchor="w", padx=16, pady=2)
+        ctk.CTkLabel(t_resumen, text=f"• Escalar c: {formatear_numero(c)}", font=FUENTE_NORMAL, text_color=PALETA["texto_2"]).pack(anchor="w", padx=16, pady=2)
+        ctk.CTkLabel(
+            t_resumen,
+            text=f"✓ Validación de dimensiones: Columnas de A ({nA}) = Dimensión de u ({len(u)}) = Dimensión de v ({len(v)}). El producto matriz-vector está algebraicamente definido.",
+            font=("Segoe UI", 11, "bold"),
+            text_color=PALETA["exito"],
+            wraplength=580,
+            justify="left"
+        ).pack(anchor="w", padx=16, pady=(4, 12))
+
+        # 2. Propiedad 1: A(u + v) = Au + Av
+        if modo in ("Ambas propiedades", "A(u + v) = Au + Av"):
+            t_p1 = ctk.CTkFrame(self.tarjeta_res_prop_ax, fg_color=PALETA["panel_2"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
+            t_p1.pack(fill="x", pady=(0, 12))
+            ctk.CTkLabel(t_p1, text="1. Propiedad Distributiva: A(u + v) = Au + Av", font=("Segoe UI", 15, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=16, pady=(12, 6))
+
+            # Miembro Izquierdo: A(u + v)
+            f_izq = ctk.CTkFrame(t_p1, fg_color=PALETA["panel"], corner_radius=8, border_width=1, border_color=PALETA["borde"])
+            f_izq.pack(fill="x", padx=14, pady=6)
+            ctk.CTkLabel(f_izq, text="Miembro Izquierdo: A(u + v)", font=("Segoe UI", 13, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=12, pady=(10, 4))
+
+            # Paso 1: u + v
+            ctk.CTkLabel(f_izq, text="Paso 1: Suma de vectores u + v (componente a componente):", font=("Segoe UI", 12, "bold"), text_color=PALETA["texto"]).pack(anchor="w", padx=12, pady=(4, 2))
+            for linea in p1["desglose_u_mas_v"]:
+                ctk.CTkLabel(f_izq, text=f"   {linea}", font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=12, pady=1)
+            ctk.CTkLabel(f_izq, text=f"   => u + v = {formatear_vector(p1['u_mas_v'])}", font=("Segoe UI", 12, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=12, pady=(2, 6))
+
+            # Paso 2: Visualización de Matriz A
+            ctk.CTkLabel(f_izq, text=f"Paso 2: Construcción / Visualización de la matriz A ({mA}×{nA}):", font=("Segoe UI", 12, "bold"), text_color=PALETA["texto"]).pack(anchor="w", padx=12, pady=(4, 2))
+            ctk.CTkLabel(f_izq, text=matriz_simple_a_texto(A), font=FUENTE_MONO, text_color=PALETA["texto_2"], justify="left").pack(anchor="w", padx=24, pady=2)
+
+            # Paso 3: A(u + v)
+            ctk.CTkLabel(f_izq, text="Paso 3: Cálculo del producto matriz-vector A · (u + v) (regla fila por vector):", font=("Segoe UI", 12, "bold"), text_color=PALETA["texto"]).pack(anchor="w", padx=12, pady=(4, 2))
+            for linea in p1["desglose_A_u_mas_v"]:
+                ctk.CTkLabel(f_izq, text=f"   {linea}", font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=12, pady=1)
+
+            # Paso 4: Resultado Miembro Izquierdo
+            ctk.CTkLabel(f_izq, text="Paso 4: Resultado del miembro izquierdo:", font=("Segoe UI", 12, "bold"), text_color=PALETA["texto"]).pack(anchor="w", padx=12, pady=(4, 2))
+            ctk.CTkLabel(f_izq, text=f"   => A(u + v) = {formatear_vector(p1['A_u_mas_v'])}", font=("Segoe UI", 13, "bold"), text_color=PALETA["exito"]).pack(anchor="w", padx=12, pady=(2, 10))
+
+            # Miembro Derecho: Au + Av
+            f_der = ctk.CTkFrame(t_p1, fg_color=PALETA["panel"], corner_radius=8, border_width=1, border_color=PALETA["borde"])
+            f_der.pack(fill="x", padx=14, pady=6)
+            ctk.CTkLabel(f_der, text="Miembro Derecho: Au + Av", font=("Segoe UI", 13, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=12, pady=(10, 4))
+
+            # Paso 1: Au
+            ctk.CTkLabel(f_der, text="Paso 1: Cálculo del producto matriz-vector Au (fila por vector):", font=("Segoe UI", 12, "bold"), text_color=PALETA["texto"]).pack(anchor="w", padx=12, pady=(4, 2))
+            for linea in p1["desglose_Au"]:
+                ctk.CTkLabel(f_der, text=f"   {linea}", font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=12, pady=1)
+            ctk.CTkLabel(f_der, text=f"   => Au = {formatear_vector(p1['Au'])}", font=("Segoe UI", 12, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=12, pady=(2, 6))
+
+            # Paso 2: Av
+            ctk.CTkLabel(f_der, text="Paso 2: Cálculo del producto matriz-vector Av (fila por vector):", font=("Segoe UI", 12, "bold"), text_color=PALETA["texto"]).pack(anchor="w", padx=12, pady=(4, 2))
+            for linea in p1["desglose_Av"]:
+                ctk.CTkLabel(f_der, text=f"   {linea}", font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=12, pady=1)
+            ctk.CTkLabel(f_der, text=f"   => Av = {formatear_vector(p1['Av'])}", font=("Segoe UI", 12, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=12, pady=(2, 6))
+
+            # Paso 3: Au + Av
+            ctk.CTkLabel(f_der, text="Paso 3: Adición vectorial de los resultados Au + Av:", font=("Segoe UI", 12, "bold"), text_color=PALETA["texto"]).pack(anchor="w", padx=12, pady=(4, 2))
+            for linea in p1["desglose_Au_mas_Av"]:
+                ctk.CTkLabel(f_der, text=f"   {linea}", font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=12, pady=1)
+            ctk.CTkLabel(f_der, text=f"   => Au + Av = {formatear_vector(p1['Au_mas_Av'])}", font=("Segoe UI", 13, "bold"), text_color=PALETA["exito"]).pack(anchor="w", padx=12, pady=(2, 10))
+
+            # Comparación y Conclusión
+            f_comp1 = ctk.CTkFrame(t_p1, fg_color=PALETA["panel"], corner_radius=8, border_width=2,
+                                   border_color=PALETA["exito"] if p1["se_cumple"] else PALETA["error"])
+            f_comp1.pack(fill="x", padx=14, pady=(6, 12))
+            ctk.CTkLabel(f_comp1, text="Comparación de Resultados:", font=("Segoe UI", 13, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=12, pady=(8, 2))
+            ctk.CTkLabel(f_comp1, text=f"A(u + v) = {formatear_vector(p1['A_u_mas_v'])}", font=FUENTE_MONO, text_color=PALETA["texto"]).pack(anchor="w", padx=12, pady=1)
+            ctk.CTkLabel(f_comp1, text=f"Au + Av = {formatear_vector(p1['Au_mas_Av'])}", font=FUENTE_MONO, text_color=PALETA["texto"]).pack(anchor="w", padx=12, pady=1)
+
+            if p1["se_cumple"]:
+                ctk.CTkLabel(
+                    f_comp1,
+                    text="✓ Se cumple: A(u + v) = Au + Av",
+                    font=("Segoe UI", 14, "bold"),
+                    text_color=PALETA["exito"]
+                ).pack(anchor="w", padx=12, pady=(6, 10))
+            else:
+                ctk.CTkLabel(
+                    f_comp1,
+                    text="✗ No se cumple: A(u + v) ≠ Au + Av",
+                    font=("Segoe UI", 14, "bold"),
+                    text_color=PALETA["error"]
+                ).pack(anchor="w", padx=12, pady=(6, 10))
+
+        # 3. Propiedad 2: A(cu) = c(Au)
+        if modo in ("Ambas propiedades", "A(cu) = c(Au)"):
+            t_p2 = ctk.CTkFrame(self.tarjeta_res_prop_ax, fg_color=PALETA["panel_2"], corner_radius=10, border_width=1, border_color=PALETA["borde"])
+            t_p2.pack(fill="x", pady=(0, 12))
+            ctk.CTkLabel(t_p2, text="2. Propiedad de Homogeneidad / Escalar: A(cu) = c(Au)", font=("Segoe UI", 15, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=16, pady=(12, 6))
+
+            # Miembro Izquierdo: A(cu)
+            f_izq2 = ctk.CTkFrame(t_p2, fg_color=PALETA["panel"], corner_radius=8, border_width=1, border_color=PALETA["borde"])
+            f_izq2.pack(fill="x", padx=14, pady=6)
+            ctk.CTkLabel(f_izq2, text="Miembro Izquierdo: A(cu)", font=("Segoe UI", 13, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=12, pady=(10, 4))
+
+            # Paso 1: cu
+            ctk.CTkLabel(f_izq2, text=f"Paso 1: Multiplicación del vector u por el escalar c = {formatear_numero(c)}:", font=("Segoe UI", 12, "bold"), text_color=PALETA["texto"]).pack(anchor="w", padx=12, pady=(4, 2))
+            for linea in p2["desglose_cu"]:
+                ctk.CTkLabel(f_izq2, text=f"   {linea}", font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=12, pady=1)
+            ctk.CTkLabel(f_izq2, text=f"   => cu = {formatear_vector(p2['cu'])}", font=("Segoe UI", 12, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=12, pady=(2, 6))
+
+            # Paso 2: A(cu)
+            ctk.CTkLabel(f_izq2, text="Paso 2: Cálculo del producto matriz-vector A · (cu) (regla fila por vector):", font=("Segoe UI", 12, "bold"), text_color=PALETA["texto"]).pack(anchor="w", padx=12, pady=(4, 2))
+            for linea in p2["desglose_A_cu"]:
+                ctk.CTkLabel(f_izq2, text=f"   {linea}", font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=12, pady=1)
+            ctk.CTkLabel(f_izq2, text=f"   => A(cu) = {formatear_vector(p2['A_cu'])}", font=("Segoe UI", 13, "bold"), text_color=PALETA["exito"]).pack(anchor="w", padx=12, pady=(2, 10))
+
+            # Miembro Derecho: c(Au)
+            f_der2 = ctk.CTkFrame(t_p2, fg_color=PALETA["panel"], corner_radius=8, border_width=1, border_color=PALETA["borde"])
+            f_der2.pack(fill="x", padx=14, pady=6)
+            ctk.CTkLabel(f_der2, text="Miembro Derecho: c(Au)", font=("Segoe UI", 13, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=12, pady=(10, 4))
+
+            # Paso 3: Au
+            ctk.CTkLabel(f_der2, text="Paso 3: Multiplicación matriz-vector Au (fila por vector):", font=("Segoe UI", 12, "bold"), text_color=PALETA["texto"]).pack(anchor="w", padx=12, pady=(4, 2))
+            for linea in p2["desglose_Au"]:
+                ctk.CTkLabel(f_der2, text=f"   {linea}", font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=12, pady=1)
+            ctk.CTkLabel(f_der2, text=f"   => Au = {formatear_vector(p2['Au'])}", font=("Segoe UI", 12, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=12, pady=(2, 6))
+
+            # Paso 4: c(Au)
+            ctk.CTkLabel(f_der2, text=f"Paso 4: Multiplicación de Au por el escalar c = {formatear_numero(c)}:", font=("Segoe UI", 12, "bold"), text_color=PALETA["texto"]).pack(anchor="w", padx=12, pady=(4, 2))
+            for linea in p2["desglose_c_Au"]:
+                ctk.CTkLabel(f_der2, text=f"   {linea}", font=FUENTE_MONO, text_color=PALETA["texto_2"]).pack(anchor="w", padx=12, pady=1)
+            ctk.CTkLabel(f_der2, text=f"   => c(Au) = {formatear_vector(p2['c_Au'])}", font=("Segoe UI", 13, "bold"), text_color=PALETA["exito"]).pack(anchor="w", padx=12, pady=(2, 10))
+
+            # Comparación y Conclusión
+            f_comp2 = ctk.CTkFrame(t_p2, fg_color=PALETA["panel"], corner_radius=8, border_width=2,
+                                   border_color=PALETA["exito"] if p2["se_cumple"] else PALETA["error"])
+            f_comp2.pack(fill="x", padx=14, pady=(6, 12))
+            ctk.CTkLabel(f_comp2, text="Comparación de Resultados:", font=("Segoe UI", 13, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=12, pady=(8, 2))
+            ctk.CTkLabel(f_comp2, text=f"A(cu) = {formatear_vector(p2['A_cu'])}", font=FUENTE_MONO, text_color=PALETA["texto"]).pack(anchor="w", padx=12, pady=1)
+            ctk.CTkLabel(f_comp2, text=f"c(Au) = {formatear_vector(p2['c_Au'])}", font=FUENTE_MONO, text_color=PALETA["texto"]).pack(anchor="w", padx=12, pady=1)
+
+            if p2["se_cumple"]:
+                ctk.CTkLabel(
+                    f_comp2,
+                    text="✓ Se cumple: A(cu) = c(Au)",
+                    font=("Segoe UI", 14, "bold"),
+                    text_color=PALETA["exito"]
+                ).pack(anchor="w", padx=12, pady=(6, 10))
+            else:
+                ctk.CTkLabel(
+                    f_comp2,
+                    text="✗ No se cumple: A(cu) ≠ c(Au)",
+                    font=("Segoe UI", 14, "bold"),
+                    text_color=PALETA["error"]
+                ).pack(anchor="w", padx=12, pady=(6, 10))
+
+    # -------------------------------------------------------------------------
     # Pagina: Vectores en R^n (Tarea 3)
     # -------------------------------------------------------------------------
+
 
     def _crear_pagina_vectores(self, parent):
         pagina = ctk.CTkFrame(parent, fg_color=PALETA["fondo"], corner_radius=0)
@@ -3068,11 +3875,12 @@ class AplicacionAlgebraLineal(ctk.CTk):
         ctk.CTkLabel(tarjeta_uso, text="Guía de uso de los módulos", font=("Segoe UI", 15, "bold"), text_color=PALETA["primario"]).pack(anchor="w", padx=16, pady=(14, 6))
         pasos_uso = [
             "1. Ecuación Matricial (Ax = b): define ecuaciones y variables, ingresa coeficientes y términos independientes. Muestra pasos de Gauss-Jordan, solución y la interpretación como combinación lineal de columnas.",
-            "2. Vectores en R^n: define la dimensión n, introduce los vectores u y v o el escalar k, y pulsa la operación deseada para ver el procedimiento componente a componente.",
-            "3. Combinación Lineal: introduce k vectores y el vector objetivo b. Construye automáticamente [v1 ... vk | b] y resuelve para hallar los coeficientes c1, ..., ck con verificación vectorial.",
-            "4. Independencia Lineal: introduce el conjunto {v1, ..., vk}. Construye el sistema homogéneo [A | 0] y determina si es LI (solución trivial única) o LD (variables libres con relación explícita).",
-            "5. Operaciones con Matrices: selecciona A + B, A - B, k·A o A·B, define dimensiones y calcula. Incluye validación estricta de dimensiones y desglose manual por bucles anidados.",
-            "6. Entrada de valores: acepta enteros, decimales y fracciones exactas como '3/2' o '-5/7'.",
+            "2. Propiedades de Ax: ingresa la matriz A (m×n), los vectores u y v en R^n y el escalar c. Demuestra y comprueba formalmente A(u + v) = Au + Av y A(cu) = c(Au) paso a paso.",
+            "3. Vectores en R^n: define la dimensión n, introduce los vectores u y v o el escalar k, y pulsa la operación deseada para ver el procedimiento componente a componente.",
+            "4. Combinación Lineal: introduce k vectores y el vector objetivo b. Construye automáticamente [v1 ... vk | b] y resuelve para hallar los coeficientes c1, ..., ck con verificación vectorial.",
+            "5. Independencia Lineal: introduce el conjunto {v1, ..., vk}. Construye el sistema homogéneo [A | 0] y determina si es LI (solución trivial única) o LD (variables libres con relación explícita).",
+            "6. Operaciones con Matrices: selecciona A + B, A - B, k·A o A·B, define dimensiones y calcula. Incluye validación estricta de dimensiones y desglose manual por bucles anidados.",
+            "7. Entrada de valores: acepta enteros, decimales y fracciones exactas como '3/2' o '-5/7'.",
         ]
         for paso in pasos_uso:
             ctk.CTkLabel(
@@ -3083,6 +3891,7 @@ class AplicacionAlgebraLineal(ctk.CTk):
 
         conceptos = [
             ("Vector en R^n", "Una lista ordenada de n números reales que representa un punto o dirección en el espacio de dimensión n."),
+            ("Producto Matriz-Vector (Ax)", "Operación donde cada componente es el producto punto entre una fila de A y el vector x (requiere columnas(A) = dimensión(x)). Cumple linealidad: A(u+v) = Au + Av y A(cu) = c(Au)."),
             ("Combinación Lineal", "Expresión de la forma c1·v1 + c2·v2 + ... + ck·vk donde los ci son escalares y los vi vectores."),
             ("Espacio Generado (Gen)", "Conjunto de todas las posibles combinaciones lineales de los vectores dados."),
             ("Independencia Lineal (LI)", "Propiedad donde la única forma de que c1·v1 + ... + ck·vk sea el vector cero es que todos los ci sean cero."),

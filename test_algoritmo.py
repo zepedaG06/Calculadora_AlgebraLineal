@@ -743,6 +743,249 @@ class PruebasTarea3Obligatorias(unittest.TestCase):
         self.assertTrue(res["verificacion"][0])
 
 
+class PruebasPropiedadesAx(unittest.TestCase):
+    """
+    Suite de pruebas obligatorias para las propiedades del producto matriz-vector Ax:
+    1. A(u + v) = Au + Av
+    2. A(cu) = c(Au)
+    """
+
+    def test_01_propiedad_distributiva_basica(self):
+        """
+        PRUEBA 1 — Comprobar A(u + v) = Au + Av con:
+        A = [[1, 2], [3, 4]], u = [1, 2], v = [3, 1].
+        Cálculo manual exacto:
+        u + v = [4, 3]
+        A(u + v) = [1*4 + 2*3, 3*4 + 4*3] = [10, 24]
+        Au = [1*1 + 2*2, 3*1 + 4*2] = [5, 11]
+        Av = [1*3 + 2*1, 3*3 + 4*1] = [5, 13]
+        Au + Av = [5+5, 11+13] = [10, 24]
+        """
+        A = [
+            [Fraction(1), Fraction(2)],
+            [Fraction(3), Fraction(4)],
+        ]
+        u = [Fraction(1), Fraction(2)]
+        v = [Fraction(3), Fraction(1)]
+
+        # Multiplicación matriz-vector manual individual
+        Au = programa.multiplicar_matriz_vector(A, u)
+        Av = programa.multiplicar_matriz_vector(A, v)
+        self.assertEqual(Au, [Fraction(5), Fraction(11)])
+        self.assertEqual(Av, [Fraction(5), Fraction(13)])
+
+        # Suma u + v y producto A(u + v)
+        u_mas_v = programa.sumar_vectores(u, v)
+        self.assertEqual(u_mas_v, [Fraction(4), Fraction(3)])
+        A_u_mas_v = programa.multiplicar_matriz_vector(A, u_mas_v)
+        self.assertEqual(A_u_mas_v, [Fraction(10), Fraction(24)])
+
+        # Suma Au + Av
+        Au_mas_Av = programa.sumar_vectores(Au, Av)
+        self.assertEqual(Au_mas_Av, [Fraction(10), Fraction(24)])
+
+        # Verificación de igualdad A(u + v) == Au + Av
+        self.assertEqual(A_u_mas_v, Au_mas_Av)
+
+        # Verificación mediante función de análisis integral
+        res = programa.analizar_propiedades_ax(A, u, v, Fraction(3))
+        self.assertTrue(res["propiedad_1"]["se_cumple"])
+        self.assertEqual(res["propiedad_1"]["A_u_mas_v"], [Fraction(10), Fraction(24)])
+        self.assertEqual(res["propiedad_1"]["Au_mas_Av"], [Fraction(10), Fraction(24)])
+
+    def test_02_propiedad_escalar_basica(self):
+        """
+        PRUEBA 2 — Comprobar A(cu) = c(Au) con la misma matriz y vector, c = 3:
+        A = [[1, 2], [3, 4]], u = [1, 2], c = 3.
+        Cálculo manual exacto:
+        cu = [3*1, 3*2] = [3, 6]
+        A(cu) = [1*3 + 2*6, 3*3 + 4*6] = [15, 33]
+        Au = [5, 11]
+        c(Au) = 3 * [5, 11] = [15, 33]
+        """
+        A = [
+            [Fraction(1), Fraction(2)],
+            [Fraction(3), Fraction(4)],
+        ]
+        u = [Fraction(1), Fraction(2)]
+        c = Fraction(3)
+
+        # cu y A(cu)
+        cu = programa.multiplicar_vector_escalar(c, u)
+        self.assertEqual(cu, [Fraction(3), Fraction(6)])
+        A_cu = programa.multiplicar_matriz_vector(A, cu)
+        self.assertEqual(A_cu, [Fraction(15), Fraction(33)])
+
+        # Au y c(Au)
+        Au = programa.multiplicar_matriz_vector(A, u)
+        c_Au = programa.multiplicar_vector_escalar(c, Au)
+        self.assertEqual(c_Au, [Fraction(15), Fraction(33)])
+
+        # Verificación de igualdad A(cu) == c(Au)
+        self.assertEqual(A_cu, c_Au)
+
+        # Función de análisis
+        res = programa.analizar_propiedades_ax(A, u, [Fraction(0), Fraction(0)], c)
+        self.assertTrue(res["propiedad_2"]["se_cumple"])
+        self.assertEqual(res["propiedad_2"]["A_cu"], [Fraction(15), Fraction(33)])
+        self.assertEqual(res["propiedad_2"]["c_Au"], [Fraction(15), Fraction(33)])
+
+    def test_03_valores_negativos(self):
+        """
+        PRUEBA 3 — Valores negativos en matriz, vectores y escalar:
+        A = [[-1, 2], [3, -4]], u = [-2, 5], v = [4, -3], c = -2.
+        u + v = [2, 2]
+        A(u + v) = [(-1)*2 + 2*2, 3*2 + (-4)*2] = [2, -2]
+        Au = [(-1)*(-2) + 2*5, 3*(-2) + (-4)*5] = [12, -26]
+        Av = [(-1)*4 + 2*(-3), 3*4 + (-4)*(-3)] = [-10, 24]
+        Au + Av = [12 - 10, -26 + 24] = [2, -2] -> A(u + v) = Au + Av
+        cu = [-2*(-2), -2*5] = [4, -10]
+        A(cu) = [(-1)*4 + 2*(-10), 3*4 + (-4)*(-10)] = [-24, 52]
+        c(Au) = -2 * [12, -26] = [-24, 52] -> A(cu) = c(Au)
+        """
+        A = [
+            [Fraction(-1), Fraction(2)],
+            [Fraction(3), Fraction(-4)],
+        ]
+        u = [Fraction(-2), Fraction(5)]
+        v = [Fraction(4), Fraction(-3)]
+        c = Fraction(-2)
+
+        res = programa.analizar_propiedades_ax(A, u, v, c)
+        self.assertTrue(res["propiedad_1"]["se_cumple"])
+        self.assertEqual(res["propiedad_1"]["A_u_mas_v"], [Fraction(2), Fraction(-2)])
+        self.assertEqual(res["propiedad_1"]["Au_mas_Av"], [Fraction(2), Fraction(-2)])
+
+        self.assertTrue(res["propiedad_2"]["se_cumple"])
+        self.assertEqual(res["propiedad_2"]["A_cu"], [Fraction(-24), Fraction(52)])
+        self.assertEqual(res["propiedad_2"]["c_Au"], [Fraction(-24), Fraction(52)])
+
+    def test_04_matriz_rectangular_valida(self):
+        """
+        PRUEBA 4 — Matriz rectangular válida A(2 x 3) y vectores en R^3:
+        A = [[1, 2, 3], [4, 5, 6]]
+        u = [1, 0, -1], v = [2, 1, 3], c = 2.
+        u + v = [3, 1, 2] en R^3
+        A(u + v) = [1*3 + 2*1 + 3*2, 4*3 + 5*1 + 6*2] = [11, 29] en R^2
+        Au = [1*1 + 2*0 + 3*(-1), 4*1 + 5*0 + 6*(-1)] = [-2, -2]
+        Av = [1*2 + 2*1 + 3*3, 4*2 + 5*1 + 6*3] = [13, 31]
+        Au + Av = [-2 + 13, -2 + 31] = [11, 29]
+        cu = [2, 0, -2]
+        A(cu) = [1*2 + 2*0 + 3*(-2), 4*2 + 5*0 + 6*(-2)] = [-4, -4]
+        c(Au) = 2 * [-2, -2] = [-4, -4]
+        """
+        A = [
+            [Fraction(1), Fraction(2), Fraction(3)],
+            [Fraction(4), Fraction(5), Fraction(6)],
+        ]
+        u = [Fraction(1), Fraction(0), Fraction(-1)]
+        v = [Fraction(2), Fraction(1), Fraction(3)]
+        c = Fraction(2)
+
+        res = programa.analizar_propiedades_ax(A, u, v, c)
+        self.assertTrue(res["propiedad_1"]["se_cumple"])
+        self.assertEqual(res["propiedad_1"]["A_u_mas_v"], [Fraction(11), Fraction(29)])
+        self.assertEqual(res["propiedad_1"]["Au_mas_Av"], [Fraction(11), Fraction(29)])
+
+        self.assertTrue(res["propiedad_2"]["se_cumple"])
+        self.assertEqual(res["propiedad_2"]["A_cu"], [Fraction(-4), Fraction(-4)])
+        self.assertEqual(res["propiedad_2"]["c_Au"], [Fraction(-4), Fraction(-4)])
+
+    def test_05_dimensiones_incompatibles_error(self):
+        """
+        PRUEBA 5 — Dimensiones incompatibles deben lanzar ValueError con mensaje claro:
+        1. A(2x3) y x en R^2: columnas de A (3) != dimensión de x (2).
+        2. A(2x2), u en R^2 y v en R^3: dimensión u (2) != dimensión v (3).
+        3. A(2x2) y u en R^3: columnas de A (2) != dimensión de u (3).
+        """
+        A_2x3 = [
+            [Fraction(1), Fraction(2), Fraction(3)],
+            [Fraction(4), Fraction(5), Fraction(6)],
+        ]
+        x_dim2 = [Fraction(1), Fraction(2)]
+
+        with self.assertRaises(ValueError) as ctx1:
+            programa.multiplicar_matriz_vector(A_2x3, x_dim2)
+        self.assertIn("incompatibles", str(ctx1.exception).lower())
+
+        A_2x2 = [
+            [Fraction(1), Fraction(2)],
+            [Fraction(3), Fraction(4)],
+        ]
+        u_dim2 = [Fraction(1), Fraction(2)]
+        v_dim3 = [Fraction(1), Fraction(2), Fraction(3)]
+
+        with self.assertRaises(ValueError) as ctx2:
+            programa.analizar_propiedades_ax(A_2x2, u_dim2, v_dim3, Fraction(1))
+        self.assertIn("incompatible", str(ctx2.exception).lower())
+
+        with self.assertRaises(ValueError) as ctx3:
+            programa.analizar_propiedades_ax(A_2x2, v_dim3, v_dim3, Fraction(1))
+        self.assertIn("incompatible", str(ctx3.exception).lower())
+
+    def test_06_vectores_con_ceros(self):
+        """
+        PRUEBA 6 — Vectores con ceros y escalar cero:
+        A = [[2, -1], [0, 3]], u = [0, 0], v = [0, 0], c = 0.
+        A(u + v) = [0, 0] = Au + Av
+        A(cu) = [0, 0] = c(Au)
+        """
+        A = [
+            [Fraction(2), Fraction(-1)],
+            [Fraction(0), Fraction(3)],
+        ]
+        u = [Fraction(0), Fraction(0)]
+        v = [Fraction(0), Fraction(0)]
+        c = Fraction(0)
+
+        res = programa.analizar_propiedades_ax(A, u, v, c)
+        self.assertTrue(res["propiedad_1"]["se_cumple"])
+        self.assertEqual(res["propiedad_1"]["A_u_mas_v"], [Fraction(0), Fraction(0)])
+        self.assertEqual(res["propiedad_1"]["Au_mas_Av"], [Fraction(0), Fraction(0)])
+
+        self.assertTrue(res["propiedad_2"]["se_cumple"])
+        self.assertEqual(res["propiedad_2"]["A_cu"], [Fraction(0), Fraction(0)])
+        self.assertEqual(res["propiedad_2"]["c_Au"], [Fraction(0), Fraction(0)])
+
+    def test_07_valores_fraccionarios(self):
+        """
+        PRUEBA 7 — Valores fraccionarios exactos:
+        A = [[1/2, 1/3], [1/4, 1/5]], u = [1/3, 1/2], v = [2/3, 1/4], c = 3/4.
+        Cálculo manual exacto:
+        u + v = [1, 3/4]
+        A(u + v) = [(1/2)*1 + (1/3)*(3/4), (1/4)*1 + (1/5)*(3/4)]
+                 = [1/2 + 1/4, 1/4 + 3/20] = [3/4, 8/20] = [3/4, 2/5]
+        Au = [(1/2)*(1/3) + (1/3)*(1/2), (1/4)*(1/3) + (1/5)*(1/2)]
+           = [1/6 + 1/6, 1/12 + 1/10] = [1/3, 11/60]
+        Av = [(1/2)*(2/3) + (1/3)*(1/4), (1/4)*(2/3) + (1/5)*(1/4)]
+           = [1/3 + 1/12, 1/6 + 1/20] = [5/12, 13/60]
+        Au + Av = [1/3 + 5/12, 11/60 + 13/60] = [9/12, 24/60] = [3/4, 2/5]
+        A(u + v) == Au + Av = [3/4, 2/5]
+        cu = (3/4) * [1/3, 1/2] = [1/4, 3/8]
+        A(cu) = [(1/2)*(1/4) + (1/3)*(3/8), (1/4)*(1/4) + (1/5)*(3/8)]
+              = [1/8 + 1/8, 1/16 + 3/40] = [1/4, 11/80]
+        c(Au) = (3/4) * [1/3, 11/60] = [1/4, 11/80]
+        A(cu) == c(Au) = [1/4, 11/80]
+        """
+        A = [
+            [Fraction(1, 2), Fraction(1, 3)],
+            [Fraction(1, 4), Fraction(1, 5)],
+        ]
+        u = [Fraction(1, 3), Fraction(1, 2)]
+        v = [Fraction(2, 3), Fraction(1, 4)]
+        c = Fraction(3, 4)
+
+        res = programa.analizar_propiedades_ax(A, u, v, c)
+        self.assertTrue(res["propiedad_1"]["se_cumple"])
+        self.assertEqual(res["propiedad_1"]["A_u_mas_v"], [Fraction(3, 4), Fraction(2, 5)])
+        self.assertEqual(res["propiedad_1"]["Au_mas_Av"], [Fraction(3, 4), Fraction(2, 5)])
+
+        self.assertTrue(res["propiedad_2"]["se_cumple"])
+        self.assertEqual(res["propiedad_2"]["A_cu"], [Fraction(1, 4), Fraction(11, 80)])
+        self.assertEqual(res["propiedad_2"]["c_Au"], [Fraction(1, 4), Fraction(11, 80)])
+
+
 if __name__ == "__main__":
     unittest.main()
+
 
