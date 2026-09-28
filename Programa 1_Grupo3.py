@@ -770,29 +770,47 @@ def detalle_producto_matriz_vector(A, x):
     return lineas
 
 
-def verificar_propiedades_producto(A, u, v, c):
+def analizar_producto_av(A, v, c, u=None):
     """
-    Calcula todo lo necesario para comprobar las propiedades del producto Ax:
-    a) A(u + v) = Au + Av      b) A(cu) = c(Au)
+    Producto matriz-vector por columnas: si A = [a1 a2 ... an], entonces
+    Av = v1*a1 + v2*a2 + ... + vn*an. Tambien comprueba la propiedad A(cv) = c(Av)
+    y, si se da un segundo vector u, la propiedad A(u + v) = Au + Av.
     """
-    if len(u) != len(v):
-        raise ValueError("Los vectores u y v deben tener la misma cantidad de componentes.")
-    u_mas_v = [ui + vi for ui, vi in zip(u, v)]
-    Au = multiplicar_matriz_vector(A, u)
+    if not A or not A[0]:
+        raise ValueError("La matriz A no puede estar vacía.")
+    if len(A[0]) != len(v) or (u is not None and len(u) != len(v)):
+        raise ValueError("v y u deben tener una componente por cada columna a1…an de A.")
+    simbolos = [f"a{j + 1}" for j in range(len(v))]
+    columnas = [[fila[j] for fila in A] for j in range(len(v))]
+    terminos = [[v[j] * valor for valor in columnas[j]] for j in range(len(v))]
     Av = multiplicar_matriz_vector(A, v)
-    A_u_mas_v = multiplicar_matriz_vector(A, u_mas_v)
-    Au_mas_Av = [a + b for a, b in zip(Au, Av)]
-    cu = [c * ui for ui in u]
-    A_cu = multiplicar_matriz_vector(A, cu)
-    c_Au = [c * valor for valor in Au]
-    return {
-        "A": A, "u": u, "v": v, "c": c,
-        "u_mas_v": u_mas_v, "Au": Au, "Av": Av,
-        "A_u_mas_v": A_u_mas_v, "Au_mas_Av": Au_mas_Av,
-        "cu": cu, "A_cu": A_cu, "c_Au": c_Au,
-        "propiedad_a": A_u_mas_v == Au_mas_Av,
-        "propiedad_b": A_cu == c_Au,
+    cv = [c * valor for valor in v]
+    A_cv = multiplicar_matriz_vector(A, cv)
+    c_Av = [c * valor for valor in Av]
+    datos = {
+        "A": A, "v": v, "c": c, "u": u,
+        "columnas": columnas,
+        "terminos": terminos,
+        "combinacion": formatear_combinacion_lineal(v, simbolos),
+        "Av": Av,
+        "cv": cv, "A_cv": A_cv, "c_Av": c_Av,
+        "propiedad": A_cv == c_Av,
+        "propiedad_suma": None,
     }
+    if u is not None:
+        Au = multiplicar_matriz_vector(A, u)
+        u_mas_v = [a + b for a, b in zip(u, v)]
+        A_u_mas_v = multiplicar_matriz_vector(A, u_mas_v)
+        Au_mas_Av = [a + b for a, b in zip(Au, Av)]
+        datos.update(
+            Au=Au,
+            combinacion_u=formatear_combinacion_lineal(u, simbolos),
+            u_mas_v=u_mas_v,
+            A_u_mas_v=A_u_mas_v,
+            Au_mas_Av=Au_mas_Av,
+            propiedad_suma=A_u_mas_v == Au_mas_Av,
+        )
+    return datos
 
 
 def combinacion_no_trivial(direcciones):
@@ -1236,7 +1254,7 @@ def crear_tarjeta(parent, titulo=None, subtitulo=None, fondo=None):
         border_color=PALETA["borde"],
     )
     if titulo:
-        etiqueta(tarjeta, titulo, FUENTE_SECCION, "texto").pack(
+        etiqueta(tarjeta, titulo, FUENTE_SECCION, "texto", ajustar=48).pack(
             anchor="w", padx=18, pady=(16, 2 if subtitulo else 10))
     if subtitulo:
         etiqueta(tarjeta, subtitulo, FUENTE_PEQUENA, "texto_3", ajustar=48).pack(
@@ -2290,8 +2308,8 @@ def tarjeta_estado(parent, titulo, descripcion, color, icono):
                  text_color=TEXTO_SOBRE_PRIMARIO, font=(FAMILIA, 22, "bold")).pack(side="left", padx=16, pady=16)
     textos = ctk.CTkFrame(tarjeta, fg_color="transparent")
     textos.pack(side="left", fill="x", expand=True, pady=14, padx=(0, 16))
-    etiqueta(textos, titulo, (FAMILIA, 18, "bold"), "texto", ajustar=112).pack(anchor="w")
-    etiqueta(textos, descripcion, FUENTE_NORMAL, "texto_2", ajustar=112).pack(anchor="w", pady=(3, 0))
+    etiqueta(textos, titulo, (FAMILIA, 18, "bold"), "texto", ajustar=120).pack(anchor="w")
+    etiqueta(textos, descripcion, FUENTE_NORMAL, "texto_2", ajustar=120).pack(anchor="w", pady=(3, 0))
 
     inicio = resolver_color(color)
     fin = resolver_color(PALETA["borde"])
@@ -3118,22 +3136,30 @@ class PaginaIndependencia(PaginaSistema):
 
 
 class PaginaPropiedades(PaginaSistema):
-    titulo = "Propiedades del producto Ax"
-    subtitulo = "Comprueba que A(u + v) = Au + Av y que A(cu) = c(Au) con tus propios datos"
-    etiqueta_filas = "Filas de A"
-    etiqueta_columnas = "Columnas de A"
+    titulo = "Propiedades del producto Av"
+    subtitulo = ("Carga las columnas a1, a2, … de A y el vector v (y, si quieres, u): calcula "
+                 "Av = v1·a1 + … + vn·an y comprueba sus propiedades")
+    etiqueta_filas = "Componentes (m)"
+    etiqueta_columnas = "Vectores a1…an (n)"
     filas_inicial = 2
-    columnas_inicial = 2
-    titulo_datos = "Matriz A y vectores u, v"
-    texto_boton = "Comprobar propiedades"
+    columnas_inicial = 3
+    titulo_datos = "Columnas de A y vectores"
+    texto_boton = "Calcular Av"
+    # nombre: (m, n, (A, v, c, u)); u se usa solo si se activa con «Añadir u».
     ejemplos = {
-        "Matriz 2×2": (2, 2, ([[1, 2], [3, 4]], [[1, -1], [2, 0]], "3")),
-        "Matriz 2×3": (2, 3, ([[1, 0, 2], [-1, 3, 1]], [[1, 2], [0, -1], [4, 1]], "-2")),
-        "Con fracciones": (3, 2, ([["1/2", 1], [0, "3/4"], [2, -1]], [[2, "1/3"], [-4, 3]], "1/2")),
+        "Ejemplo del libro (2×3)": (2, 3, ([[1, 2, -1], [0, -5, 3]], [4, 3, 7], "2", [2, 0, -1])),
+        "Matriz 2×2": (2, 2, ([[1, 2], [3, 4]], [1, -1], "3", [0, 2])),
+        "Tres columnas en R³": (3, 3, ([[1, 0, 2], [2, 1, 0], [0, 3, 1]], [2, -1, 1], "-2", [1, 1, -1])),
+        "Con fracciones": (3, 2, ([["1/2", 1], [0, "3/4"], [2, -1]], [2, "1/3"], "1/2", ["1/2", -1])),
     }
-    ejemplo_inicial = "Matriz 2×2"
-    vacio_resultado = "Escribe A, u, v y c, y presiona «Comprobar propiedades»."
-    vacio_pasos = "Aquí aparecerá cada producto calculado fila por fila."
+    ejemplo_inicial = "Ejemplo del libro (2×3)"
+    vacio_resultado = "Escribe las columnas a1…an, el vector v y c, y presiona «Calcular Av»."
+    vacio_pasos = "Aquí aparecerá Av como combinación de las columnas y la comprobación fila por fila."
+
+    def __init__(self, parent, app):
+        self.con_u = False
+        self._u_guardado = []
+        super().__init__(parent, app)
 
     def controles_extra(self, fila):
         grupo = ctk.CTkFrame(fila, fg_color="transparent")
@@ -3152,110 +3178,236 @@ class PaginaPropiedades(PaginaSistema):
         self._al_cambiar_datos()
 
     def construir_entradas(self, parent):
-        etiqueta(parent, "Matriz A", FUENTE_PEQUENA_NEGRITA, "texto_3").pack(anchor="w", padx=4, pady=(4, 2))
+        etiqueta(parent, "Matriz A = [a1  a2  …  an]  (cada columna es un vector)", FUENTE_PEQUENA_NEGRITA,
+                 "texto_3").pack(anchor="w", padx=4, pady=(4, 2))
         self.matriz_a = MatrizEntrada(parent, al_cambiar=self._al_cambiar_datos)
         self.matriz_a.pack(anchor="w", padx=4)
-        etiqueta(parent, "Vectores u y v", FUENTE_PEQUENA_NEGRITA, "texto_3").pack(anchor="w", padx=4, pady=(14, 2))
-        self.matriz_uv = MatrizEntrada(parent, al_cambiar=self._al_cambiar_datos)
-        self.matriz_uv.pack(anchor="w", padx=4)
+
+        # El tamano de v (y u) es el mismo n que la cantidad de columnas a1…an
+        # (Av solo existe asi), por eso ambos contadores van sincronizados.
+        cabecera = ctk.CTkFrame(parent, fg_color="transparent")
+        cabecera.pack(anchor="w", padx=4, pady=(14, 4))
+        self.etiqueta_vectores = etiqueta(cabecera, "Vector v", FUENTE_PEQUENA_NEGRITA, "texto_3")
+        self.etiqueta_vectores.pack(side="left", anchor="s", pady=(0, 6))
+        self.contador_v = Contador(cabecera, "Componentes (n)", self.contador_columnas.get(),
+                                   self.minimo_columnas, LIMITE_DIMENSION, self._cambiar_tamano_v)
+        self.contador_v.pack(side="left", padx=(16, 0))
+        self.boton_u = boton_secundario(cabecera, "+  Añadir u", self.alternar_u, width=112, height=30,
+                                        font=FUENTE_PEQUENA_NEGRITA)
+        self.boton_u.pack(side="left", anchor="s", padx=(12, 0), pady=(0, 2))
+        self.matriz_v = MatrizEntrada(parent, al_cambiar=self._al_cambiar_datos)
+        self.matriz_v.pack(anchor="w", padx=4)
+        etiqueta(parent, "Los vectores tienen una componente por cada columna a1…an: al cambiar n también "
+                         "cambia la cantidad de columnas de A.",
+                 FUENTE_PEQUENA, "texto_3", ajustar=40).pack(anchor="w", padx=4, pady=(6, 0))
+
+    def _cambiar_tamano_v(self, componentes):
+        self.contador_columnas.set(componentes)
+        self.reconstruir()
+
+    def alternar_u(self):
+        """Muestra u como una segunda columna junto a v (o la quita), conservando los valores escritos."""
+        textos = self.matriz_v.textos()
+        if self.con_u:
+            self._u_guardado = [fila[1] for fila in textos]
+        self.con_u = not self.con_u
+        self.boton_u.configure(text="−  Quitar u" if self.con_u else "+  Añadir u")
+        self.etiqueta_vectores.configure(text="Vectores v y u" if self.con_u else "Vector v")
+        valores = []
+        for i, fila in enumerate(textos):
+            valores.append([fila[0]] + ([self._u_guardado[i] if i < len(self._u_guardado) else "0"]
+                                        if self.con_u else []))
+        self._configurar_v(len(textos), valores)
+        self.etiqueta_dimension.configure(
+            text=self.texto_dimension(self.contador_filas.get(), self.contador_columnas.get()))
+        self._al_cambiar_datos()
+        if self.con_u:
+            self.matriz_v.celdas[0][1].focus_set()
+
+    def _configurar_v(self, componentes, valores=None):
+        encabezados = ["v", "u"] if self.con_u else ["v"]
+        self.matriz_v.configurar(componentes, len(encabezados), encabezados,
+                                 [str(i + 1) for i in range(componentes)], None, valores)
 
     def crear_procedimiento(self, pestana):
         self.area_pasos = AreaDesplazable(pestana, PALETA["panel"])
         self.area_pasos.pack(fill="both", expand=True)
 
     def texto_dimension(self, filas, columnas):
-        return f"A es {filas} × {columnas}; u, v ∈ {espacio_real(columnas)}"
+        vectores = "u, v" if self.con_u else "v"
+        return f"A: {filas} × {columnas} · {vectores} ∈ {espacio_real(columnas)}"
 
     def configurar_entradas(self, filas, columnas, valores):
-        A = uv = None
+        A = v = None
         if valores is not None:
-            A, uv, c = valores
+            A, v, c, u = valores
+            self._u_guardado = [str(x) for x in u]
             self.entrada_c.delete(0, "end")
             self.entrada_c.insert(0, str(c))
             self.entrada_c.configure(border_color=PALETA["borde"])
         self.matriz_a.configurar(filas, columnas, [f"a{j + 1}" for j in range(columnas)],
-                                 [f"F{i + 1}" for i in range(filas)], None, A)
-        self.matriz_uv.configurar(columnas, 2, ["u", "v"], [str(i + 1) for i in range(columnas)], None, uv)
+                                 [str(i + 1) for i in range(filas)], None, A)
+        filas_v = None
+        if v is not None:
+            filas_v = [[v[i]] + ([self._u_guardado[i]] if self.con_u else []) for i in range(columnas)]
+        self._configurar_v(columnas, filas_v)
+        self.contador_v.set(columnas)
 
     def valores_previa(self):
         A = [[_numero_o_nada(t) for t in fila] for fila in self.matriz_a.textos()]
-        uv = [[_numero_o_nada(t) for t in fila] for fila in self.matriz_uv.textos()]
-        return A, [f[0] for f in uv], [f[1] for f in uv], _numero_o_nada(self.entrada_c.get())
+        vectores = [[_numero_o_nada(t) for t in fila] for fila in self.matriz_v.textos()]
+        v = [fila[0] for fila in vectores]
+        u = [fila[1] for fila in vectores] if self.con_u else None
+        return A, v, u, _numero_o_nada(self.entrada_c.get())
 
     def construir_previa(self, parent, valores):
-        A, u, v, c = valores
-        dibujar_expresion(parent, ["A =", A, " u =", u, " v =", v], tamano=12).pack(anchor="w")
+        A, v, u, c = valores
+        partes = ["A =", A, "  v =", v] + (["  u =", u] if u is not None else [])
+        dibujar_expresion(parent, partes, tamano=12).pack(anchor="w")
+        simbolos = [f"a{j + 1}" for j in range(len(v))]
+        for nombre, vector in (("v", v), ("u", u)):
+            if vector is None:
+                continue
+            if all(x is not None for x in vector):
+                combinacion = formatear_combinacion_lineal(vector, simbolos)
+            else:
+                combinacion = " + ".join(f"{nombre}{j + 1}·{s}" for j, s in enumerate(simbolos))
+            etiqueta(parent, f"A{nombre} = {combinacion}", FUENTE_MONO, "texto", ajustar=40).pack(
+                anchor="w", pady=(6 if nombre == "v" else 2, 0))
         etiqueta(parent, f"c = {_texto_valor(c)}", FUENTE_MONO, "texto" if c is not None else "error").pack(
-            anchor="w", pady=(4, 0))
+            anchor="w", pady=(2, 0))
 
     def leer_datos(self):
         A = self.matriz_a.valores()
-        uv = self.matriz_uv.valores()
+        vectores = self.matriz_v.valores()
         try:
             c = convertir_numero(self.entrada_c.get())
         except ValueError as error:
             self.entrada_c.configure(border_color=PALETA["error"])
             raise ValueError(f"Escalar c: {error}") from None
-        return A, [f[0] for f in uv], [f[1] for f in uv], c
+        v = [fila[0] for fila in vectores]
+        u = [fila[1] for fila in vectores] if self.con_u else None
+        return A, v, c, u
 
     def limpiar_entradas(self):
         self.matriz_a.limpiar()
-        self.matriz_uv.limpiar()
+        self.matriz_v.limpiar()
 
     def valores_aleatorios(self, filas, columnas):
         A = [[random.randint(-4, 4) for _ in range(columnas)] for _ in range(filas)]
-        uv = [[random.randint(-3, 3) for _ in range(2)] for _ in range(columnas)]
-        return A, uv, str(random.choice([-3, -2, 2, 3, 4]))
+        v = [random.randint(-3, 3) for _ in range(columnas)]
+        u = [random.randint(-3, 3) for _ in range(columnas)]
+        return A, v, str(random.choice([-3, -2, 2, 3, 4])), u
 
     def calcular(self, datos):
-        return verificar_propiedades_producto(*datos)
+        return analizar_producto_av(*datos)
+
+    @staticmethod
+    def _coeficiente(valor):
+        return ("-" if valor < 0 else "") + formatear_coeficiente(valor)
+
+    @staticmethod
+    def _todo_se_cumple(datos):
+        return datos["propiedad"] and datos["propiedad_suma"] is not False
 
     def construir_resultado(self, datos):
-        ambas = datos["propiedad_a"] and datos["propiedad_b"]
-        estado = (
-            "Se cumplen ambas propiedades" if ambas else "Alguna propiedad no se cumple",
-            "El producto matriz-vector es lineal: respeta la suma de vectores y la multiplicación por escalares.",
-            PALETA["exito"] if ambas else PALETA["error"], "✓" if ambas else "✕",
-        )
         c = formatear_numero(datos["c"])
+        con_u = datos["u"] is not None
+        cumple = self._todo_se_cumple(datos)
+        propiedades = "A(cv) = c(Av) y A(u + v) = Au + Av" if con_u else "A(cv) = c(Av)"
+        estado = (
+            "Productos Av y Au calculados" if con_u else "Producto Av calculado",
+            f"Av = {datos['combinacion']}. " + (f"Se cumple {propiedades}." if cumple
+                                              else "Alguna propiedad no se cumple."),
+            PALETA["exito"] if cumple else PALETA["error"], "✓" if cumple else "✕",
+        )
 
-        def comparar(parent, titulo, partes, cumple, texto):
+        def combinacion(parent, nombre, vector, resultado, texto):
+            tarjeta = tarjeta_seccion(parent, f"A{nombre} como combinación de las columnas de A",
+                                      f"Cada columna aj se multiplica por la componente {nombre}j y luego se suman.")
+            etiqueta(tarjeta, f"A{nombre} = {texto}", (FAMILIA_MONO, 16, "bold"), "primario",
+                     ajustar=44).pack(anchor="w", padx=16)
+            dibujar_expresion(tarjeta, [f"A{nombre} ="] + partes_combinacion(vector, datos["columnas"], resultado),
+                              tamano=13).pack(anchor="w", padx=14, pady=(6, 0))
+            partes = ["="]
+            for j, columna in enumerate(datos["columnas"]):
+                partes += (["+"] if j else []) + [[vector[j] * valor for valor in columna]]
+            dibujar_expresion(tarjeta, partes + ["=", resultado], tamano=13).pack(anchor="w", padx=14, pady=(0, 14))
+
+        def fila_por_fila(parent):
+            tarjeta = tarjeta_seccion(parent, "Comprobación fila por fila",
+                                      "Cada componente de Av es el producto de una fila de A por v.")
+            for linea in detalle_producto_matriz_vector(datos["A"], datos["v"]):
+                etiqueta(tarjeta, linea, FUENTE_MONO, "texto_2").pack(anchor="w", padx=16)
+            dibujar_expresion(tarjeta, ["Av =", datos["Av"]]).pack(anchor="w", padx=14, pady=(6, 14))
+
+        def comparar(parent, titulo, lineas_de_partes, se_cumple):
             tarjeta = tarjeta_seccion(parent, titulo)
-            dibujar_expresion(tarjeta, partes).pack(anchor="w", padx=14)
-            etiqueta(tarjeta, ("✓  " if cumple else "✕  ") + texto, FUENTE_NEGRITA,
-                     "exito" if cumple else "error", ajustar=44).pack(anchor="w", padx=16, pady=(6, 16))
+            for partes in lineas_de_partes:
+                dibujar_expresion(tarjeta, partes, tamano=13).pack(anchor="w", padx=14)
+            etiqueta(tarjeta, ("✓  Los dos vectores son iguales." if se_cumple else "✕  Los vectores son distintos."),
+                     FUENTE_NEGRITA, "exito" if se_cumple else "error", ajustar=44).pack(
+                anchor="w", padx=16, pady=(6, 16))
 
-        return [
+        constructores = [
             lambda p: tarjeta_estado(p, *estado),
-            lambda p: comparar(p, "Productos Au y Av", ["Au =", datos["Au"], "  Av =", datos["Av"]], True,
-                               "Productos calculados fila por fila (ver Procedimiento)."),
-            lambda p: comparar(p, "a)  A(u + v) = Au + Av",
-                               ["A(u + v) =", datos["A_u_mas_v"], "  Au + Av =", datos["Au_mas_Av"]],
-                               datos["propiedad_a"], "Los dos vectores son iguales." if datos["propiedad_a"]
-                               else "Los vectores son distintos."),
-            lambda p: comparar(p, f"b)  A(cu) = c(Au)   con c = {c}",
-                               ["A(cu) =", datos["A_cu"], "  c(Au) =", datos["c_Au"]],
-                               datos["propiedad_b"], "Los dos vectores son iguales." if datos["propiedad_b"]
-                               else "Los vectores son distintos."),
+            lambda p: combinacion(p, "v", datos["v"], datos["Av"], datos["combinacion"]),
         ]
+        if con_u:
+            constructores.append(lambda p: combinacion(p, "u", datos["u"], datos["Au"], datos["combinacion_u"]))
+        constructores += [
+            fila_por_fila,
+            lambda p: comparar(p, f"Propiedad  A(cv) = c(Av)   con c = {c}",
+                               [["cv =", datos["cv"]], ["A(cv) =", datos["A_cv"], " c(Av) =", datos["c_Av"]]],
+                               datos["propiedad"]),
+        ]
+        if con_u:
+            constructores.append(lambda p: comparar(
+                p, "Propiedad  A(u + v) = Au + Av",
+                [["u + v =", datos["u_mas_v"]], ["A(u + v) =", datos["A_u_mas_v"], " Au + Av =", datos["Au_mas_Av"]]],
+                datos["propiedad_suma"]))
+        return constructores
 
     def mostrar_procedimiento(self, datos):
         c = formatear_numero(datos["c"])
+        n = len(datos["v"])
+        con_u = datos["u"] is not None
+        columnas = []
+        for j, columna in enumerate(datos["columnas"]):
+            columnas += [f"a{j + 1} =", columna]
+        escaladas = []
+        for j, termino in enumerate(datos["terminos"]):
+            escaladas += [f"{self._coeficiente(datos['v'][j])}·a{j + 1} =", termino]
+        suma = []
+        for j, termino in enumerate(datos["terminos"]):
+            suma += (["+"] if j else []) + [termino]
+        simbolica = " + ".join(f"v{j + 1}·a{j + 1}" for j in range(n))
+        comparaciones = [f"A(cv) {'=' if datos['propiedad'] else '≠'} c(Av)"]
+
         pasos = [
-            ("Datos", None, ["A =", datos["A"], " u =", datos["u"], " v =", datos["v"], f" c = {c}"]),
-            ("Calcular Au (fila de A por u)", detalle_producto_matriz_vector(datos["A"], datos["u"]), None),
-            ("Calcular Av (fila de A por v)", detalle_producto_matriz_vector(datos["A"], datos["v"]), None),
-            ("Sumar u + v componente a componente", None, ["u + v =", datos["u_mas_v"]]),
-            ("Calcular A(u + v)", detalle_producto_matriz_vector(datos["A"], datos["u_mas_v"]), None),
-            ("Sumar Au + Av", None, ["Au + Av =", datos["Au_mas_Av"]]),
-            (f"Multiplicar u por c = {c}", None, ["cu =", datos["cu"]]),
-            ("Calcular A(cu)", detalle_producto_matriz_vector(datos["A"], datos["cu"]), None),
-            (f"Multiplicar Au por c = {c}", None, ["c(Au) =", datos["c_Au"]]),
-            ("Comparar", [
-                f"A(u + v) {'=' if datos['propiedad_a'] else '≠'} Au + Av",
-                f"A(cu) {'=' if datos['propiedad_b'] else '≠'} c(Au)",
-            ], None),
+            ("Datos", None, (["A =", datos["A"]],
+                             ["v =", datos["v"]] + (["u =", datos["u"]] if con_u else []) + [f"c = {c}"])),
+            ("Separar A en sus columnas a1 … an", None, columnas),
+            ("Escribir Av como combinación lineal de las columnas",
+             [f"Av = {simbolica}", f"Av = {datos['combinacion']}"], None),
+            ("Multiplicar cada columna por su componente de v", None, escaladas),
+            ("Sumar los vectores obtenidos", None, suma + ["=", datos["Av"]]),
+            ("Comprobar fila por fila", detalle_producto_matriz_vector(datos["A"], datos["v"]), None),
+            (f"Multiplicar v por c = {c}", None, ["cv =", datos["cv"]]),
+            ("Calcular A(cv)", detalle_producto_matriz_vector(datos["A"], datos["cv"]), None),
+            (f"Multiplicar Av por c = {c}", None, ["c(Av) =", datos["c_Av"]]),
         ]
+        if con_u:
+            comparaciones.append(f"A(u + v) {'=' if datos['propiedad_suma'] else '≠'} Au + Av")
+            pasos += [
+                ("Calcular Au como combinación de las columnas",
+                 [f"Au = {datos['combinacion_u']}"] + detalle_producto_matriz_vector(datos["A"], datos["u"]),
+                 ["Au =", datos["Au"]]),
+                ("Sumar u + v componente a componente", None, ["u + v =", datos["u_mas_v"]]),
+                ("Calcular A(u + v)", detalle_producto_matriz_vector(datos["A"], datos["u_mas_v"]), None),
+                ("Sumar Au + Av", None, ["Au + Av =", datos["Au_mas_Av"]]),
+            ]
+        pasos.append(("Comparar", comparaciones, None))
 
         def tarjeta(parent, numero, titulo, lineas, partes):
             marco = ctk.CTkFrame(parent, fg_color=PALETA["panel_2"], corner_radius=12,
@@ -3264,11 +3416,12 @@ class PaginaPropiedades(PaginaSistema):
             cabecera = ctk.CTkFrame(marco, fg_color="transparent")
             cabecera.pack(fill="x", padx=14, pady=(12, 6))
             chip(cabecera, f"Paso {numero}", "primario", TEXTO_SOBRE_PRIMARIO).pack(side="left")
-            etiqueta(cabecera, titulo, FUENTE_NEGRITA, "texto").pack(side="left", padx=(10, 0))
+            etiqueta(cabecera, titulo, FUENTE_NEGRITA, "texto", ajustar=120).pack(side="left", padx=(10, 0))
             for linea in lineas or []:
                 etiqueta(marco, linea, FUENTE_MONO, "texto_2").pack(anchor="w", padx=18)
-            if partes:
-                dibujar_expresion(marco, partes).pack(anchor="w", padx=14)
+            # partes puede ser una sola expresion (lista) o varias lineas (tupla de listas).
+            for linea in (partes if isinstance(partes, tuple) else [partes] if partes else []):
+                dibujar_expresion(marco, linea, tamano=13).pack(anchor="w", padx=14)
             ctk.CTkFrame(marco, fg_color="transparent", height=10).pack()
             efecto_hover(marco)
 
@@ -3279,20 +3432,30 @@ class PaginaPropiedades(PaginaSistema):
     def procedimiento_vacio(self):
         self.area_pasos.llenar([lambda p: placeholder(p, "☰", self.vacio_pasos)])
 
+    @staticmethod
+    def _vector(valores):
+        return "(" + ", ".join(formatear_numero(x) for x in valores) + ")"
+
     def texto_copiar(self, datos):
-        def vec(v):
-            return "(" + ", ".join(formatear_numero(x) for x in v) + ")"
-        return "\n".join([
-            f"Au = {vec(datos['Au'])}",
-            f"Av = {vec(datos['Av'])}",
-            f"A(u + v) = {vec(datos['A_u_mas_v'])}   Au + Av = {vec(datos['Au_mas_Av'])}",
-            f"A(cu) = {vec(datos['A_cu'])}   c(Au) = {vec(datos['c_Au'])}",
-        ])
+        vec = self._vector
+        lineas = [
+            f"Av = {datos['combinacion']} = {vec(datos['Av'])}",
+            f"A(cv) = {vec(datos['A_cv'])}   c(Av) = {vec(datos['c_Av'])}",
+        ]
+        if datos["u"] is not None:
+            lineas += [
+                f"Au = {datos['combinacion_u']} = {vec(datos['Au'])}",
+                f"A(u + v) = {vec(datos['A_u_mas_v'])}   Au + Av = {vec(datos['Au_mas_Av'])}",
+            ]
+        return "\n".join(lineas)
 
     def mensaje_resuelto(self, datos):
-        if datos["propiedad_a"] and datos["propiedad_b"]:
-            return "Se verificaron ambas propiedades del producto Ax.", "exito"
-        return "Alguna propiedad no se cumplió.", "error"
+        if not self._todo_se_cumple(datos):
+            return "Alguna propiedad no se cumplió.", "error"
+        if datos["u"] is not None:
+            return (f"Av = {self._vector(datos['Av'])}, Au = {self._vector(datos['Au'])} · "
+                    f"se cumplen ambas propiedades."), "exito"
+        return f"Av = {self._vector(datos['Av'])} · se cumple A(cv) = c(Av).", "exito"
 
 
 class PaginaInformativa(PaginaBase):
@@ -3406,6 +3569,7 @@ class PaginaAyuda(PaginaInformativa):
         ("Independencia lineal", "Los vectores son L.I. si c1·v1 + … + cp·vp = 0 solo se cumple con todos los ci = 0: "
                                  "en la forma escalonada de [A | 0] hay un pivote en cada columna."),
         ("Sistema homogéneo", "Todos los términos independientes son 0 (Ax = 0). Siempre tiene al menos la solución trivial."),
+        ("Producto Ax", "Si A = [a1 … an], entonces Ax = x1·a1 + … + xn·an: una combinación lineal de las columnas de A."),
         ("Linealidad de Ax", "Para toda matriz A: A(u + v) = Au + Av y A(cu) = c(Au)."),
     ]
 

@@ -7,7 +7,7 @@ Proyecto universitario del Grupo 3 (Universidad Americana) para resolver problem
 - **Calculadora**: sistemas de ecuaciones lineales de hasta 10 × 10, con clasificación, rango, solución única o paramétrica y verificación.
 - **Combinaciones lineales**: indica si w pertenece a Gen{v1, …, vn} y con qué coeficientes.
 - **Ecuación Ax = b**: vista matricial del sistema, forma vectorial paramétrica y comprobación de A·x = b.
-- **Propiedades de Ax**: comprueba A(u + v) = Au + Av y A(cu) = c(Au) fila por fila.
+- **Propiedades de Ax**: se cargan las columnas a1, a2, … de A y un vector v; calcula Av = v1·a1 + … + vn·an (y fila por fila) y comprueba A(cv) = c(Av).
 - **Independencia lineal**: pide la cantidad de vectores p y su dimensión n, construye el sistema homogéneo [A | 0], lo reduce a forma escalonada por filas, cuenta pivotes y variables libres y da el veredicto (L.I. o L.D.). Si son dependientes, también muestra una relación de dependencia.
 - **Método** y **Ayuda**: explicación del algoritmo con un ejemplo resuelto, atajos y conceptos clave.
 

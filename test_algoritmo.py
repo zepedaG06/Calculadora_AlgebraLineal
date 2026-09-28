@@ -551,17 +551,38 @@ class PruebasOtrasSecciones(unittest.TestCase):
         self.assertIn("Número de pivotes: 2", texto)
         self.assertIn("Veredicto: Linealmente Dependiente (L.D.)", texto)
 
-    def test_propiedades_del_producto_ax(self):
-        A = [[Fraction(1), Fraction(2)], [Fraction(3), Fraction(4)]]
-        u = [Fraction(1), Fraction(2)]
-        v = [Fraction(-1), Fraction(0)]
-        datos = programa.verificar_propiedades_producto(A, u, v, Fraction(3))
-        self.assertEqual(datos["Au"], [5, 11])
-        self.assertEqual(datos["Av"], [-1, -3])
-        self.assertEqual(datos["A_u_mas_v"], [4, 8])
-        self.assertEqual(datos["A_cu"], [15, 33])
-        self.assertTrue(datos["propiedad_a"])
-        self.assertTrue(datos["propiedad_b"])
+    def test_producto_av_por_columnas(self):
+        # Ejemplo de Lay 1.4: A = [a1 a2 a3], v = (4, 3, 7) -> Av = 4a1 + 3a2 + 7a3 = (3, 6)
+        A = [[Fraction(1), Fraction(2), Fraction(-1)], [Fraction(0), Fraction(-5), Fraction(3)]]
+        v = [Fraction(4), Fraction(3), Fraction(7)]
+        datos = programa.analizar_producto_av(A, v, Fraction(2))
+        self.assertEqual(datos["columnas"], [[1, 0], [2, -5], [-1, 3]])
+        self.assertEqual(datos["combinacion"], "4·a1 + 3·a2 + 7·a3")
+        self.assertEqual(datos["terminos"], [[4, 0], [6, -15], [-7, 21]])
+        self.assertEqual(datos["Av"], [3, 6])
+        suma = [sum(t[i] for t in datos["terminos"]) for i in range(2)]
+        self.assertEqual(suma, datos["Av"])
+        self.assertEqual(datos["A_cv"], [6, 12])
+        self.assertTrue(datos["propiedad"])
+
+    def test_producto_av_con_u(self):
+        A = [[Fraction(1), Fraction(2), Fraction(-1)], [Fraction(0), Fraction(-5), Fraction(3)]]
+        v = [Fraction(4), Fraction(3), Fraction(7)]
+        u = [Fraction(2), Fraction(0), Fraction(-1)]
+        datos = programa.analizar_producto_av(A, v, Fraction(2), u)
+        self.assertEqual(datos["Au"], [3, -3])
+        self.assertEqual(datos["combinacion_u"], "2·a1 - a3")
+        self.assertEqual(datos["u_mas_v"], [6, 3, 6])
+        self.assertEqual(datos["A_u_mas_v"], [6, 3])
+        self.assertEqual(datos["Au_mas_Av"], [6, 3])
+        self.assertTrue(datos["propiedad_suma"])
+        # Sin u no se calcula la propiedad de la suma.
+        self.assertIsNone(programa.analizar_producto_av(A, v, Fraction(2))["propiedad_suma"])
+
+    def test_producto_av_dimension_incorrecta(self):
+        A = [[Fraction(1), Fraction(2)]]
+        with self.assertRaisesRegex(ValueError, "una componente por cada columna"):
+            programa.analizar_producto_av(A, [Fraction(1)], Fraction(2))
 
     def test_detalle_producto_matriz_vector(self):
         A = [[Fraction(1), Fraction(2)], [Fraction(0), Fraction(-3)]]
