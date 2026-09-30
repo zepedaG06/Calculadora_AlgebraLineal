@@ -758,6 +758,236 @@ def multiplicar_matriz_vector(A, x):
     return [sum(A[i][j] * x[j] for j in range(len(x))) for i in range(len(A))]
 
 
+# -----------------------------------------------------------------------------
+# Operaciones con matrices y propiedades teóricas
+# -----------------------------------------------------------------------------
+
+def validar_matriz(matriz, nombre="Matriz"):
+    """Valida una matriz rectangular no vacía y convierte sus entradas a Fraction."""
+    if not isinstance(matriz, list) or not matriz:
+        raise ValueError(f"{nombre} debe ser una matriz no vacía.")
+    if not all(isinstance(fila, list) and fila for fila in matriz):
+        raise ValueError(f"{nombre} debe tener filas no vacías.")
+    columnas = len(matriz[0])
+    if any(len(fila) != columnas for fila in matriz):
+        raise ValueError(f"{nombre} debe ser rectangular: todas sus filas deben tener la misma longitud.")
+    try:
+        return [[valor if isinstance(valor, Fraction) else Fraction(valor) for valor in fila] for fila in matriz]
+    except (TypeError, ValueError, ZeroDivisionError) as error:
+        raise ValueError(f"{nombre} contiene una entrada no numérica válida.") from error
+
+
+def dimensiones_matriz(matriz):
+    matriz = validar_matriz(matriz)
+    return len(matriz), len(matriz[0])
+
+
+def matriz_cero(filas, columnas):
+    return [[Fraction(0) for _ in range(columnas)] for _ in range(filas)]
+
+
+def matriz_identidad(orden):
+    if not isinstance(orden, int) or orden < 1:
+        raise ValueError("El orden de la identidad debe ser un entero positivo.")
+    return [[Fraction(int(i == j)) for j in range(orden)] for i in range(orden)]
+
+
+def transponer_matriz(A):
+    A = validar_matriz(A, "A")
+    return [[A[i][j] for i in range(len(A))] for j in range(len(A[0]))]
+
+
+def sumar_matrices(A, B):
+    A, B = validar_matriz(A, "A"), validar_matriz(B, "B")
+    da, db = (len(A), len(A[0])), (len(B), len(B[0]))
+    if da != db:
+        raise ValueError(f"A es {da[0]}×{da[1]} y B es {db[0]}×{db[1]}; A + B no está definida: las dimensiones deben ser iguales.")
+    return [[A[i][j] + B[i][j] for j in range(da[1])] for i in range(da[0])]
+
+
+def restar_matrices(A, B):
+    A, B = validar_matriz(A, "A"), validar_matriz(B, "B")
+    da, db = (len(A), len(A[0])), (len(B), len(B[0]))
+    if da != db:
+        raise ValueError(f"A es {da[0]}×{da[1]} y B es {db[0]}×{db[1]}; A - B no está definida: las dimensiones deben ser iguales.")
+    return [[A[i][j] - B[i][j] for j in range(da[1])] for i in range(da[0])]
+
+
+def multiplicar_matriz_escalar(escalar, A):
+    A = validar_matriz(A, "A")
+    try:
+        escalar = escalar if isinstance(escalar, Fraction) else Fraction(escalar)
+    except (TypeError, ValueError, ZeroDivisionError) as error:
+        raise ValueError("El escalar debe ser un número válido.") from error
+    return [[escalar * valor for valor in fila] for fila in A]
+
+
+def multiplicar_matrices(A, B):
+    A, B = validar_matriz(A, "A"), validar_matriz(B, "B")
+    m, n, p, q = len(A), len(A[0]), len(B), len(B[0])
+    if n != p:
+        raise ValueError(f"A es {m}×{n} y B es {p}×{q}; AB no está definido porque columnas(A) = {n} ≠ filas(B) = {p}.")
+    return [[sum(A[i][k] * B[k][j] for k in range(n)) for j in range(q)] for i in range(m)]
+
+
+def _terminos(izquierda, derecha, operador="·"):
+    return " + ".join(f"{formatear_numero(a)}{operador}{formatear_numero(b)}" for a, b in zip(izquierda, derecha)) or "0"
+
+
+def procedimiento_operacion_matrices(A, operacion, B=None, escalar=None):
+    """Calcula una operación y devuelve resultado, pasos reales y conclusión académica."""
+    A = validar_matriz(A, "A")
+    m, n = dimensiones_matriz(A)
+    pasos = [f"Datos: A es una matriz {m}×{n}."]
+    if operacion in ("suma", "resta", "producto"):
+        B = validar_matriz(B, "B")
+        p, q = dimensiones_matriz(B)
+        pasos.append(f"B es una matriz {p}×{q}.")
+    if operacion in ("suma", "resta"):
+        if (m, n) != (p, q):
+            raise ValueError(f"A es {m}×{n} y B es {p}×{q}. La operación no está definida porque suma y resta exigen dimensiones idénticas.")
+        signo, resultado = ("+", sumar_matrices(A, B)) if operacion == "suma" else ("−", restar_matrices(A, B))
+        pasos.append(f"Condición cumplida: {m}×{n} = {p}×{q}. Se opera entrada por entrada.")
+        for i in range(m):
+            pasos.append("Fila " + str(i + 1) + ": " + ", ".join(
+                f"({formatear_numero(A[i][j])}) {signo} ({formatear_numero(B[i][j])}) = {formatear_numero(resultado[i][j])}" for j in range(n)))
+        return {"resultado": resultado, "pasos": pasos, "conclusion": f"La operación A {signo} B está definida y su resultado es una matriz {m}×{n}."}
+    if operacion == "escalar":
+        escalar = escalar if isinstance(escalar, Fraction) else Fraction(escalar)
+        resultado = multiplicar_matriz_escalar(escalar, A)
+        pasos.append(f"Se multiplica cada entrada por el escalar r = {formatear_numero(escalar)}.")
+        for i in range(m):
+            pasos.append("Fila " + str(i + 1) + ": " + ", ".join(
+                f"{formatear_numero(escalar)}({formatear_numero(A[i][j])}) = {formatear_numero(resultado[i][j])}" for j in range(n)))
+        return {"resultado": resultado, "pasos": pasos, "conclusion": f"rA está definida y conserva las dimensiones {m}×{n}."}
+    if operacion == "transpuesta":
+        resultado = transponer_matriz(A)
+        pasos += ["Cada fila de A se convierte en una columna de Aᵀ."]
+        pasos += [f"Fila {i + 1} de A = columna {i + 1} de Aᵀ: ({', '.join(formatear_numero(x) for x in fila)})." for i, fila in enumerate(A)]
+        return {"resultado": resultado, "pasos": pasos, "conclusion": f"Aᵀ tiene dimensiones {n}×{m}; se intercambiaron filas y columnas."}
+    if operacion == "producto":
+        if n != p:
+            raise ValueError(f"A es {m}×{n} y B es {p}×{q}. AB no está definido porque {n} ≠ {p}.")
+        resultado = multiplicar_matrices(A, B)
+        pasos.append(f"Condición cumplida: columnas(A) = filas(B) = {n}. AB tendrá dimensión {m}×{q}.")
+        for i in range(m):
+            for j in range(q):
+                columna = [B[k][j] for k in range(n)]
+                pasos.append(f"(AB){i + 1},{j + 1} = {_terminos(A[i], columna)} = {formatear_numero(resultado[i][j])}.")
+        return {"resultado": resultado, "pasos": pasos, "conclusion": f"AB está definida y su resultado es una matriz {m}×{q}."}
+    raise ValueError("Operación matricial desconocida.")
+
+
+def comparar_matrices(izquierda, derecha, nombre_izquierdo="Lado izquierdo", nombre_derecho="Lado derecho"):
+    izquierda, derecha = validar_matriz(izquierda, nombre_izquierdo), validar_matriz(derecha, nombre_derecho)
+    di, dd = dimensiones_matriz(izquierda), dimensiones_matriz(derecha)
+    diferencias = []
+    if di == dd:
+        for i in range(di[0]):
+            for j in range(di[1]):
+                if izquierda[i][j] != derecha[i][j]:
+                    diferencias.append((i + 1, j + 1, izquierda[i][j], derecha[i][j]))
+    else:
+        diferencias.append(("dimensiones", di, dd))
+    return {"izquierda": izquierda, "derecha": derecha, "dimensiones_izquierda": di,
+            "dimensiones_derecha": dd, "coinciden": not diferencias, "diferencias": diferencias,
+            "conclusion": ("Las dimensiones y todas las entradas coinciden exactamente." if not diferencias
+                           else "La igualdad no se verifica: revise las diferencias indicadas.")}
+
+
+def verificar_propiedades_transpuesta(A, B=None, escalar=Fraction(1)):
+    """Verifica casos particulares; no los presenta como demostración general."""
+    A = validar_matriz(A, "A")
+    r = escalar if isinstance(escalar, Fraction) else Fraction(escalar)
+    propiedades = {}
+    propiedades["doble"] = comparar_matrices(transponer_matriz(transponer_matriz(A)), A, "(Aᵀ)ᵀ", "A")
+    propiedades["escalar"] = comparar_matrices(transponer_matriz(multiplicar_matriz_escalar(r, A)),
+                                                  multiplicar_matriz_escalar(r, transponer_matriz(A)), "(rA)ᵀ", "rAᵀ")
+    if B is not None:
+        B = validar_matriz(B, "B")
+        try:
+            propiedades["suma"] = comparar_matrices(transponer_matriz(sumar_matrices(A, B)),
+                                                       sumar_matrices(transponer_matriz(A), transponer_matriz(B)),
+                                                       "(A+B)ᵀ", "Aᵀ+Bᵀ")
+        except ValueError as error:
+            propiedades["suma"] = {"definida": False, "error": str(error)}
+        try:
+            propiedades["producto"] = comparar_matrices(transponer_matriz(multiplicar_matrices(A, B)),
+                                                           multiplicar_matrices(transponer_matriz(B), transponer_matriz(A)),
+                                                           "(AB)ᵀ", "BᵀAᵀ")
+        except ValueError as error:
+            propiedades["producto"] = {"definida": False, "error": str(error)}
+    return propiedades
+
+
+def verificar_propiedades_algebraicas(A, B, C, r=Fraction(1), s=Fraction(1)):
+    A, B, C = validar_matriz(A, "A"), validar_matriz(B, "B"), validar_matriz(C, "C")
+    r, s = Fraction(r), Fraction(s)
+    resultados = {}
+    def prueba(nombre, izquierda, derecha):
+        resultados[nombre] = comparar_matrices(izquierda, derecha, "Lado izquierdo", "Lado derecho")
+    if dimensiones_matriz(A) == dimensiones_matriz(B) == dimensiones_matriz(C):
+        prueba("asociatividad_suma", sumar_matrices(sumar_matrices(A, B), C), sumar_matrices(A, sumar_matrices(B, C)))
+        prueba("conmutatividad_suma", sumar_matrices(A, B), sumar_matrices(B, A))
+        prueba("distributividad_escalar", multiplicar_matriz_escalar(r, sumar_matrices(A, B)),
+               sumar_matrices(multiplicar_matriz_escalar(r, A), multiplicar_matriz_escalar(r, B)))
+    prueba("cero_aditivo", sumar_matrices(A, matriz_cero(*dimensiones_matriz(A))), A)
+    prueba("inverso_aditivo", sumar_matrices(A, multiplicar_matriz_escalar(-1, A)), matriz_cero(*dimensiones_matriz(A)))
+    prueba("suma_escalares", multiplicar_matriz_escalar(r + s, A),
+           sumar_matrices(multiplicar_matriz_escalar(r, A), multiplicar_matriz_escalar(s, A)))
+    prueba("producto_escalares", multiplicar_matriz_escalar(r, multiplicar_matriz_escalar(s, A)),
+           multiplicar_matriz_escalar(r * s, A))
+    prueba("identidad_derecha", multiplicar_matrices(A, matriz_identidad(dimensiones_matriz(A)[1])), A)
+    prueba("identidad_izquierda", multiplicar_matrices(matriz_identidad(dimensiones_matriz(A)[0]), A), A)
+    try:
+        prueba("asociatividad_producto", multiplicar_matrices(multiplicar_matrices(A, B), C), multiplicar_matrices(A, multiplicar_matrices(B, C)))
+    except ValueError as error:
+        resultados["asociatividad_producto"] = {"definida": False, "error": str(error)}
+    try:
+        prueba("distributividad_izquierda", multiplicar_matrices(A, sumar_matrices(B, C)),
+               sumar_matrices(multiplicar_matrices(A, B), multiplicar_matrices(A, C)))
+    except ValueError as error:
+        resultados["distributividad_izquierda"] = {"definida": False, "error": str(error)}
+    try:
+        prueba("distributividad_derecha", multiplicar_matrices(sumar_matrices(A, B), C),
+               sumar_matrices(multiplicar_matrices(A, C), multiplicar_matrices(B, C)))
+    except ValueError as error:
+        resultados["distributividad_derecha"] = {"definida": False, "error": str(error)}
+    return resultados
+
+
+def contraejemplos_matriciales():
+    """Contraejemplos exactos, listos para ser explicados y comprobados."""
+    A, B = [[1, 2], [0, 1]], [[1, 0], [3, 1]]
+    C, D = [[1, 0], [0, 0]], [[0, 0], [1, 0]]
+    E, F, G = [[1, 0], [0, 0]], [[1, 0], [0, 0]], [[1, 0], [2, 0]]
+    return {
+        "no_conmutatividad": {"A": A, "B": B, "AB": multiplicar_matrices(A, B), "BA": multiplicar_matrices(B, A),
+            "conclusion": "AB y BA están definidos pero son distintos; el producto matricial no es conmutativo en general."},
+        "orden_rectangular": {"A": [[1, 2, 3], [4, 5, 6]], "B": [[1, 0, 1, 0], [0, 1, 0, 1], [1, 1, 0, 0]],
+            "AB": multiplicar_matrices([[1, 2, 3], [4, 5, 6]], [[1, 0, 1, 0], [0, 1, 0, 1], [1, 1, 0, 0]]),
+            "conclusion": "AB está definido (2×3 por 3×4), pero BA no está definido porque B tiene 4 columnas y A tiene 2 filas."},
+        "cancelacion": {"A": E, "B": F, "C": G, "AB": multiplicar_matrices(E, F), "AC": multiplicar_matrices(E, G),
+            "conclusion": "AB = AC pero B ≠ C; no se puede cancelar A sin hipótesis adicionales (por ejemplo, A invertible)."},
+        "divisores_cero": {"A": C, "B": D, "AB": multiplicar_matrices(C, D),
+            "conclusion": "AB = 0 aunque A y B no son matrices cero: existen divisores de cero."},
+    }
+
+
+def ejercicios_matrices():
+    """Banco breve y variado de ejercicios; cada uno explicita qué debe justificarse."""
+    return [
+        {"tema": "Suma con fracciones", "A": [["1/2", "-1"], ["3", "0"]], "B": [["1/3", "2"], ["-3", "5/2"]],
+         "consigna": "Calcule A+B entrada por entrada y justifique la compatibilidad de dimensiones."},
+        {"tema": "Producto rectangular", "A": [[1, 2, -1], [0, 3, 4]], "B": [[2, 1], [-1, 0], [3, 2]],
+         "consigna": "Calcule AB fila por columna e indique la dimensión del resultado."},
+        {"tema": "Transpuesta", "A": [[1, -2, 3], ["1/2", 0, 4]],
+         "consigna": "Calcule Aᵀ y verifique (Aᵀ)ᵀ=A para este caso particular."},
+        {"tema": "Propiedad y contraejemplo", "consigna": "Decida si AB=BA vale siempre. Dé un contraejemplo y compruebe ambos productos."},
+        {"tema": "Cancelación", "consigna": "Explique por qué AB=AC no implica B=C sin que A sea invertible."},
+    ]
+
+
 def detalle_producto_matriz_vector(A, x):
     """Explica el producto Ax fila por fila: 'Fila 1: 1(2) + 3(-1) = -1'."""
     lineas = []
@@ -3458,6 +3688,150 @@ class PaginaPropiedades(PaginaSistema):
         return f"Av = {self._vector(datos['Av'])} · se cumple A(cv) = c(Av).", "exito"
 
 
+class PaginaMatrices(PaginaBase):
+    """Interfaz integrada para cálculo, verificación y práctica de matrices."""
+    titulo = "Operaciones con Matrices y Propiedades Teóricas"
+    subtitulo = "Resultados exactos, procedimientos verificables y conclusiones para examen"
+
+    OPCIONES = ("A + B", "A − B", "rA", "Aᵀ", "AB", "Propiedades de la transpuesta",
+                "Propiedades algebraicas", "Contraejemplos", "Ejercicios tipo examen")
+
+    def __init__(self, parent, app):
+        super().__init__(parent, app)
+        self.grid_rowconfigure(1, weight=1)
+        cuerpo = ctk.CTkFrame(self, fg_color="transparent")
+        cuerpo.grid(row=1, column=0, sticky="nsew", padx=24, pady=(0, 20))
+        cuerpo.grid_columnconfigure(0, weight=1)
+        cuerpo.grid_columnconfigure(1, weight=1)
+        cuerpo.grid_rowconfigure(1, weight=1)
+        controles = crear_tarjeta(cuerpo, "Datos y operación")
+        controles.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 12))
+        fila = ctk.CTkFrame(controles, fg_color="transparent")
+        fila.pack(fill="x", padx=16, pady=12)
+        self.dimension_a = ctk.CTkEntry(fila, width=68, placeholder_text="2×2")
+        self.dimension_b = ctk.CTkEntry(fila, width=68, placeholder_text="2×2")
+        self.dimension_c = ctk.CTkEntry(fila, width=68, placeholder_text="2×2")
+        self.dimension_a.insert(0, "2x2")
+        self.dimension_b.insert(0, "2x2")
+        self.dimension_c.insert(0, "2x2")
+        etiqueta(fila, "A:", FUENTE_PEQUENA_NEGRITA, "texto").pack(side="left")
+        self.dimension_a.pack(side="left", padx=(5, 14))
+        etiqueta(fila, "B:", FUENTE_PEQUENA_NEGRITA, "texto").pack(side="left")
+        self.dimension_b.pack(side="left", padx=(5, 14))
+        etiqueta(fila, "C:", FUENTE_PEQUENA_NEGRITA, "texto").pack(side="left")
+        self.dimension_c.pack(side="left", padx=(5, 14))
+        boton_secundario(fila, "Actualizar dimensiones", self.reconstruir, width=170).pack(side="left", padx=(0, 14))
+        self.operacion = ctk.CTkOptionMenu(fila, values=list(self.OPCIONES), width=230)
+        self.operacion.set("A + B")
+        self.operacion.pack(side="left", padx=(0, 12))
+        etiqueta(fila, "r:", FUENTE_PEQUENA_NEGRITA, "texto").pack(side="left")
+        self.escalar = ctk.CTkEntry(fila, width=75)
+        self.escalar.insert(0, "1/2")
+        self.escalar.pack(side="left", padx=5)
+        boton_primario(fila, "Calcular y comprobar", self.calcular, width=195).pack(side="right")
+
+        izquierda = crear_tarjeta(cuerpo, "Matrices de entrada")
+        izquierda.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
+        self.entrada_area = AreaDesplazable(izquierda, PALETA["panel"])
+        self.entrada_area.pack(fill="both", expand=True, padx=12, pady=12)
+        derecha = crear_tarjeta(cuerpo, "Resultado, procedimiento y comprobación")
+        derecha.grid(row=1, column=1, sticky="nsew", padx=(10, 0))
+        self.salida = ctk.CTkTextbox(derecha, wrap="word", font=FUENTE_MONO, fg_color=PALETA["entrada"], text_color=PALETA["texto"])
+        self.salida.pack(fill="both", expand=True, padx=12, pady=12)
+        self.reconstruir()
+
+    @staticmethod
+    def _dimension(texto):
+        partes = texto.lower().replace("×", "x").split("x")
+        if len(partes) != 2:
+            raise ValueError("Usa dimensiones positivas con el formato filas×columnas; por ejemplo, 2x3.")
+        filas, columnas = (int(x.strip()) for x in partes)
+        if not (1 <= filas <= LIMITE_DIMENSION and 1 <= columnas <= LIMITE_DIMENSION):
+            raise ValueError(f"Cada dimensión debe estar entre 1 y {LIMITE_DIMENSION}.")
+        return filas, columnas
+
+    def reconstruir(self):
+        try:
+            fa, ca = self._dimension(self.dimension_a.get())
+            fb, cb = self._dimension(self.dimension_b.get())
+            fc, cc = self._dimension(self.dimension_c.get())
+        except ValueError as error:
+            self._escribir("Error de dimensiones\n\n" + str(error))
+            return
+        self.entrada_area.limpiar()
+        p = self.entrada_area.interior
+        etiqueta(p, f"A ({fa}×{ca})", FUENTE_SECCION, "primario").pack(anchor="w")
+        self.entrada_a = MatrizEntrada(p)
+        self.entrada_a.pack(anchor="w", padx=4, pady=(4, 14))
+        self.entrada_a.configurar(fa, ca, [f"a{j + 1}" for j in range(ca)], valores=[[1 if i == j else 0 for j in range(ca)] for i in range(fa)])
+        etiqueta(p, f"B ({fb}×{cb})", FUENTE_SECCION, "primario").pack(anchor="w")
+        self.entrada_b = MatrizEntrada(p)
+        self.entrada_b.pack(anchor="w", padx=4, pady=(4, 14))
+        self.entrada_b.configurar(fb, cb, [f"b{j + 1}" for j in range(cb)], valores=[[1 if i == j else 0 for j in range(cb)] for i in range(fb)])
+        etiqueta(p, f"C ({fc}×{cc})", FUENTE_SECCION, "primario").pack(anchor="w")
+        self.entrada_c = MatrizEntrada(p)
+        self.entrada_c.pack(anchor="w", padx=4, pady=(4, 14))
+        self.entrada_c.configurar(fc, cc, [f"c{j + 1}" for j in range(cc)], valores=[[1 if i == j else 0 for j in range(cc)] for i in range(fc)])
+        etiqueta(p, "Para las propiedades algebraicas, elija A, B y C con las dimensiones compatibles requeridas por cada producto.", FUENTE_PEQUENA, "texto_3", ajustar=45).pack(anchor="w", padx=4)
+        self._escribir("Ingrese las matrices. Se aceptan enteros, decimales y fracciones exactas como −3/2.")
+
+    def _escribir(self, texto):
+        self.salida.configure(state="normal")
+        self.salida.delete("1.0", "end")
+        self.salida.insert("1.0", texto)
+        self.salida.configure(state="disabled")
+
+    @staticmethod
+    def _matriz_texto(A):
+        return matriz_a_texto(validar_matriz(A))
+
+    def _comparacion_texto(self, nombre, dato):
+        if dato.get("definida") is False:
+            return f"{nombre}: no aplicable\n{dato['error']}\n"
+        lineas = [f"{nombre}", f"Lado izquierdo ({dato['dimensiones_izquierda'][0]}×{dato['dimensiones_izquierda'][1]}):\n{self._matriz_texto(dato['izquierda'])}",
+                  f"Lado derecho ({dato['dimensiones_derecha'][0]}×{dato['dimensiones_derecha'][1]}):\n{self._matriz_texto(dato['derecha'])}",
+                  ("✓ Coinciden exactamente entrada por entrada." if dato["coinciden"] else f"✗ Diferencias: {dato['diferencias']}"),
+                  "Esta es una verificación del caso introducido; no sustituye la demostración algebraica general.\n"]
+        return "\n".join(lineas)
+
+    def calcular(self):
+        try:
+            A, B, C, r = self.entrada_a.valores(), self.entrada_b.valores(), self.entrada_c.valores(), convertir_numero(self.escalar.get())
+            op = self.operacion.get()
+            if op in ("A + B", "A − B", "rA", "Aᵀ", "AB"):
+                clave = {"A + B": "suma", "A − B": "resta", "rA": "escalar", "Aᵀ": "transpuesta", "AB": "producto"}[op]
+                dato = procedimiento_operacion_matrices(A, clave, B, r)
+                texto = f"{op}\n\nA =\n{self._matriz_texto(A)}\n\n" + (f"B =\n{self._matriz_texto(B)}\n\n" if clave in ("suma", "resta", "producto") else "")
+                texto += "PROCEDIMIENTO\n" + "\n".join(f"{i + 1}. {x}" for i, x in enumerate(dato["pasos"]))
+                texto += f"\n\nRESULTADO\n{self._matriz_texto(dato['resultado'])}\n\nCONCLUSIÓN\n{dato['conclusion']}"
+            elif op == "Propiedades de la transpuesta":
+                datos = verificar_propiedades_transpuesta(A, B, r)
+                nombres = {"doble": "(Aᵀ)ᵀ = A", "suma": "(A+B)ᵀ = Aᵀ+Bᵀ", "escalar": "(rA)ᵀ = rAᵀ", "producto": "(AB)ᵀ = BᵀAᵀ"}
+                texto = "PROPIEDADES DE LA TRANSPUESTA\n\n" + "\n".join(self._comparacion_texto(nombres[k], v) for k, v in datos.items())
+            elif op == "Propiedades algebraicas":
+                datos = verificar_propiedades_algebraicas(A, B, C, r, Fraction(2))
+                texto = "PROPIEDADES ALGEBRAICAS (s = 2)\n\n" + "\n".join(self._comparacion_texto(k.replace("_", " "), v) for k, v in datos.items())
+            elif op == "Contraejemplos":
+                datos = contraejemplos_matriciales()
+                texto = "CONTRAEJEMPLOS: AFIRMACIONES FALSAS EN GENERAL\n\n"
+                for nombre, dato in datos.items():
+                    texto += nombre.replace("_", " ").upper() + "\n"
+                    for clave, valor in dato.items():
+                        texto += f"{clave} =\n{self._matriz_texto(valor)}\n" if isinstance(valor, list) else f"{clave}: {valor}\n"
+                    texto += "\n"
+            else:
+                texto = "EJERCICIOS TIPO EXAMEN\n\n"
+                for numero, ejercicio in enumerate(ejercicios_matrices(), 1):
+                    texto += f"{numero}. {ejercicio['tema']}\n{ejercicio['consigna']}\n"
+                    for clave in ("A", "B"):
+                        if clave in ejercicio:
+                            texto += f"{clave} =\n{self._matriz_texto([[convertir_numero(x) for x in fila] for fila in ejercicio[clave]])}\n"
+                    texto += "\n"
+            self._escribir(texto)
+        except ValueError as error:
+            self._escribir("OPERACIÓN NO REALIZADA\n\n" + str(error) + "\n\nRevise las dimensiones antes de calcular.")
+
+
 class PaginaInformativa(PaginaBase):
     """Pagina de lectura: las tarjetas aparecen en cascada cada vez que se abre."""
 
@@ -3630,6 +4004,7 @@ class AplicacionAlgebraLineal(_Ventana):
         ("vectorial", "Σ", "Combinaciones lineales", PaginaCombinaciones),
         ("axb", "≡", "Ecuación Ax = b", PaginaAxb),
         ("propiedades_ax", "⇄", "Propiedades de Ax", PaginaPropiedades),
+        ("matrices", "▦", "Operaciones con matrices", PaginaMatrices),
         ("independencia", "⊥", "Independencia lineal", PaginaIndependencia),
         ("metodo", "☰", "Método de eliminación", PaginaMetodo),
         ("ayuda", "?", "Ayuda", PaginaAyuda),

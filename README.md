@@ -8,6 +8,7 @@ Proyecto universitario del Grupo 3 (Universidad Americana) para resolver problem
 - **Combinaciones lineales**: indica si w pertenece a Gen{v1, …, vn} y con qué coeficientes.
 - **Ecuación Ax = b**: vista matricial del sistema, forma vectorial paramétrica y comprobación de A·x = b.
 - **Propiedades de Ax**: se cargan las columnas a1, a2, … de A y un vector v; calcula Av = v1·a1 + … + vn·an (y fila por fila) y comprueba A(cv) = c(Av).
+- **Operaciones con matrices**: suma, resta, escalar, transpuesta y producto general con fracciones exactas, validación de dimensiones y desarrollo entrada por entrada. Incluye las cuatro propiedades de la transpuesta, propiedades algebraicas, comparaciones independientes de ambos lados, contraejemplos y ejercicios tipo examen. Una verificación numérica se identifica expresamente como caso particular, no como demostración general.
 - **Independencia lineal**: pide la cantidad de vectores p y su dimensión n, construye el sistema homogéneo [A | 0], lo reduce a forma escalonada por filas, cuenta pivotes y variables libres y da el veredicto (L.I. o L.D.). Si son dependientes, también muestra una relación de dependencia.
 - **Método** y **Ayuda**: explicación del algoritmo con un ejemplo resuelto, atajos y conceptos clave.
 

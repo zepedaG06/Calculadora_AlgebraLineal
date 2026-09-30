@@ -593,6 +593,66 @@ class PruebasOtrasSecciones(unittest.TestCase):
         )
 
 
+class PruebasOperacionesMatrices(unittest.TestCase):
+    """Cobertura académica del módulo Operaciones con Matrices."""
+
+    A = [[Fraction(1), Fraction(2)], [Fraction(3), Fraction(4)]]
+    B = [[Fraction(5), Fraction(6)], [Fraction(7), Fraction(8)]]
+
+    def test_suma_resta_y_dimension_incompatible(self):
+        self.assertEqual(programa.sumar_matrices(self.A, self.B), [[6, 8], [10, 12]])
+        self.assertEqual(programa.restar_matrices(self.A, self.B), [[-4, -4], [-4, -4]])
+        with self.assertRaisesRegex(ValueError, "dimensiones"):
+            programa.sumar_matrices([[1, 2]], [[1], [2]])
+
+    def test_escalar_cero_negativo_y_fraccionario(self):
+        self.assertEqual(programa.multiplicar_matriz_escalar(0, self.A), [[0, 0], [0, 0]])
+        self.assertEqual(programa.multiplicar_matriz_escalar(-2, self.A), [[-2, -4], [-6, -8]])
+        self.assertEqual(programa.multiplicar_matriz_escalar(Fraction(1, 2), self.A), [[Fraction(1, 2), 1], [Fraction(3, 2), 2]])
+
+    def test_transpuesta_y_producto_rectangular(self):
+        self.assertEqual(programa.transponer_matriz([[1, 2, 3], [4, 5, 6]]), [[1, 4], [2, 5], [3, 6]])
+        self.assertEqual(programa.multiplicar_matrices([[1, 2, 3], [4, 5, 6]], [[1, 2], [3, 4], [5, 6]]), [[22, 28], [49, 64]])
+        with self.assertRaisesRegex(ValueError, "no está definido"):
+            programa.multiplicar_matrices([[1, 2]], [[1, 2]])
+
+    def test_procedimientos_son_reales_y_entrada_por_entrada(self):
+        dato = programa.procedimiento_operacion_matrices(self.A, "producto", self.B)
+        self.assertEqual(dato["resultado"], [[19, 22], [43, 50]])
+        self.assertTrue(any("(AB)1,1" in paso and "1·5 + 2·7" in paso for paso in dato["pasos"]))
+        self.assertIn("2×2", dato["conclusion"])
+
+    def test_cuatro_propiedades_de_transpuesta(self):
+        datos = programa.verificar_propiedades_transpuesta(self.A, self.B, Fraction(-3, 2))
+        self.assertTrue(datos["doble"]["coinciden"])
+        self.assertTrue(datos["suma"]["coinciden"])
+        self.assertTrue(datos["escalar"]["coinciden"])
+        self.assertTrue(datos["producto"]["coinciden"])
+        self.assertEqual(datos["producto"]["izquierda"], [[19, 43], [22, 50]])
+
+    def test_propiedades_algebraicas_e_identidad(self):
+        datos = programa.verificar_propiedades_algebraicas(self.A, self.B, programa.matriz_identidad(2), Fraction(2), Fraction(-1))
+        for clave in ("asociatividad_suma", "conmutatividad_suma", "cero_aditivo", "inverso_aditivo", "asociatividad_producto", "distributividad_izquierda", "distributividad_derecha", "identidad_derecha", "identidad_izquierda", "distributividad_escalar", "suma_escalares", "producto_escalares"):
+            self.assertTrue(datos[clave]["coinciden"], clave)
+
+    def test_comparacion_muestra_diferencias(self):
+        dato = programa.comparar_matrices([[1, 2]], [[1, 3]])
+        self.assertFalse(dato["coinciden"])
+        self.assertEqual(dato["diferencias"], [(1, 2, Fraction(2), Fraction(3))])
+
+    def test_contraejemplos_validos(self):
+        datos = programa.contraejemplos_matriciales()
+        self.assertNotEqual(datos["no_conmutatividad"]["AB"], datos["no_conmutatividad"]["BA"])
+        self.assertEqual(datos["cancelacion"]["AB"], datos["cancelacion"]["AC"])
+        self.assertNotEqual(datos["cancelacion"]["B"], datos["cancelacion"]["C"])
+        self.assertEqual(datos["divisores_cero"]["AB"], [[0, 0], [0, 0]])
+        with self.assertRaises(ValueError):
+            programa.multiplicar_matrices(datos["orden_rectangular"]["B"], datos["orden_rectangular"]["A"])
+        ejercicios = programa.ejercicios_matrices()
+        self.assertGreaterEqual(len(ejercicios), 5)
+        self.assertTrue(any(ejercicio["tema"] == "Producto rectangular" for ejercicio in ejercicios))
+
+
 if __name__ == "__main__":
     unittest.main()
 
