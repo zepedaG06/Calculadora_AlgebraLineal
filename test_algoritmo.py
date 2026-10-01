@@ -653,6 +653,359 @@ class PruebasOperacionesMatrices(unittest.TestCase):
         self.assertTrue(any(ejercicio["tema"] == "Producto rectangular" for ejercicio in ejercicios))
 
 
+def F(valor):
+    return Fraction(valor)
+
+
+def M(filas):
+    """Matriz de Fraction a partir de enteros o textos como '1/2'."""
+    return [[Fraction(v) for v in fila] for fila in filas]
+
+
+class PruebasExpresionesMatriciales(unittest.TestCase):
+    """Procedimiento, expresiones con A, B y C y verificacion independiente."""
+
+    A = M([[1, 2], [3, 4]])
+    B = M([[0, 1], [-1, 2]])
+    C = M([[2, 0], [1, -3]])
+
+    def resolver(self, expresion, matrices=None, escalares=None):
+        matrices = matrices or {"A": self.A, "B": self.B, "C": self.C}
+        resolucion = programa.resolver_expresion_matricial(expresion, matrices, escalares)
+        verificacion = programa.verificar_resolucion(resolucion)
+        return resolucion, verificacion
+
+    def assert_resultado(self, expresion, esperado, matrices=None, escalares=None):
+        resolucion, verificacion = self.resolver(expresion, matrices, escalares)
+        self.assertIsNone(resolucion["error"], resolucion["error"])
+        self.assertEqual(resolucion["resultado"], esperado)
+        self.assertTrue(verificacion["correcto"])
+        return resolucion, verificacion
+
+    # 1-3: suma y resta
+    def test_01_suma_compatible(self):
+        resolucion, verificacion = self.assert_resultado("A + B", M([[1, 3], [2, 6]]))
+        paso = resolucion["operaciones"][0]
+        self.assertEqual(paso["tipo"], "suma")
+        self.assertTrue(paso["condicion"]["cumple"])
+        self.assertEqual(len(paso["entradas"]), 4)
+        self.assertIn("(1) + (0) = 1", paso["entradas"][0]["lineas"][0])
+        self.assertEqual(verificacion["pasos"][0]["entradas_ok"], 4)
+
+    def test_02_rechazo_suma_dimensiones_distintas(self):
+        resolucion, verificacion = self.resolver("A + B", {"A": M([[1, 2, 3], [4, 5, 6]]), "B": self.B})
+        self.assertIn("A es 2×3 y B es 2×2", resolucion["error"])
+        self.assertIn("mismo tamaño", resolucion["error"])
+        self.assertFalse(resolucion["operaciones"][0]["condicion"]["cumple"])
+        self.assertIsNone(resolucion["resultado"])
+        self.assertFalse(verificacion["aplicable"])
+        with self.assertRaises(ValueError):
+            programa.sumar_matrices([[1, 2, 3]], [[1, 2]])
+
+    def test_03_resta(self):
+        resolucion, _ = self.assert_resultado("A - B", M([[1, 1], [4, 2]]))
+        self.assertEqual(resolucion["operaciones"][0]["tipo"], "resta")
+
+    # 4-6: multiplicacion por escalar
+    def test_04_escalar_positivo(self):
+        resolucion, _ = self.assert_resultado("3A", M([[3, 6], [9, 12]]))
+        paso = resolucion["operaciones"][0]
+        self.assertEqual(paso["tipo"], "escalar")
+        self.assertEqual(paso["dimension"], (2, 2))
+        self.assertIn("(3)·(2) = 6", paso["entradas"][1]["lineas"][0])
+
+    def test_05_escalar_negativo(self):
+        self.assert_resultado("-2A", M([[-2, -4], [-6, -8]]))
+        self.assert_resultado("(-2)A", M([[-2, -4], [-6, -8]]))
+        self.assert_resultado("-A", M([[-1, -2], [-3, -4]]))
+
+    def test_06_escalar_cero(self):
+        self.assert_resultado("0A", M([[0, 0], [0, 0]]))
+
+    # 7: transpuesta
+    def test_07_transpuesta_rectangular(self):
+        A = M([[1, 2, 3], [4, 5, 6]])
+        for escritura in ("A^T", "Aᵀ", "A'"):
+            resolucion, _ = self.assert_resultado(escritura, M([[1, 4], [2, 5], [3, 6]]), {"A": A})
+            self.assertEqual(resolucion["dimension"], (3, 2))
+            self.assertIn("2×3, así que Aᵀ es 3×2", resolucion["operaciones"][0]["condicion"]["texto"])
+
+    # 8-10: producto
+    def test_08_producto_cuadradas(self):
+        resolucion, _ = self.assert_resultado("AB", M([[-2, 5], [-4, 11]]))
+        lineas = resolucion["operaciones"][0]["entradas"][0]["lineas"]
+        self.assertIn("a₁₁·b₁₁ + a₁₂·b₂₁", lineas[1])
+        self.assertIn("(1)(0) + (2)(-1)", lineas[2])
+        self.assertEqual(lineas[-1].strip(), "= -2")
+
+    def test_09_producto_rectangular_compatible(self):
+        A, B = M([[1, 2, 3], [4, 5, 6]]), M([[1, 2], [3, 4], [5, 6]])
+        resolucion, _ = self.assert_resultado("AB", M([[22, 28], [49, 64]]), {"A": A, "B": B})
+        self.assertEqual(resolucion["dimension"], (2, 2))
+        self.assertIn("el resultado será 2×2", resolucion["operaciones"][0]["condicion"]["texto"])
+
+    def test_10_rechazo_producto_incompatible(self):
+        resolucion, _ = self.resolver("AB", {"A": M([[1, 2, 3]]), "B": M([[1, 2]])})
+        self.assertIn("columnas de A (3)", resolucion["error"])
+        self.assertIn("filas de B (1)", resolucion["error"])
+
+    # 11-16: expresiones combinadas
+    def test_11_a_mas_b_menos_c(self):
+        resolucion, _ = self.assert_resultado("A + B - C", M([[-1, 3], [1, 9]]))
+        self.assertEqual([p["expresion"] for p in resolucion["operaciones"]], ["A + B", "A + B − C"])
+        self.assertEqual(resolucion["interpretacion"], "(A + B) − C")
+
+    def test_12_combinacion_con_escalares(self):
+        resolucion, _ = self.assert_resultado("2A - 3B + C", M([[4, 1], [10, -1]]))
+        self.assertEqual(resolucion["interpretacion"], "((2·A) − (3·B)) + C")
+        self.assertEqual([p["expresion"] for p in resolucion["operaciones"]], ["2A", "3B", "2A − 3B", "2A − 3B + C"])
+
+    def test_13_a_por_b_mas_c(self):
+        resolucion, verificacion = self.assert_resultado("A(B + C)", M([[2, -1], [6, -1]]))
+        self.assertEqual([p["expresion"] for p in resolucion["operaciones"]], ["B + C", "A(B + C)"])
+        self.assertEqual(verificacion["identidad"]["nombre"], "Distributividad por la izquierda")
+        self.assertEqual(verificacion["identidad"]["expresion"], "AB + AC")
+        self.assertTrue(verificacion["identidad"]["ok"])
+
+    def test_14_ab_mas_ac(self):
+        resolucion, verificacion = self.assert_resultado("AB + AC", M([[2, -1], [6, -1]]))
+        self.assertEqual(len(resolucion["operaciones"]), 3)
+        self.assertEqual(verificacion["identidad"]["expresion"], "A(B + C)")
+
+    def test_15_a_mas_b_por_c(self):
+        _, verificacion = self.assert_resultado("(A + B)C", M([[5, -9], [10, -18]]))
+        self.assertEqual(verificacion["identidad"]["expresion"], "AC + BC")
+
+    def test_16_a_por_b_menos_c(self):
+        _, verificacion = self.assert_resultado("A(B - C)", M([[-6, 11], [-14, 23]]))
+        self.assertEqual(verificacion["identidad"]["expresion"], "AB − AC")
+        self.assert_resultado("AB - AC", M([[-6, 11], [-14, 23]]))
+
+    # 17-20: transpuestas
+    def test_17_transpuesta_de_producto(self):
+        A, B = M([[1, 2, 0], [-1, 3, 1]]), M([[2, 1], [0, -1], [1, 4]])
+        izquierda, verificacion = self.assert_resultado("(AB)ᵀ", M([[2, -1], [-1, 0]]), {"A": A, "B": B})
+        derecha, _ = self.assert_resultado("BᵀAᵀ", M([[2, -1], [-1, 0]]), {"A": A, "B": B})
+        self.assertEqual(verificacion["identidad"]["expresion"], "BᵀAᵀ")
+        informe = programa.verificar_propiedad_matricial("transpuesta_producto", {"A": A, "B": B})
+        self.assertTrue(informe["cumple"])
+        # El error frecuente AᵀBᵀ se calcula aparte (aqui es 3×3, ni siquiera tiene el tamaño de (AB)ᵀ).
+        error_comun = informe["lados"][2]["resolucion"]
+        self.assertEqual(error_comun["dimension"], (3, 3))
+        self.assertFalse(informe["comparaciones"][1]["comparacion"]["coinciden"])
+        advertencias = " ".join(izquierda["operaciones"][-1]["advertencias"])
+        self.assertIn("se invierte el orden", advertencias)
+
+    def test_18_transpuesta_de_suma(self):
+        informe = programa.verificar_propiedad_matricial("transpuesta_suma", {"A": self.A, "B": self.B})
+        self.assertTrue(informe["cumple"])
+        self.assertEqual(informe["lados"][0]["resolucion"]["resultado"], M([[1, 2], [3, 6]]))
+
+    def test_19_transpuesta_de_multiplo_escalar(self):
+        A = M([[1, -2, 3], ["1/2", 0, 4]])
+        informe = programa.verificar_propiedad_matricial("transpuesta_escalar", {"A": A}, {"r": Fraction(-3, 2)})
+        self.assertTrue(informe["cumple"])
+        self.assertEqual(informe["lados"][0]["resolucion"]["resultado"], M([["-3/2", "-3/4"], [3, 0], ["-9/2", -6]]))
+
+    def test_20_doble_transpuesta(self):
+        A = M([[1, -2, 3], ["1/2", 0, 4]])
+        informe = programa.verificar_propiedad_matricial("transpuesta_doble", {"A": A})
+        self.assertTrue(informe["cumple"])
+        self.assertEqual(informe["lados"][0]["resolucion"]["resultado"], A)
+        self.assertEqual(informe["lados"][0]["resolucion"]["expresion"], "(Aᵀ)ᵀ")
+
+    # 21-23: propiedades del producto
+    def test_21_asociatividad_rectangular(self):
+        matrices = {"A": M([[1, 2, 0], [0, 1, -1]]), "B": M([[1, 0], [2, 1], [-1, 3]]), "C": M([[1, 2, 0, -1], [0, 1, 1, 2]])}
+        informe = programa.verificar_propiedad_matricial("asociatividad_producto", matrices)
+        self.assertTrue(informe["cumple"])
+        self.assertEqual(informe["lados"][0]["resolucion"]["dimension"], (2, 4))
+        self.assertEqual([lado["resolucion"]["expresion"] for lado in informe["lados"]], ["(AB)C", "A(BC)"])
+
+    def test_22_distributividad_izquierda_y_derecha(self):
+        izquierda = {"A": M([[1, 2], [0, -1], [3, 1]]), "B": M([[2, 0, 1], [1, -1, 2]]), "C": M([[0, 3, -1], ["1/2", 1, 0]])}
+        self.assertTrue(programa.verificar_propiedad_matricial("distributiva_izquierda", izquierda)["cumple"])
+        derecha = {"A": M([[1, 2, 0], [0, -1, 1]]), "B": M([[3, 0, 1], [1, 1, 1]]), "C": M([[1, 0], [2, 1], [0, -2]])}
+        self.assertTrue(programa.verificar_propiedad_matricial("distributiva_derecha", derecha)["cumple"])
+
+    def test_23_identidad(self):
+        A = M([[1, 2, 3], [4, 5, 6]])
+        derecha = programa.verificar_propiedad_matricial("identidad_derecha", {"A": A})
+        izquierda = programa.verificar_propiedad_matricial("identidad_izquierda", {"A": A})
+        self.assertTrue(derecha["cumple"] and izquierda["cumple"])
+        self.assertEqual(len(derecha["matrices_extra"]["I"]), 3)
+        self.assertEqual(len(izquierda["matrices_extra"]["I"]), 2)
+        self.assert_resultado("AI3", A, {"A": A})
+        self.assert_resultado("I2A", A, {"A": A})
+
+    # 24-26: advertencias
+    def test_24_producto_no_conmutativo(self):
+        informe = programa.verificar_propiedad_matricial("no_conmutatividad", {"A": self.A, "B": self.B})
+        self.assertFalse(informe["cumple"])
+        self.assertIn("contraejemplo", informe["conclusion"])
+        resolucion, _ = self.resolver("AB")
+        self.assertTrue(any("El orden importa" in a for a in resolucion["operaciones"][0]["advertencias"]))
+
+    def test_25_divisores_de_cero(self):
+        datos = programa.contraejemplos_matriciales()["divisores_cero"]
+        informe = programa.verificar_propiedad_matricial("divisores_cero", {"A": datos["A"], "B": datos["B"]})
+        self.assertFalse(informe["cumple"])
+        self.assertIn("divisores de cero", informe["conclusion"])
+
+    def test_26_cancelacion_no_valida(self):
+        datos = programa.contraejemplos_matriciales()["cancelacion"]
+        informe = programa.verificar_propiedad_matricial(
+            "cancelacion", {"A": datos["A"], "B": datos["B"], "C": datos["C"]})
+        self.assertFalse(informe["cumple"])
+        self.assertTrue(informe["comparaciones"][0]["comparacion"]["coinciden"])
+        self.assertFalse(informe["comparaciones"][1]["comparacion"]["coinciden"])
+
+    # 27-28: fracciones y parentesis anidados
+    def test_27_fracciones_ceros_y_negativos(self):
+        A, B = M([["1/2", -1], [0, "3/4"]]), M([["-1/3", 2], [0, "1/2"]])
+        resolucion, _ = self.assert_resultado("(1/2)A - B", M([["7/12", "-5/2"], [0, "-1/8"]]), {"A": A, "B": B})
+        self.assertEqual(resolucion["expresion"], "(1/2)A − B")
+        self.assert_resultado("AB", M([["-1/6", "1/2"], [0, "3/8"]]), {"A": A, "B": B})
+
+    def test_28_parentesis_anidados(self):
+        resolucion, verificacion = self.assert_resultado("((A + B)(B - C))ᵀ", M([[-8, -16], [16, 32]]))
+        self.assertEqual([p["expresion"] for p in resolucion["operaciones"]],
+                         ["A + B", "B − C", "(A + B)(B − C)", "((A + B)(B − C))ᵀ"])
+        self.assertEqual(verificacion["identidad"]["nombre"], "Transpuesta de un producto")
+        esperado = programa.multiplicar_matrices(programa.transponer_matriz(programa.restar_matrices(self.B, self.C)),
+                                                 programa.transponer_matriz(programa.sumar_matrices(self.A, self.B)))
+        self.assert_resultado("A((B - C)ᵀ + C)",
+                              programa.multiplicar_matrices(self.A, programa.sumar_matrices(
+                                  programa.transponer_matriz(programa.restar_matrices(self.B, self.C)), self.C)))
+        self.assertEqual(resolucion["resultado"], esperado)
+
+    # 29-30: deteccion de errores
+    def test_29_detecta_error_en_operacion_intermedia(self):
+        resolucion, _ = self.resolver("A(B + C)")
+        suma = resolucion["operaciones"][0]
+        suma["resultado"][0][0] += 1  # resultado intermedio incorrecto
+        verificacion = programa.verificar_resolucion(resolucion)
+        self.assertFalse(verificacion["correcto"])
+        self.assertFalse(verificacion["pasos"][0]["ok"])
+        self.assertEqual(verificacion["pasos"][0]["diferencias"], [(1, 1, Fraction(3), Fraction(2))])
+        self.assertIn("se obtuvo 3 y debía ser 2", programa.describir_diferencias(verificacion["pasos"][0]["diferencias"])[0])
+
+    def test_30_verificacion_independiente_del_resultado_final(self):
+        resolucion, _ = self.resolver("(A + B)C")
+        resolucion["resultado"] = M([[5, -9], [10, -17]])  # una entrada final alterada
+        verificacion = programa.verificar_resolucion(resolucion)
+        self.assertFalse(verificacion["global"]["ok"])
+        self.assertFalse(verificacion["identidad"]["ok"])
+        self.assertFalse(verificacion["correcto"])
+        self.assertEqual(verificacion["global"]["comparacion"]["diferencias"], [(2, 2, Fraction(-17), Fraction(-18))])
+
+
+class PruebasAnalizadorDeExpresiones(unittest.TestCase):
+    def test_precedencia_y_orden_de_factores(self):
+        texto = lambda e: programa.analizar_expresion_matricial(e).texto_completo()
+        self.assertEqual(texto("AB^T"), "A·Bᵀ")
+        self.assertEqual(texto("(AB)^T"), "(A·B)ᵀ")
+        self.assertEqual(texto("A + BC"), "A + (B·C)")
+        self.assertEqual(texto("AᵀBC"), "(Aᵀ·B)·C")
+        self.assertEqual(texto("-A + B"), "(−A) + B")
+        self.assertEqual(texto("A - (B - C)"), "A − (B − C)")
+
+    def test_conserva_parentesis_del_usuario(self):
+        self.assertEqual(programa.analizar_expresion_matricial("(A + B) + C").texto(), "(A + B) + C")
+        self.assertEqual(programa.analizar_expresion_matricial("A + B + C").texto(), "A + B + C")
+        self.assertEqual(programa.analizar_expresion_matricial("(A^T)^T").texto(), "(Aᵀ)ᵀ")
+
+    def test_errores_de_escritura_con_posicion(self):
+        casos = {"A(B + C": (1, "Falta cerrar"), "A +": (3, "incompleta"), "A^": (1, "^"),
+                 ")A": (0, "paréntesis"), "AB x": (3, "no es un símbolo válido"), "A*": (1, "Falta un factor")}
+        for expresion, (posicion, mensaje) in casos.items():
+            with self.assertRaises(programa.ErrorExpresion) as contexto:
+                programa.analizar_expresion_matricial(expresion)
+            self.assertEqual(contexto.exception.posicion, posicion, expresion)
+            self.assertIn(mensaje, str(contexto.exception), expresion)
+
+    def test_matriz_o_escalar_no_definidos(self):
+        with self.assertRaisesRegex(programa.ErrorExpresion, "La matriz D no está definida"):
+            programa.resolver_expresion_matricial("A + D", {"A": [[1]]})
+        with self.assertRaisesRegex(programa.ErrorExpresion, "transpuesta"):
+            programa.resolver_expresion_matricial("AT", {"A": [[1]]})
+        with self.assertRaisesRegex(programa.ErrorExpresion, "escalar r"):
+            programa.resolver_expresion_matricial("rA", {"A": [[1]]})
+
+    def test_dimensiones_revisadas_despues_de_cada_operacion(self):
+        dimensiones = {"A": (2, 3), "B": (2, 2), "C": (2, 1)}
+        nodo = programa.analizar_expresion_matricial("BA + C")
+        condiciones, final = programa.revisar_dimensiones(nodo, dimensiones)
+        self.assertEqual([c["cumple"] for c in condiciones], [True, False])
+        self.assertEqual(condiciones[0]["dimension"], (2, 3))
+        self.assertIn("2×3 ≠ 2×1", condiciones[1]["requisito"])
+        self.assertIsNone(final)
+
+    def test_advertencia_producto_elemento_a_elemento(self):
+        A, B = M([[1, 2], [3, 4]]), M([[0, 1], [-1, 2]])
+        resolucion = programa.resolver_expresion_matricial("AB", {"A": A, "B": B})
+        advertencias = " ".join(resolucion["operaciones"][0]["advertencias"])
+        self.assertIn("no entrada por entrada", advertencias)
+        self.assertIn("[0 2; -3 8]", advertencias)  # lo que daria multiplicar entrada por entrada
+
+    def test_escalares_con_nombre(self):
+        resolucion = programa.resolver_expresion_matricial("(r + s)A", {"A": M([[2, 4]])},
+                                                           {"r": Fraction(1, 2), "s": 2})
+        self.assertEqual(resolucion["resultado"], M([[5, 10]]))
+        self.assertEqual(resolucion["operaciones"][0]["tipo"], "aritmetica")
+        self.assertTrue(programa.verificar_resolucion(resolucion)["correcto"])
+
+    def test_texto_de_matriz_sin_barra_de_aumentada(self):
+        self.assertEqual(programa.matriz_a_texto(M([[1, 2], [3, 4]]), aumentada=False),
+                         "[    1     2 ]\n[    3     4 ]")
+        self.assertIn("|", programa.matriz_a_texto(M([[1, 2], [3, 4]])))
+
+    def test_todas_las_propiedades_generales_se_cumplen(self):
+        matrices = {"A": M([[1, "1/2"], [-3, 0]]), "B": M([[2, -1], [4, "3/5"]]), "C": M([[0, 1], [-2, 5]])}
+        for propiedad in programa.PROPIEDADES_MATRICIALES:
+            if propiedad["general"]:
+                informe = programa.verificar_propiedad_matricial(
+                    propiedad["clave"], matrices, {"r": Fraction(-2, 3), "s": 4})
+                self.assertTrue(informe["cumple"], propiedad["clave"])
+                self.assertIn("demostración general", informe["conclusion"])
+
+
+class PruebasRegresionModulos(unittest.TestCase):
+    """Comprueba que los demas modulos siguen funcionando junto al de matrices."""
+
+    def test_sistemas_gauss_jordan_y_verificacion(self):
+        A = M([[1, 1, 1], [2, -1, 1], [1, 2, -1]])
+        resultado = programa.resolver_sistema(A, [F(6), F(3), F(2)])
+        self.assertEqual(resultado["solucion"], [1, 2, 3])
+        self.assertEqual(resultado["pasos"][-1]["tipo"], "final")
+        self.assertTrue(resultado["verificacion"][0])
+
+    def test_eliminacion_de_gauss_forma_escalonada(self):
+        escalonada, pivotes, _ = programa.forma_escalonada(M([[2, 4, 0], [1, 3, 0]]), 2)
+        self.assertEqual(escalonada, M([[2, 4, 0], [0, 1, 0]]))
+        self.assertEqual(pivotes, [0, 1])
+
+    def test_variables_basicas_y_libres(self):
+        resultado = programa.resolver_sistema(M([[1, 2, 0, 1], [0, 1, 1, 2]]), [F(5), F(4)])
+        self.assertEqual(resultado["variables_basicas"], [0, 1])
+        self.assertEqual(resultado["variables_libres"], [2, 3])
+
+    def test_combinacion_lineal_y_ecuacion_vectorial(self):
+        A = M([[1, 0, 1], [0, 1, 1], [1, 1, 0]])
+        resultado = programa.resolver_sistema(A, [F(2), F(3), F(3)], programa.obtener_nombres_variables(3, "c"))
+        self.assertEqual(resultado["solucion"], [1, 2, 1])
+        self.assertEqual(programa.formatear_combinacion_lineal(resultado["solucion"], ["v1", "v2", "v3"]),
+                         "v1 + 2·v2 + v3")
+
+    def test_independencia_y_dependencia(self):
+        self.assertTrue(programa.analizar_independencia(M([[1, 0], [0, 1]]))["independiente"])
+        self.assertFalse(programa.analizar_independencia(M([[1, 2], [2, 4]]))["independiente"])
+
+    def test_producto_av(self):
+        datos = programa.analizar_producto_av(M([[1, 2, -1], [0, -5, 3]]), [F(4), F(3), F(7)], F(2))
+        self.assertEqual(datos["Av"], [3, 6])
+
+
 if __name__ == "__main__":
     unittest.main()
 

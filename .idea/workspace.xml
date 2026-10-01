@@ -7,7 +7,7 @@
     <option name="selectedModelId" value="auto" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="b063673a-242a-44d1-834c-a3b57751a65a" name="Changes" comment="&quot;feat: tarea 4&quot;">
+    <list default="true" id="b063673a-242a-44d1-834c-a3b57751a65a" name="Changes" comment="cambios v2">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Programa 1_Grupo3.py" beforeDir="false" afterPath="$PROJECT_DIR$/Programa 1_Grupo3.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
@@ -162,7 +162,9 @@
     <MESSAGE value="&quot;feat: Se anadio propiedades del producto matriz ax&quot;" />
     <MESSAGE value="&quot;feat: cambios en interfaz y funcionamiento&quot;" />
     <MESSAGE value="&quot;feat: tarea 4&quot;" />
-    <option name="LAST_COMMIT_MESSAGE" value="&quot;feat: tarea 4&quot;" />
+    <MESSAGE value="&quot;feat: v y u en propiedades ax&quot;" />
+    <MESSAGE value="cambios v2" />
+    <option name="LAST_COMMIT_MESSAGE" value="cambios v2" />
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />
