@@ -122,8 +122,11 @@ def sumar_multiplo_fila(matriz, destino, origen, factor):
     ]
 
 
-def matriz_a_texto(matriz):
-    """Convierte una matriz aumentada en texto alineado (se usa al copiar resultados)."""
+def matriz_a_texto(matriz, aumentada=True):
+    """
+    Convierte una matriz en texto alineado (se usa al copiar resultados).
+    Con aumentada=True separa la ultima columna con '|' como en [A | b].
+    """
     if not matriz or not matriz[0]:
         return ""
     num_cols = len(matriz[0])
@@ -134,6 +137,9 @@ def matriz_a_texto(matriz):
     anchos = [max(w, 4) for w in anchos]
     lineas = []
     for fila in matriz:
+        if not aumentada or num_cols == 1:
+            lineas.append("[ " + "  ".join(f"{formatear_numero(fila[c]):>{anchos[c]}}" for c in range(num_cols)) + " ]")
+            continue
         coeficientes = "  ".join(f"{formatear_numero(fila[c]):>{anchos[c]}}" for c in range(num_cols - 1))
         independiente = f"{formatear_numero(fila[-1]):>{anchos[-1]}}"
         lineas.append(f"[ {coeficientes} | {independiente} ]")
@@ -975,17 +981,1285 @@ def contraejemplos_matriciales():
 
 
 def ejercicios_matrices():
-    """Banco breve y variado de ejercicios; cada uno explicita qué debe justificarse."""
+    """
+    Banco breve y variado de ejercicios; cada uno explicita qué debe justificarse.
+    Las claves opcionales 'expresion', 'propiedad' y 'contraejemplo' indican cómo
+    resolverlo en la calculadora.
+    """
     return [
         {"tema": "Suma con fracciones", "A": [["1/2", "-1"], ["3", "0"]], "B": [["1/3", "2"], ["-3", "5/2"]],
-         "consigna": "Calcule A+B entrada por entrada y justifique la compatibilidad de dimensiones."},
+         "consigna": "Calcule A+B entrada por entrada y justifique la compatibilidad de dimensiones.",
+         "expresion": "A + B"},
         {"tema": "Producto rectangular", "A": [[1, 2, -1], [0, 3, 4]], "B": [[2, 1], [-1, 0], [3, 2]],
-         "consigna": "Calcule AB fila por columna e indique la dimensión del resultado."},
+         "consigna": "Calcule AB fila por columna e indique la dimensión del resultado.",
+         "expresion": "AB"},
         {"tema": "Transpuesta", "A": [[1, -2, 3], ["1/2", 0, 4]],
-         "consigna": "Calcule Aᵀ y verifique (Aᵀ)ᵀ=A para este caso particular."},
-        {"tema": "Propiedad y contraejemplo", "consigna": "Decida si AB=BA vale siempre. Dé un contraejemplo y compruebe ambos productos."},
-        {"tema": "Cancelación", "consigna": "Explique por qué AB=AC no implica B=C sin que A sea invertible."},
+         "consigna": "Calcule Aᵀ y verifique (Aᵀ)ᵀ=A para este caso particular.",
+         "propiedad": "transpuesta_doble"},
+        {"tema": "Propiedad y contraejemplo", "consigna": "Decida si AB=BA vale siempre. Dé un contraejemplo y compruebe ambos productos.",
+         "contraejemplo": "no_conmutatividad"},
+        {"tema": "Cancelación", "consigna": "Explique por qué AB=AC no implica B=C sin que A sea invertible.",
+         "contraejemplo": "cancelacion"},
+        {"tema": "Distributividad con tres matrices", "A": [[1, 2], [0, -1], [3, 1]],
+         "B": [[2, 0, 1], [1, -1, 2]], "C": [[0, 3, -1], ["1/2", 1, 0]],
+         "consigna": "Calcule A(B + C) paso a paso y compruébelo calculando AB + AC por separado.",
+         "expresion": "A(B + C)"},
+        {"tema": "Transpuesta de un producto", "A": [[1, 2, 0], [-1, 3, 1]], "B": [[2, 1], [0, -1], [1, 4]],
+         "consigna": "Calcule (AB)ᵀ y compare con BᵀAᵀ; explique por qué se invierte el orden.",
+         "expresion": "(AB)ᵀ"},
+        {"tema": "Combinación con escalares", "A": [[1, -1], [2, 0]], "B": [["1/2", 2], [-1, 3]],
+         "C": [[4, 0], [-2, 1]],
+         "consigna": "Calcule 2A − 3B + C indicando el orden de las operaciones.",
+         "expresion": "2A − 3B + C"},
     ]
+
+
+# -----------------------------------------------------------------------------
+# Expresiones con matrices: analizador, procedimiento y verificacion
+# -----------------------------------------------------------------------------
+# Una expresion como 2A − 3B + C o A(B + C)ᵀ se convierte en un arbol que respeta
+# los parentesis y la precedencia (transpuesta > producto > suma/resta). Luego se
+# evalua de abajo hacia arriba registrando cada operacion intermedia, y por ultimo
+# se verifica con calculos independientes.
+
+_TABLA_SUBINDICES = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
+
+
+def subindice(i, j):
+    """Subindice de una entrada: subindice(1, 2) -> '₁₂'; con dos cifras usa coma: '₁,₁₀'."""
+    texto = f"{i}{j}" if i < 10 and j < 10 else f"{i},{j}"
+    return texto.translate(_TABLA_SUBINDICES)
+
+
+def formatear_dimension(dimension):
+    return f"{dimension[0]}×{dimension[1]}"
+
+
+def matriz_en_linea(matriz):
+    """[[1, 2], [3, 4]] -> '[1 2; 3 4]'."""
+    return "[" + "; ".join(" ".join(formatear_numero(v) for v in fila) for fila in matriz) + "]"
+
+
+def _entre_parentesis(valor):
+    return f"({formatear_numero(valor)})"
+
+
+def _suma_en_texto(valores):
+    """[2, -2, 3] -> '2 - 2 + 3'."""
+    partes = []
+    for valor in valores:
+        if not partes:
+            partes.append(formatear_numero(valor))
+        else:
+            partes.append(f"- {formatear_numero(-valor)}" if valor < 0 else f"+ {formatear_numero(valor)}")
+    return " ".join(partes) if partes else "0"
+
+
+class ErrorExpresion(ValueError):
+    """Error de escritura o de dimensiones en una expresion matricial (posicion = indice del caracter)."""
+
+    def __init__(self, mensaje, posicion=None):
+        super().__init__(mensaje)
+        self.posicion = posicion
+
+
+def tokenizar_expresion(texto):
+    """
+    Divide la expresion en simbolos: numeros (2, 0.5, 3/2), matrices (A, B, C, ...),
+    identidades (I2, I3, ...), escalares (r, s), operadores (+ - *), parentesis y
+    transpuesta (ᵀ, ^T o ').
+    """
+    texto = texto.replace("−", "-").replace("×", "*").replace("·", "*")
+    tokens = []
+    i, n = 0, len(texto)
+    while i < n:
+        caracter = texto[i]
+        if caracter.isspace():
+            i += 1
+        elif caracter.isdigit() or (caracter == "." and i + 1 < n and texto[i + 1].isdigit()):
+            j = i
+            while j < n and (texto[j].isdigit() or texto[j] == "."):
+                j += 1
+            if j + 1 < n and texto[j] == "/" and texto[j + 1].isdigit():
+                j += 1
+                while j < n and texto[j].isdigit():
+                    j += 1
+            lexema = texto[i:j]
+            try:
+                valor = Fraction(lexema)
+            except (ValueError, ZeroDivisionError):
+                raise ErrorExpresion(f"«{lexema}» no es un número válido.", i) from None
+            tokens.append(("numero", valor, i, lexema))
+            i = j
+        elif caracter in ("ᵀ", "'"):  # antes que isalpha(): «ᵀ» cuenta como letra en Python
+            tokens.append(("T", "T", i, caracter))
+            i += 1
+        elif caracter == "I" and i + 1 < n and texto[i + 1].isdigit():
+            j = i + 1
+            while j < n and texto[j].isdigit():
+                j += 1
+            tokens.append(("identidad", int(texto[i + 1:j]), i, texto[i:j]))
+            i = j
+        elif caracter.isalpha() and caracter.isupper():
+            tokens.append(("matriz", caracter, i, caracter))
+            i += 1
+        elif caracter in ("r", "s"):
+            tokens.append(("escalar", caracter, i, caracter))
+            i += 1
+        elif caracter.isalpha():
+            raise ErrorExpresion(f"«{caracter}» no es un símbolo válido: las matrices van en mayúscula "
+                                 f"(A, B, C) y los escalares son números, r o s.", i)
+        elif caracter in "+-*()":
+            tokens.append((caracter, caracter, i, caracter))
+            i += 1
+        elif caracter == "^":
+            j = i + 1
+            while j < n and texto[j].isspace():
+                j += 1
+            if j < n and texto[j] in "Tt":
+                tokens.append(("T", "T", i, texto[i:j + 1]))
+                i = j + 1
+            else:
+                raise ErrorExpresion("Después de ^ solo se admite T (transpuesta), por ejemplo A^T.", i)
+        else:
+            raise ErrorExpresion(f"El carácter «{caracter}» no está permitido.", i)
+    return tokens
+
+
+class NodoExpresion:
+    """Nodo del arbol de una expresion matricial."""
+
+    PRECEDENCIA = {"suma": 1, "resta": 1, "producto": 2, "negativo": 3, "transpuesta": 4,
+                   "matriz": 5, "identidad": 5, "numero": 5, "escalar": 5}
+
+    def __init__(self, tipo, hijos=(), valor=None, posicion=None, parentesis=False):
+        self.tipo = tipo
+        self.hijos = list(hijos)
+        self.valor = valor
+        self.posicion = posicion
+        # True si el usuario agrupo esta subexpresion con parentesis: se conservan al mostrarla
+        # aunque no hagan falta por precedencia, como en (A + B) + C o (AB)C.
+        self.parentesis = parentesis
+
+    @property
+    def precedencia(self):
+        return self.PRECEDENCIA[self.tipo]
+
+    @property
+    def es_hoja(self):
+        return not self.hijos
+
+    def _operando(self, hijo, minimo, derecha=False, en_producto=False):
+        texto = hijo.texto()
+        if (hijo.precedencia < minimo or (derecha and hijo.tipo == "negativo")
+                or (hijo.parentesis and not hijo.es_hoja)):
+            return f"({texto})"
+        if en_producto and hijo.tipo == "numero" and (hijo.valor.denominator != 1 or hijo.valor < 0):
+            return f"({texto})"
+        return texto
+
+    def texto(self):
+        """Notacion habitual con los parentesis minimos: 2A − 3B + C, A(B + C), (AB)ᵀ."""
+        tipo = self.tipo
+        if tipo in ("matriz", "escalar"):
+            return self.valor
+        if tipo == "identidad":
+            return "I" + str(self.valor).translate(_TABLA_SUBINDICES)
+        if tipo == "numero":
+            return formatear_numero(self.valor)
+        if tipo == "transpuesta":
+            return self._operando(self.hijos[0], 5) + "ᵀ"
+        if tipo == "negativo":
+            return "−" + self._operando(self.hijos[0], 3)
+        if tipo in ("suma", "resta"):
+            signo = " + " if tipo == "suma" else " − "
+            return self._operando(self.hijos[0], 1) + signo + self._operando(self.hijos[1], 2, derecha=True)
+        izquierda = self._operando(self.hijos[0], 2, en_producto=True)
+        derecha = self._operando(self.hijos[1], 3, derecha=True, en_producto=True)
+        separador = "·" if derecha[0].isdigit() else ""
+        return izquierda + separador + derecha
+
+    def texto_completo(self, externo=True):
+        """Cada operacion entre parentesis y con · explicito: muestra el orden real de calculo."""
+        tipo = self.tipo
+        if self.es_hoja:
+            if tipo == "numero" and not externo and (self.valor.denominator != 1 or self.valor < 0):
+                return f"({self.texto()})"
+            return self.texto()
+        if tipo == "transpuesta":
+            hijo = self.hijos[0]
+            return (hijo.texto() if hijo.es_hoja else f"({hijo.texto_completo()})") + "ᵀ"
+        if tipo == "negativo":
+            texto = "−" + self.hijos[0].texto_completo(False)
+        else:
+            signo = {"suma": " + ", "resta": " − ", "producto": "·"}[tipo]
+            texto = self.hijos[0].texto_completo(False) + signo + self.hijos[1].texto_completo(False)
+        return texto if externo else f"({texto})"
+
+    def nombres_matrices(self):
+        if self.tipo == "matriz":
+            return {self.valor}
+        nombres = set()
+        for hijo in self.hijos:
+            nombres |= hijo.nombres_matrices()
+        return nombres
+
+    def nombres_escalares(self):
+        if self.tipo == "escalar":
+            return {self.valor}
+        nombres = set()
+        for hijo in self.hijos:
+            nombres |= hijo.nombres_escalares()
+        return nombres
+
+    def es_matricial(self):
+        """True si el valor de la expresion es una matriz (y no un numero)."""
+        if self.tipo in ("matriz", "identidad"):
+            return True
+        if self.tipo in ("numero", "escalar"):
+            return False
+        return any(hijo.es_matricial() for hijo in self.hijos)
+
+
+class _AnalizadorExpresion:
+    """
+    Gramatica (de menor a mayor precedencia):
+        expresion := termino (('+' | '-') termino)*
+        termino   := factor (['*'] factor)*        # AB, 2A, A(B+C): producto por yuxtaposicion
+        factor    := '-' factor | postfijo
+        postfijo  := primario ('ᵀ')*
+        primario  := numero | matriz | identidad | escalar | '(' expresion ')'
+    """
+
+    INICIO_DE_FACTOR = ("numero", "matriz", "identidad", "escalar", "(", "-")
+
+    def __init__(self, tokens, longitud):
+        self.tokens = tokens
+        self.longitud = longitud
+        self.indice = 0
+
+    def actual(self):
+        return self.tokens[self.indice] if self.indice < len(self.tokens) else None
+
+    def ver(self):
+        token = self.actual()
+        return token[0] if token else None
+
+    def tomar(self):
+        token = self.actual()
+        self.indice += 1
+        return token
+
+    def expresion(self):
+        nodo = self.termino()
+        while self.ver() in ("+", "-"):
+            token = self.tomar()
+            nodo = NodoExpresion("suma" if token[0] == "+" else "resta", [nodo, self.termino()], posicion=token[2])
+        return nodo
+
+    def termino(self):
+        nodo = self.factor()
+        while True:
+            tipo = self.ver()
+            if tipo == "*":
+                token = self.tomar()
+                if self.ver() not in self.INICIO_DE_FACTOR:
+                    raise ErrorExpresion("Falta un factor después del signo de multiplicación.", token[2])
+            elif tipo not in ("numero", "matriz", "identidad", "escalar", "("):
+                return nodo
+            nodo = NodoExpresion("producto", [nodo, self.factor()])
+
+    def factor(self):
+        if self.ver() == "-":
+            token = self.tomar()
+            return NodoExpresion("negativo", [self.factor()], posicion=token[2])
+        return self.postfijo()
+
+    def postfijo(self):
+        nodo = self.primario()
+        while self.ver() == "T":
+            token = self.tomar()
+            nodo = NodoExpresion("transpuesta", [nodo], posicion=token[2])
+        return nodo
+
+    def primario(self):
+        token = self.actual()
+        if token is None:
+            raise ErrorExpresion("La expresión está incompleta: falta un operando al final.", self.longitud)
+        tipo, valor, posicion, lexema = token
+        if tipo == "(":
+            self.tomar()
+            if self.ver() == ")":
+                raise ErrorExpresion("Hay un par de paréntesis vacío «()».", posicion)
+            nodo = self.expresion()
+            if self.ver() != ")":
+                raise ErrorExpresion("Falta cerrar un paréntesis «)».", posicion)
+            self.tomar()
+            nodo.parentesis = True
+            return nodo
+        if tipo in ("numero", "matriz", "identidad", "escalar"):
+            self.tomar()
+            return NodoExpresion(tipo, valor=valor, posicion=posicion)
+        if tipo == ")":
+            raise ErrorExpresion("Hay un paréntesis «)» sin una expresión antes.", posicion)
+        if tipo == "T":
+            raise ErrorExpresion("La transpuesta ᵀ debe ir justo después de una matriz o de un paréntesis.", posicion)
+        raise ErrorExpresion(f"Falta un operando antes de «{lexema}».", posicion)
+
+
+def analizar_expresion_matricial(texto):
+    """Convierte el texto en un arbol NodoExpresion o lanza ErrorExpresion con la posicion del problema."""
+    if not texto or not texto.strip():
+        raise ErrorExpresion("Escribe una expresión, por ejemplo A(B + C).", 0)
+    tokens = tokenizar_expresion(texto)
+    analizador = _AnalizadorExpresion(tokens, len(texto))
+    nodo = analizador.expresion()
+    sobrante = analizador.actual()
+    if sobrante is not None:
+        if sobrante[0] == ")":
+            raise ErrorExpresion("Hay un paréntesis de cierre «)» que no tiene apertura.", sobrante[2])
+        raise ErrorExpresion(f"No se esperaba «{sobrante[3]}» en esta posición.", sobrante[2])
+    return nodo
+
+
+def _letra(nodo, defecto):
+    """Letra para las entradas de un operando: a para A, b para B; x o y si es una subexpresion."""
+    if nodo.tipo == "matriz":
+        return nodo.valor.lower()
+    if nodo.tipo == "identidad":
+        return "δ"
+    return defecto
+
+
+def _nombre_operando(nodo):
+    return nodo.texto() if nodo.es_hoja or nodo.tipo == "transpuesta" else f"({nodo.texto()})"
+
+
+def _argumento(nodo):
+    """Texto para usar como argumento: dim(A), columnas(B + C)."""
+    return f"({nodo.texto()})"
+
+
+def _buscar_posicion(nodo, tipo, valor):
+    if nodo.tipo == tipo and nodo.valor == valor:
+        return nodo.posicion
+    for hijo in nodo.hijos:
+        posicion = _buscar_posicion(hijo, tipo, valor)
+        if posicion is not None:
+            return posicion
+    return None
+
+
+def revisar_dimensiones(nodo, dimensiones, escalares=("r", "s")):
+    """
+    Recorre la expresion con solo las dimensiones (sin calcular) y devuelve
+    (condiciones, dimension_final). Cada condicion indica la operacion, el requisito
+    y si se cumple; el recorrido se detiene en la primera operacion no definida.
+    """
+    condiciones = []
+
+    def recorrer(n):
+        if n.tipo == "matriz":
+            if n.valor not in dimensiones:
+                raise ErrorExpresion(f"La matriz {n.valor} no está definida." + (
+                    " Para la transpuesta escribe Aᵀ, A^T o A'." if n.valor == "T" else
+                    " Para la identidad escribe I2, I3, …" if n.valor == "I" else ""), n.posicion)
+            return dimensiones[n.valor]
+        if n.tipo == "identidad":
+            if not 1 <= n.valor <= LIMITE_DIMENSION:
+                raise ErrorExpresion(f"La identidad debe tener orden entre 1 y {LIMITE_DIMENSION}.", n.posicion)
+            return (n.valor, n.valor)
+        if n.tipo == "numero":
+            return None
+        if n.tipo == "escalar":
+            if n.valor not in escalares:
+                raise ErrorExpresion(f"Falta el valor del escalar {n.valor}.", n.posicion)
+            return None
+        dims = [recorrer(h) for h in n.hijos]
+        texto = n.texto()
+        if n.tipo == "transpuesta":
+            if dims[0] is None:
+                return None
+            m, k = dims[0]
+            condiciones.append({"operacion": texto, "requisito": f"siempre definida: {formatear_dimension((m, k))} → "
+                                f"{formatear_dimension((k, m))}", "cumple": True, "dimension": (k, m)})
+            return (k, m)
+        if n.tipo == "negativo":
+            if dims[0] is not None:
+                condiciones.append({"operacion": texto, "requisito": "multiplicar por −1 conserva el tamaño",
+                                    "cumple": True, "dimension": dims[0]})
+            return dims[0]
+        izquierda, derecha = dims
+        nombres = [_argumento(h) for h in n.hijos]
+        if n.tipo in ("suma", "resta"):
+            if izquierda is None and derecha is None:
+                return None
+            if izquierda is None or derecha is None:
+                condiciones.append({"operacion": texto, "requisito": "no se puede sumar o restar un número y una matriz",
+                                    "cumple": False, "dimension": None})
+                raise _DimensionNoDefinida()
+            cumple = izquierda == derecha
+            condiciones.append({
+                "operacion": texto,
+                "requisito": f"dim{nombres[0]} = dim{nombres[1]}: {formatear_dimension(izquierda)} "
+                             f"{'=' if cumple else '≠'} {formatear_dimension(derecha)}",
+                "cumple": cumple, "dimension": izquierda if cumple else None})
+            if not cumple:
+                raise _DimensionNoDefinida()
+            return izquierda
+        # producto
+        if izquierda is None or derecha is None:
+            matriz = izquierda or derecha
+            if matriz is not None:
+                condiciones.append({"operacion": texto, "requisito": "escalar por matriz: conserva el tamaño "
+                                    f"{formatear_dimension(matriz)}", "cumple": True, "dimension": matriz})
+            return matriz
+        cumple = izquierda[1] == derecha[0]
+        condiciones.append({
+            "operacion": texto,
+            "requisito": f"columnas{nombres[0]} = filas{nombres[1]}: {izquierda[1]} {'=' if cumple else '≠'} "
+                         f"{derecha[0]}",
+            "cumple": cumple, "dimension": (izquierda[0], derecha[1]) if cumple else None})
+        if not cumple:
+            raise _DimensionNoDefinida()
+        return (izquierda[0], derecha[1])
+
+    try:
+        final = recorrer(nodo)
+    except _DimensionNoDefinida:
+        final = None
+    return condiciones, final
+
+
+class _DimensionNoDefinida(Exception):
+    pass
+
+
+class _OperacionNoDefinida(Exception):
+    def __init__(self, mensaje):
+        super().__init__(mensaje)
+
+
+TIPOS_OPERACION_MATRICIAL = {
+    "suma": "Suma", "resta": "Resta", "producto": "Producto", "escalar": "Escalar por matriz",
+    "transpuesta": "Transposición", "aritmetica": "Operación con números",
+    "datos": "Datos", "respuesta": "Respuesta",
+}
+
+REGLAS_OPERACION = {
+    "suma": "Definición de la suma: se suman las entradas de la misma posición",
+    "resta": "Definición de la resta: se restan las entradas de la misma posición",
+    "producto": "Producto matricial: cada entrada es una fila de la izquierda por una columna de la derecha",
+    "escalar": "Multiplicación por escalar: el escalar multiplica cada entrada",
+    "transpuesta": "Transpuesta: las filas pasan a ser columnas",
+    "aritmetica": "Aritmética de números reales",
+}
+
+
+class _ResolutorMatricial:
+    """Evalua el arbol de abajo hacia arriba y registra cada operacion intermedia."""
+
+    def __init__(self, matrices, escalares):
+        self.matrices = matrices
+        self.escalares = escalares
+        self.pasos = []
+
+    def valor(self, nodo):
+        tipo = nodo.tipo
+        if tipo == "matriz":
+            return ("matriz", self.matrices[nodo.valor])
+        if tipo == "identidad":
+            return ("matriz", matriz_identidad(nodo.valor))
+        if tipo == "numero":
+            return ("numero", nodo.valor)
+        if tipo == "escalar":
+            return ("numero", self.escalares[nodo.valor])
+        operandos = [self.valor(hijo) for hijo in nodo.hijos]
+        return getattr(self, "_" + tipo)(nodo, *operandos)
+
+    def _registrar(self, nodo, tipo, operandos, condicion, cumple, regla, descripcion, entradas=(),
+                   resultado=None, advertencias=(), extra=()):
+        paso = {
+            "tipo": tipo,
+            "titulo": f"Calcular {nodo.texto()}",
+            "expresion": nodo.texto(),
+            "operandos": [(_nombre_operando(h), v) for h, v in operandos],
+            "condicion": {"texto": condicion, "cumple": cumple},
+            "regla": regla,
+            "descripcion": descripcion,
+            "entradas": list(entradas),
+            "resultado": resultado,
+            "dimension": (len(resultado), len(resultado[0])) if isinstance(resultado, list) else None,
+            "advertencias": list(advertencias),
+            "extra": list(extra),
+        }
+        self.pasos.append(paso)
+        return paso
+
+    def _fallar(self, nodo, tipo, operandos, condicion, mensaje):
+        self._registrar(nodo, tipo, operandos, condicion, False, REGLAS_OPERACION.get(tipo, ""), mensaje)
+        raise _OperacionNoDefinida(mensaje)
+
+    def _aritmetica(self, nodo, operandos, valor, simbolo):
+        a, b = (operandos + [None])[:2]
+        texto = (f"{_entre_parentesis(a[1])} {simbolo} {_entre_parentesis(b[1])} = {formatear_numero(valor)}"
+                 if b is not None else f"−{_entre_parentesis(a[1])} = {formatear_numero(valor)}")
+        paso = self._registrar(nodo, "aritmetica", list(zip(nodo.hijos, [o[1] for o in operandos])),
+                               "Operación entre números: siempre definida.", True, REGLAS_OPERACION["aritmetica"],
+                               "Se opera con los escalares antes de usarlos con matrices.", [{"lineas": [texto]}], valor)
+        paso["simbolo"] = simbolo if b is not None else "negativo"
+        return ("numero", valor)
+
+    def _suma(self, nodo, a, b, resta=False):
+        signo = "−" if resta else "+"
+        tipo = "resta" if resta else "suma"
+        izquierda, derecha = nodo.hijos
+        if a[0] == "numero" and b[0] == "numero":
+            return self._aritmetica(nodo, [a, b], a[1] - b[1] if resta else a[1] + b[1], signo)
+        operandos = list(zip(nodo.hijos, [a[1], b[1]]))
+        nx, ny = _nombre_operando(izquierda), _nombre_operando(derecha)
+        if a[0] != b[0]:
+            self._fallar(nodo, tipo, operandos, "Uno de los operandos es un número y el otro una matriz.",
+                         f"No se puede calcular {nodo.texto()}: no está definido {'restar' if resta else 'sumar'} "
+                         f"un número y una matriz.")
+        X, Y = a[1], b[1]
+        dx, dy = (len(X), len(X[0])), (len(Y), len(Y[0]))
+        condicion = (f"dim{_argumento(izquierda)} = {formatear_dimension(dx)} y dim{_argumento(derecha)} = "
+                     f"{formatear_dimension(dy)}: "
+                     + ("tienen el mismo tamaño ✓" if dx == dy else "tamaños distintos ✗"))
+        if dx != dy:
+            self._fallar(nodo, tipo, operandos, condicion,
+                         f"No se puede calcular {nodo.texto()}: {nx} es {formatear_dimension(dx)} y {ny} es "
+                         f"{formatear_dimension(dy)}. La {'resta' if resta else 'suma'} solo está definida para "
+                         f"matrices del mismo tamaño.")
+        x, y = _letra(izquierda, "x"), _letra(derecha, "y")
+        R = [[X[i][j] - Y[i][j] if resta else X[i][j] + Y[i][j] for j in range(dx[1])] for i in range(dx[0])]
+        entradas = []
+        for i in range(dx[0]):
+            for j in range(dx[1]):
+                sub = subindice(i + 1, j + 1)
+                entradas.append({"posicion": (i + 1, j + 1), "lineas": [
+                    f"Entrada ({i + 1},{j + 1}):  {x}{sub} {signo} {y}{sub} = {_entre_parentesis(X[i][j])} {signo} "
+                    f"{_entre_parentesis(Y[i][j])} = {formatear_numero(R[i][j])}"]})
+        nombres = "" if (izquierda.es_hoja and derecha.es_hoja) else f"   (X = {izquierda.texto()}, Y = {derecha.texto()})"
+        regla = f"({'X' if x == 'x' else x.upper()} {signo} {'Y' if y == 'y' else y.upper()})ᵢⱼ = {x}ᵢⱼ {signo} {y}ᵢⱼ{nombres}"
+        descripcion = (f"Se {'restan' if resta else 'suman'} las entradas que ocupan la misma posición en {nx} y {ny}; "
+                       f"el resultado conserva el tamaño {formatear_dimension(dx)}.")
+        self._registrar(nodo, tipo, operandos, condicion, True, regla, descripcion, entradas, R)
+        return ("matriz", R)
+
+    def _resta(self, nodo, a, b):
+        return self._suma(nodo, a, b, resta=True)
+
+    def _escalar_por_matriz(self, nodo, escalar, matriz, operandos, nombre_matriz, letra, titulo=None):
+        r = escalar
+        R = [[r * v for v in fila] for fila in matriz]
+        entradas = []
+        for i, fila in enumerate(matriz):
+            for j, v in enumerate(fila):
+                entradas.append({"posicion": (i + 1, j + 1), "lineas": [
+                    f"Entrada ({i + 1},{j + 1}):  {_entre_parentesis(r)}·{letra}{subindice(i + 1, j + 1)} = "
+                    f"{_entre_parentesis(r)}·{_entre_parentesis(v)} = {formatear_numero(R[i][j])}"]})
+        dimension = formatear_dimension((len(matriz), len(matriz[0])))
+        paso = self._registrar(
+            nodo, "escalar", operandos,
+            f"Un escalar puede multiplicar cualquier matriz: {nombre_matriz} es {dimension} y el resultado también ✓",
+            True, f"(r·X)ᵢⱼ = r·xᵢⱼ   con r = {formatear_numero(r)}",
+            f"Se multiplica cada entrada de {nombre_matriz} por {formatear_numero(r)}; el tamaño no cambia.",
+            entradas, R)
+        paso["escalar"] = r
+        if titulo:
+            paso["titulo"] = titulo
+        return ("matriz", R)
+
+    def _producto(self, nodo, a, b):
+        izquierda, derecha = nodo.hijos
+        if a[0] == "numero" and b[0] == "numero":
+            return self._aritmetica(nodo, [a, b], a[1] * b[1], "·")
+        operandos = list(zip(nodo.hijos, [a[1], b[1]]))
+        if a[0] == "numero":
+            return self._escalar_por_matriz(nodo, a[1], b[1], operandos, _nombre_operando(derecha), _letra(derecha, "x"))
+        if b[0] == "numero":
+            return self._escalar_por_matriz(nodo, b[1], a[1], operandos, _nombre_operando(izquierda), _letra(izquierda, "x"))
+
+        X, Y = a[1], b[1]
+        m, n, p, q = len(X), len(X[0]), len(Y), len(Y[0])
+        nx, ny = _nombre_operando(izquierda), _nombre_operando(derecha)
+        condicion = (f"{nx} es {m}×{n} y {ny} es {p}×{q}: columnas{_argumento(izquierda)} = {n} "
+                     + (f"= filas{_argumento(derecha)} = {p} ✓  →  el resultado será {m}×{q}" if n == p
+                        else f"≠ filas{_argumento(derecha)} = {p} ✗"))
+        if n != p:
+            self._fallar(nodo, "producto", operandos, condicion,
+                         f"No se puede calcular {nodo.texto()}: {nx} es {m}×{n} y {ny} es {p}×{q}. El producto exige "
+                         f"que el número de columnas de {nx} ({n}) sea igual al número de filas de {ny} ({p}).")
+        x, y = _letra(izquierda, "x"), _letra(derecha, "y")
+        R = [[sum(X[i][k] * Y[k][j] for k in range(n)) for j in range(q)] for i in range(m)]
+        entradas = []
+        for i in range(m):
+            for j in range(q):
+                sub = subindice(i + 1, j + 1)
+                simbolico = " + ".join(f"{x}{subindice(i + 1, k + 1)}·{y}{subindice(k + 1, j + 1)}" for k in range(n))
+                sustitucion = " + ".join(f"{_entre_parentesis(X[i][k])}{_entre_parentesis(Y[k][j])}" for k in range(n))
+                productos = [X[i][k] * Y[k][j] for k in range(n)]
+                lineas = [f"Entrada ({i + 1},{j + 1}): fila {i + 1} de {nx} por columna {j + 1} de {ny}",
+                          f"   c{sub} = {simbolico}",
+                          f"        = {sustitucion}"]
+                if n > 1:
+                    lineas.append(f"        = {_suma_en_texto(productos)}")
+                lineas.append(f"        = {formatear_numero(R[i][j])}")
+                entradas.append({"posicion": (i + 1, j + 1), "lineas": lineas})
+
+        advertencias = ["Es un producto fila por columna, no entrada por entrada: cada entrada combina una fila "
+                        f"completa de {nx} con una columna completa de {ny}."]
+        if (m, n) == (p, q):
+            elemento = [[X[i][j] * Y[i][j] for j in range(n)] for i in range(m)]
+            if elemento != R:
+                advertencias.append(f"Multiplicar solo las entradas de la misma posición daría {matriz_en_linea(elemento)}, "
+                                    f"que no es {nodo.texto()}.")
+        if q == m:
+            invertido = multiplicar_matrices(Y, X)
+            orden = f"{ny}{nx}" if izquierda.es_hoja and derecha.es_hoja else f"{ny}·{nx}"
+            if invertido != R:
+                advertencias.append(f"El orden importa: {orden} también está definido y da {matriz_en_linea(invertido)}, "
+                                    f"distinto de {nodo.texto()}.")
+            else:
+                advertencias.append(f"En este caso {orden} da el mismo resultado, pero en general el producto de "
+                                    f"matrices no es conmutativo.")
+        else:
+            advertencias.append(f"El orden importa: {ny}·{nx} ni siquiera está definido "
+                                f"(columnas{_argumento(derecha)} = {q} ≠ filas{_argumento(izquierda)} = {m}).")
+        nombres = "" if (izquierda.es_hoja and derecha.es_hoja) else f"   (X = {izquierda.texto()}, Y = {derecha.texto()})"
+        self._registrar(
+            nodo, "producto", operandos, condicion, True,
+            f"cᵢⱼ = Σₖ {x}ᵢₖ·{y}ₖⱼ,  k = 1, …, {n}{nombres}",
+            f"Cada entrada (i, j) es la fila i de {nx} multiplicada por la columna j de {ny}: se multiplican "
+            f"{n} pares de números y se suman. El resultado es {m}×{q}.",
+            entradas, R, advertencias)
+        return ("matriz", R)
+
+    def _transpuesta(self, nodo, a):
+        hijo = nodo.hijos[0]
+        operandos = [(hijo, a[1])]
+        if a[0] == "numero":
+            self._fallar(nodo, "transpuesta", operandos, "La transpuesta se aplica a matrices.",
+                         f"No se puede calcular {nodo.texto()}: {hijo.texto()} es un número, no una matriz.")
+        X = a[1]
+        m, n = len(X), len(X[0])
+        nombre = _nombre_operando(hijo)
+        x = _letra(hijo, "x")
+        R = [[X[i][j] for i in range(m)] for j in range(n)]
+        entradas = [{"posicion": (i + 1, j + 1), "lineas": [
+            f"Entrada ({i + 1},{j + 1}) = entrada ({j + 1},{i + 1}) de {nombre} = {x}{subindice(j + 1, i + 1)} = "
+            f"{formatear_numero(R[i][j])}"]}
+            for i in range(n) for j in range(m)]
+        extra = [f"Fila {i + 1} de {nombre} = ({', '.join(formatear_numero(v) for v in X[i])})  →  columna {i + 1} "
+                 f"de {nodo.texto()}" for i in range(m)]
+        advertencias = []
+        if hijo.tipo == "producto" and hijo.hijos[0].es_matricial() and hijo.hijos[1].es_matricial():
+            p_izq, p_der = hijo.hijos
+            advertencias.append(f"Propiedad: ({p_izq.texto()}{p_der.texto()})ᵀ = {p_der.texto()}ᵀ{p_izq.texto()}ᵀ; al "
+                                f"transponer un producto se invierte el orden de los factores.")
+            try:
+                Xi = evaluar_independiente(p_izq, self.matrices, self.escalares)
+                Yi = evaluar_independiente(p_der, self.matrices, self.escalares)
+                if len(Xi) == len(Yi[0]):
+                    sin_invertir = multiplicar_matrices(transponer_matriz(Xi), transponer_matriz(Yi))
+                    if sin_invertir != R:
+                        advertencias.append(f"Si se olvida invertir el orden, {_nombre_operando(p_izq)}ᵀ{_nombre_operando(p_der)}ᵀ "
+                                            f"da {matriz_en_linea(sin_invertir)}, que es otra matriz.")
+                else:
+                    advertencias.append(f"Sin invertir el orden, {_nombre_operando(p_izq)}ᵀ{_nombre_operando(p_der)}ᵀ ni siquiera "
+                                        f"está definido.")
+            except ErrorExpresion:
+                pass
+        self._registrar(
+            nodo, "transpuesta", operandos,
+            f"La transpuesta siempre está definida: {nombre} es {m}×{n}, así que {nodo.texto()} es {n}×{m} ✓",
+            True, f"(Xᵀ)ᵢⱼ = xⱼᵢ",
+            f"La fila i de {nombre} se escribe como la columna i de {nodo.texto()}.",
+            entradas, R, advertencias, extra)
+        return ("matriz", R)
+
+    def _negativo(self, nodo, a):
+        hijo = nodo.hijos[0]
+        if a[0] == "numero":
+            return self._aritmetica(nodo, [a], -a[1], "−")
+        return self._escalar_por_matriz(nodo, Fraction(-1), a[1], [(hijo, a[1])], _nombre_operando(hijo),
+                                        _letra(hijo, "x"), titulo=f"Calcular {nodo.texto()} (multiplicar por −1)")
+
+
+def evaluar_independiente(nodo, matrices, escalares=None):
+    """
+    Recalcula la expresion desde los datos originales con algoritmos distintos a los
+    del procedimiento (el producto se acumula como suma de productos columna·fila y
+    la transpuesta se arma por columnas). Sirve para verificar el resultado final.
+    """
+    escalares = escalares or {}
+    tipo = nodo.tipo
+    if tipo == "matriz":
+        return [fila[:] for fila in matrices[nodo.valor]]
+    if tipo == "identidad":
+        return matriz_identidad(nodo.valor)
+    if tipo == "numero":
+        return nodo.valor
+    if tipo == "escalar":
+        return escalares[nodo.valor]
+    valores = [evaluar_independiente(h, matrices, escalares) for h in nodo.hijos]
+    es_matriz = [isinstance(v, list) for v in valores]
+    if tipo == "transpuesta":
+        X = valores[0]
+        if not es_matriz[0]:
+            raise ErrorExpresion("La transpuesta se aplica a matrices.")
+        return [[fila[j] for fila in X] for j in range(len(X[0]))]
+    if tipo == "negativo":
+        return [[-v for v in fila] for fila in valores[0]] if es_matriz[0] else -valores[0]
+    X, Y = valores
+    if tipo in ("suma", "resta"):
+        if not any(es_matriz):
+            return X + Y if tipo == "suma" else X - Y
+        if not all(es_matriz) or (len(X), len(X[0])) != (len(Y), len(Y[0])):
+            raise ErrorExpresion("Dimensiones incompatibles en una suma o resta.")
+        signo = 1 if tipo == "suma" else -1
+        return [[a + signo * b for a, b in zip(fila_x, fila_y)] for fila_x, fila_y in zip(X, Y)]
+    if not any(es_matriz):
+        return X * Y
+    if not es_matriz[0]:
+        return [[X * v for v in fila] for fila in Y]
+    if not es_matriz[1]:
+        return [[Y * v for v in fila] for fila in X]
+    m, n, p, q = len(X), len(X[0]), len(Y), len(Y[0])
+    if n != p:
+        raise ErrorExpresion("Dimensiones incompatibles en un producto.")
+    R = [[Fraction(0)] * q for _ in range(m)]
+    for k in range(n):
+        for i in range(m):
+            for j in range(q):
+                R[i][j] += X[i][k] * Y[k][j]
+    return R
+
+
+def _nodo(tipo, *hijos, parentesis=False):
+    return NodoExpresion(tipo, hijos, parentesis=parentesis)
+
+
+def identidad_para_verificar(nodo):
+    """
+    Si la expresion tiene la forma de una propiedad conocida, devuelve
+    (nombre, enunciado, expresion_equivalente) para comprobarla por otra ruta.
+    """
+    tipo = nodo.tipo
+    hijos = nodo.hijos
+    if tipo == "producto":
+        izquierda, derecha = hijos
+        if derecha.tipo in ("suma", "resta") and izquierda.es_matricial() and derecha.es_matricial():
+            y, z = derecha.hijos
+            return ("Distributividad por la izquierda", "A(B ± C) = AB ± AC",
+                    _nodo(derecha.tipo, _nodo("producto", izquierda, y), _nodo("producto", izquierda, z)))
+        if derecha.tipo in ("suma", "resta") and not izquierda.es_matricial() and derecha.es_matricial():
+            y, z = derecha.hijos
+            return ("Distributividad del escalar", "r(A ± B) = rA ± rB",
+                    _nodo(derecha.tipo, _nodo("producto", izquierda, y), _nodo("producto", izquierda, z)))
+        if izquierda.tipo in ("suma", "resta") and izquierda.es_matricial() and derecha.es_matricial():
+            x, y = izquierda.hijos
+            return ("Distributividad por la derecha", "(A ± B)C = AC ± BC",
+                    _nodo(izquierda.tipo, _nodo("producto", x, derecha), _nodo("producto", y, derecha)))
+        if izquierda.tipo in ("suma", "resta") and not izquierda.es_matricial() and derecha.es_matricial():
+            x, y = izquierda.hijos
+            return ("Distributividad respecto de la suma de escalares", "(r ± s)A = rA ± sA",
+                    _nodo(izquierda.tipo, _nodo("producto", x, derecha), _nodo("producto", y, derecha)))
+        if (izquierda.tipo == "transpuesta" and derecha.tipo == "transpuesta"
+                and izquierda.es_matricial() and derecha.es_matricial()):
+            return ("Transpuesta de un producto", "BᵀAᵀ = (AB)ᵀ",
+                    _nodo("transpuesta", _nodo("producto", derecha.hijos[0], izquierda.hijos[0])))
+        if izquierda.tipo == "producto" and all(h.es_matricial() for h in (*izquierda.hijos, derecha)):
+            x, y = izquierda.hijos
+            return ("Asociatividad del producto", "(AB)C = A(BC)",
+                    _nodo("producto", x, _nodo("producto", y, derecha, parentesis=True)))
+        if derecha.tipo == "producto" and all(h.es_matricial() for h in (izquierda, *derecha.hijos)):
+            y, z = derecha.hijos
+            return ("Asociatividad del producto", "A(BC) = (AB)C",
+                    _nodo("producto", _nodo("producto", izquierda, y, parentesis=True), z))
+    if tipo == "transpuesta":
+        hijo = hijos[0]
+        if hijo.tipo == "producto" and hijo.hijos[0].es_matricial() and hijo.hijos[1].es_matricial():
+            x, y = hijo.hijos
+            return ("Transpuesta de un producto", "(AB)ᵀ = BᵀAᵀ",
+                    _nodo("producto", _nodo("transpuesta", y), _nodo("transpuesta", x)))
+        if hijo.tipo == "producto":
+            x, y = hijo.hijos
+            escalar, matriz = (x, y) if not x.es_matricial() else (y, x)
+            return ("Transpuesta de un múltiplo escalar", "(rA)ᵀ = rAᵀ",
+                    _nodo("producto", escalar, _nodo("transpuesta", matriz)))
+        if hijo.tipo in ("suma", "resta"):
+            x, y = hijo.hijos
+            return ("Transpuesta de una suma", "(A ± B)ᵀ = Aᵀ ± Bᵀ",
+                    _nodo(hijo.tipo, _nodo("transpuesta", x), _nodo("transpuesta", y)))
+        if hijo.tipo == "transpuesta":
+            return ("Doble transpuesta", "(Aᵀ)ᵀ = A", hijo.hijos[0])
+    if tipo in ("suma", "resta") and nodo.es_matricial():
+        izquierda, derecha = hijos
+        if izquierda.tipo == "producto" and derecha.tipo == "producto":
+            (a, b), (c, d) = izquierda.hijos, derecha.hijos
+            if a.texto() == c.texto():
+                return ("Distributividad (factor común a la izquierda)", "AB ± AC = A(B ± C)",
+                        _nodo("producto", a, _nodo(tipo, b, d)))
+            if b.texto() == d.texto():
+                return ("Distributividad (factor común a la derecha)", "AC ± BC = (A ± B)C",
+                        _nodo("producto", _nodo(tipo, a, c), b))
+        if izquierda.tipo == "transpuesta" and derecha.tipo == "transpuesta":
+            return ("Transpuesta de una suma", "Aᵀ ± Bᵀ = (A ± B)ᵀ",
+                    _nodo("transpuesta", _nodo(tipo, izquierda.hijos[0], derecha.hijos[0])))
+        if izquierda.tipo in ("suma", "resta"):
+            x, y = izquierda.hijos
+            # (X ± Y) ± Z = X ± (Y ∓ Z) cuando corresponde: se reagrupa la suma
+            if izquierda.tipo == "suma":
+                return ("Asociatividad de la suma", "(A + B) ± C = A + (B ± C)",
+                        _nodo("suma", x, _nodo(tipo, y, derecha)))
+            return ("Asociatividad de la suma", "(A − B) ± C = A − (B ∓ C)",
+                    _nodo("resta", x, _nodo("resta" if tipo == "suma" else "suma", y, derecha)))
+        if tipo == "suma":
+            return ("Conmutatividad de la suma", "A + B = B + A", _nodo("suma", derecha, izquierda))
+        return ("Definición de la resta", "A − B = A + (−1)B",
+                _nodo("suma", izquierda, _nodo("producto", NodoExpresion("numero", valor=Fraction(-1)), derecha)))
+    return None
+
+
+def _preparar_datos(nodo, matrices, escalares):
+    matrices_validas = {}
+    for nombre in sorted(nodo.nombres_matrices()):
+        if nombre not in matrices:
+            raise ErrorExpresion(f"La matriz {nombre} no está definida." + (
+                " Para la transpuesta escribe Aᵀ, A^T o A'." if nombre == "T" else
+                " Para la identidad escribe I2, I3, …" if nombre == "I" else ""),
+                _buscar_posicion(nodo, "matriz", nombre))
+        matrices_validas[nombre] = validar_matriz(matrices[nombre], nombre)
+    escalares_validos = {}
+    for nombre in sorted(nodo.nombres_escalares()):
+        if nombre not in (escalares or {}):
+            raise ErrorExpresion(f"Falta el valor del escalar {nombre}.", _buscar_posicion(nodo, "escalar", nombre))
+        escalares_validos[nombre] = Fraction(escalares[nombre])
+    return matrices_validas, escalares_validos
+
+
+def resolver_expresion_matricial(expresion, matrices, escalares=None):
+    """
+    Resuelve una expresion como 'A(B + C)' paso a paso. Devuelve un diccionario con
+    el arbol, las condiciones de dimension, los pasos (datos, cada operacion
+    intermedia y respuesta), el resultado o el error de dimensiones (indicando en
+    que operacion ocurrio). Lanza ErrorExpresion si la expresion esta mal escrita.
+    """
+    nodo = expresion if isinstance(expresion, NodoExpresion) else analizar_expresion_matricial(expresion)
+    matrices_validas, escalares_validos = _preparar_datos(nodo, matrices, escalares)
+    dimensiones = {nombre: (len(M), len(M[0])) for nombre, M in matrices_validas.items()}
+    condiciones, dimension_final = revisar_dimensiones(nodo, dimensiones, escalares_validos)
+
+    resolutor = _ResolutorMatricial(matrices_validas, escalares_validos)
+    error = None
+    tipo_resultado, resultado = None, None
+    try:
+        tipo_resultado, resultado = resolutor.valor(nodo)
+    except _OperacionNoDefinida as falla:
+        error = str(falla)
+
+    operaciones = resolutor.pasos
+    for k, paso in enumerate(operaciones):
+        if paso["condicion"]["cumple"]:
+            paso["siguiente"] = (operaciones[k + 1]["titulo"] if k + 1 < len(operaciones)
+                                 else "Ninguna: este es el resultado final.")
+        else:
+            paso["siguiente"] = "El cálculo se detiene: esta operación no está definida."
+
+    identidad = None if error else identidad_para_verificar(nodo)
+    texto = nodo.texto()
+    datos = {
+        "tipo": "datos",
+        "titulo": "Datos del ejercicio",
+        "expresion": texto,
+        "interpretacion": nodo.texto_completo(),
+        "matrices": [(nombre, M) for nombre, M in matrices_validas.items()],
+        "escalares": escalares_validos,
+        "condiciones": condiciones,
+        "primera": operaciones[0]["titulo"] if operaciones else "No hay operaciones: la expresión es un solo dato.",
+        "propiedad": identidad[:2] if identidad else None,
+    }
+    pasos = [datos] + operaciones
+    if error is None:
+        definiciones = []
+        for paso in operaciones:
+            regla = REGLAS_OPERACION[paso["tipo"]]
+            if regla not in definiciones:
+                definiciones.append(regla)
+        dimension = (len(resultado), len(resultado[0])) if tipo_resultado == "matriz" else None
+        conclusion = (
+            f"{texto} está definida para estas matrices. Se calculó con {_plural(len(operaciones), 'operación', 'operaciones')} "
+            f"en el orden que indican los paréntesis y la precedencia"
+            + (f", y el resultado es una matriz {formatear_dimension(dimension)}." if dimension else
+               f", y el resultado es el número {formatear_numero(resultado)}.")
+        )
+        pasos.append({
+            "tipo": "respuesta",
+            "titulo": "Respuesta final",
+            "expresion": texto,
+            "resultado": resultado,
+            "dimension": dimension,
+            "orden": [paso["expresion"] for paso in operaciones],
+            "definiciones": definiciones,
+            "propiedad": identidad[:2] if identidad else None,
+            "conclusion": conclusion,
+        })
+    for numero, paso in enumerate(pasos, start=1):
+        paso["numero"] = numero
+
+    return {
+        "expresion": texto,
+        "interpretacion": nodo.texto_completo(),
+        "nodo": nodo,
+        "matrices": matrices_validas,
+        "escalares": escalares_validos,
+        "condiciones": condiciones,
+        "dimension_esperada": dimension_final,
+        "pasos": pasos,
+        "operaciones": operaciones,
+        "resultado": resultado,
+        "tipo_resultado": tipo_resultado,
+        "dimension": (len(resultado), len(resultado[0])) if tipo_resultado == "matriz" else None,
+        "error": error,
+        "identidad": identidad,
+    }
+
+
+def _comparar_valores(obtenido, esperado):
+    """Compara dos matrices (o dos numeros) entrada por entrada."""
+    if isinstance(obtenido, list) and isinstance(esperado, list):
+        return comparar_matrices(obtenido, esperado, "Obtenido", "Esperado")
+    if not isinstance(obtenido, list) and not isinstance(esperado, list):
+        coinciden = Fraction(obtenido) == Fraction(esperado)
+        return {"izquierda": obtenido, "derecha": esperado, "dimensiones_izquierda": None,
+                "dimensiones_derecha": None, "coinciden": coinciden,
+                "diferencias": [] if coinciden else [("valor", obtenido, esperado)],
+                "conclusion": "Los números coinciden." if coinciden else "Los números son distintos."}
+    return {"izquierda": obtenido, "derecha": esperado, "dimensiones_izquierda": None, "dimensiones_derecha": None,
+            "coinciden": False, "diferencias": [("tipo", obtenido, esperado)],
+            "conclusion": "Uno es un número y el otro una matriz."}
+
+
+def _verificar_operacion(paso):
+    """Recalcula una operacion intermedia a partir de sus operandos con un metodo independiente."""
+    tipo = paso["tipo"]
+    valores = [v for _, v in paso["operandos"]]
+    obtenido = paso["resultado"]
+    if tipo == "aritmetica":
+        a = valores[0]
+        b = valores[1] if len(valores) > 1 else None
+        esperado = {"+": lambda: a + b, "−": lambda: a - b, "·": lambda: a * b,
+                    "negativo": lambda: -a}[paso["simbolo"]]()
+        metodo = "Se repite la operación con los números."
+    elif tipo in ("suma", "resta"):
+        X, Y = valores
+        signo = 1 if tipo == "suma" else -1
+        esperado = [[X[i][j] + signo * Y[i][j] for j in range(len(X[0]))] for i in range(len(X))]
+        metodo = f"Se vuelve a {'sumar' if tipo == 'suma' else 'restar'} cada par de entradas de la misma posición."
+    elif tipo == "escalar":
+        escalar = paso["escalar"]
+        X = next(v for v in valores if isinstance(v, list))
+        esperado = [[escalar * v for v in fila] for fila in X]
+        metodo = f"Se comprueba (rX)ᵢⱼ = r·xᵢⱼ en cada entrada, con r = {formatear_numero(escalar)}."
+    elif tipo == "transpuesta":
+        X = valores[0]
+        esperado = [[X[i][j] for i in range(len(X))] for j in range(len(X[0]))]
+        metodo = "Se comprueba (Xᵀ)ᵢⱼ = xⱼᵢ en cada entrada."
+    else:
+        X, Y = valores
+        esperado = [[Fraction(0)] * len(Y[0]) for _ in X]
+        for k in range(len(Y)):
+            for i in range(len(X)):
+                for j in range(len(Y[0])):
+                    esperado[i][j] += X[i][k] * Y[k][j]
+        metodo = ("Se recalcula como suma de productos columna·fila (Σₖ columnaₖ(X)·filaₖ(Y)), un método "
+                  "distinto del de fila por columna.")
+    comparacion = _comparar_valores(obtenido, esperado)
+    dimension_esperada = (len(esperado), len(esperado[0])) if isinstance(esperado, list) else None
+    dimension_obtenida = (len(obtenido), len(obtenido[0])) if isinstance(obtenido, list) else None
+    total = len(esperado) * len(esperado[0]) if isinstance(esperado, list) else 1
+    diferencias = [d for d in comparacion["diferencias"] if isinstance(d[0], int)]
+    return {
+        "numero": paso.get("numero"),
+        "expresion": paso["expresion"],
+        "metodo": metodo,
+        "dimension_esperada": dimension_esperada,
+        "dimension_obtenida": dimension_obtenida,
+        "dimensiones_ok": dimension_esperada == dimension_obtenida,
+        "entradas_total": total,
+        "entradas_ok": total - len(diferencias) if dimension_esperada == dimension_obtenida else 0,
+        "diferencias": comparacion["diferencias"],
+        "ok": comparacion["coinciden"],
+    }
+
+
+ALCANCE_VERIFICACION = ("Esta es una comprobación numérica de este ejercicio concreto; no es una demostración "
+                        "general de ninguna propiedad.")
+
+
+def verificar_resolucion(resolucion):
+    """
+    Informe de verificacion de una resolucion:
+    1. cada operacion intermedia recalculada desde sus propios operandos;
+    2. la expresion completa recalculada desde los datos originales con otro algoritmo;
+    3. si la expresion coincide con una propiedad conocida, la ruta equivalente
+       (por ejemplo AB + AC para A(B + C)) calculada tambien desde los datos originales.
+    """
+    if resolucion["error"]:
+        return {"aplicable": False, "motivo": resolucion["error"], "pasos": [], "global": None,
+                "identidad": None, "correcto": False, "alcance": ALCANCE_VERIFICACION}
+    pasos = [_verificar_operacion(p) for p in resolucion["operaciones"]]
+
+    independiente = evaluar_independiente(resolucion["nodo"], resolucion["matrices"], resolucion["escalares"])
+    comparacion = _comparar_valores(resolucion["resultado"], independiente)
+    global_ = {
+        "metodo": ("Se recalcula toda la expresión desde las matrices originales, sin usar los resultados "
+                   "intermedios del procedimiento; los productos se acumulan como suma de productos columna·fila."),
+        "esperado": independiente,
+        "comparacion": comparacion,
+        "ok": comparacion["coinciden"],
+    }
+
+    identidad = None
+    if resolucion["identidad"]:
+        nombre, enunciado, alternativa = resolucion["identidad"]
+        try:
+            ruta = resolver_expresion_matricial(alternativa, resolucion["matrices"], resolucion["escalares"])
+        except ErrorExpresion as error:
+            ruta = None
+            identidad = {"nombre": nombre, "enunciado": enunciado, "expresion": alternativa.texto(),
+                         "definida": False, "motivo": str(error), "ok": None}
+        if ruta is not None:
+            if ruta["error"]:
+                identidad = {"nombre": nombre, "enunciado": enunciado, "expresion": ruta["expresion"],
+                             "definida": False, "motivo": ruta["error"], "ok": None, "resolucion": ruta}
+            else:
+                comparacion_ruta = _comparar_valores(resolucion["resultado"], ruta["resultado"])
+                identidad = {"nombre": nombre, "enunciado": enunciado, "expresion": ruta["expresion"],
+                             "definida": True, "resolucion": ruta, "comparacion": comparacion_ruta,
+                             "ok": comparacion_ruta["coinciden"]}
+
+    correcto = all(p["ok"] for p in pasos) and global_["ok"] and (identidad is None or identidad["ok"] is not False)
+    return {"aplicable": True, "pasos": pasos, "global": global_, "identidad": identidad,
+            "correcto": correcto, "alcance": ALCANCE_VERIFICACION}
+
+
+def describir_diferencias(diferencias):
+    """Texto legible para las diferencias que devuelve comparar_matrices."""
+    lineas = []
+    for diferencia in diferencias:
+        if diferencia[0] == "dimensiones":
+            lineas.append(f"Dimensiones distintas: {formatear_dimension(diferencia[1])} y "
+                          f"{formatear_dimension(diferencia[2])}.")
+        elif diferencia[0] in ("valor", "tipo"):
+            lineas.append("Los valores comparados no coinciden.")
+        else:
+            i, j, a, b = diferencia
+            lineas.append(f"Entrada ({i},{j}): se obtuvo {formatear_numero(a)} y debía ser {formatear_numero(b)}.")
+    return lineas
+
+
+# --- Propiedades teoricas -------------------------------------------------------
+
+PROPIEDADES_MATRICIALES = [
+    {"clave": "conmutatividad_suma", "grupo": "Suma", "nombre": "Conmutatividad de la suma",
+     "izquierda": "A + B", "derecha": "B + A", "general": True,
+     "condiciones": "A y B del mismo tamaño m×n.",
+     "demostracion": "(A + B)ᵢⱼ = aᵢⱼ + bᵢⱼ = bᵢⱼ + aᵢⱼ = (B + A)ᵢⱼ para toda posición (i, j), porque la suma de "
+                     "números reales es conmutativa."},
+    {"clave": "asociatividad_suma", "grupo": "Suma", "nombre": "Asociatividad de la suma",
+     "izquierda": "(A + B) + C", "derecha": "A + (B + C)", "general": True,
+     "condiciones": "A, B y C del mismo tamaño m×n.",
+     "demostracion": "((A + B) + C)ᵢⱼ = (aᵢⱼ + bᵢⱼ) + cᵢⱼ = aᵢⱼ + (bᵢⱼ + cᵢⱼ) = (A + (B + C))ᵢⱼ."},
+    {"clave": "matriz_cero", "grupo": "Suma", "nombre": "Matriz cero (neutro de la suma)",
+     "izquierda": "A + O", "derecha": "A", "general": True, "extra": "cero",
+     "condiciones": "O es la matriz cero del mismo tamaño que A.",
+     "demostracion": "(A + O)ᵢⱼ = aᵢⱼ + 0 = aᵢⱼ."},
+    {"clave": "inverso_aditivo", "grupo": "Suma", "nombre": "Inverso aditivo",
+     "izquierda": "A + (−A)", "derecha": "O", "general": True, "extra": "cero",
+     "condiciones": "O es la matriz cero del mismo tamaño que A.",
+     "demostracion": "(A + (−A))ᵢⱼ = aᵢⱼ + (−aᵢⱼ) = 0."},
+    {"clave": "escalar_suma_matrices", "grupo": "Escalares", "nombre": "Escalar por una suma de matrices",
+     "izquierda": "r(A + B)", "derecha": "rA + rB", "general": True,
+     "condiciones": "A y B del mismo tamaño; r es cualquier número real.",
+     "demostracion": "(r(A + B))ᵢⱼ = r(aᵢⱼ + bᵢⱼ) = raᵢⱼ + rbᵢⱼ = (rA + rB)ᵢⱼ."},
+    {"clave": "suma_escalares", "grupo": "Escalares", "nombre": "Suma de escalares por una matriz",
+     "izquierda": "(r + s)A", "derecha": "rA + sA", "general": True,
+     "condiciones": "A de cualquier tamaño; r y s números reales.",
+     "demostracion": "((r + s)A)ᵢⱼ = (r + s)aᵢⱼ = raᵢⱼ + saᵢⱼ = (rA + sA)ᵢⱼ."},
+    {"clave": "producto_escalares", "grupo": "Escalares", "nombre": "Producto de escalares",
+     "izquierda": "r(sA)", "derecha": "(rs)A", "general": True,
+     "condiciones": "A de cualquier tamaño; r y s números reales.",
+     "demostracion": "(r(sA))ᵢⱼ = r(saᵢⱼ) = (rs)aᵢⱼ = ((rs)A)ᵢⱼ."},
+    {"clave": "asociatividad_producto", "grupo": "Producto", "nombre": "Asociatividad del producto",
+     "izquierda": "(AB)C", "derecha": "A(BC)", "general": True,
+     "condiciones": "A es m×n, B es n×p y C es p×q.",
+     "demostracion": "((AB)C)ᵢⱼ = Σₗ (Σₖ aᵢₖbₖₗ) cₗⱼ = Σₖ aᵢₖ (Σₗ bₖₗcₗⱼ) = (A(BC))ᵢⱼ: solo se reordena una "
+                     "suma finita."},
+    {"clave": "distributiva_izquierda", "grupo": "Producto", "nombre": "Distributividad por la izquierda",
+     "izquierda": "A(B + C)", "derecha": "AB + AC", "general": True,
+     "condiciones": "A es m×n; B y C son n×p.",
+     "demostracion": "(A(B + C))ᵢⱼ = Σₖ aᵢₖ(bₖⱼ + cₖⱼ) = Σₖ aᵢₖbₖⱼ + Σₖ aᵢₖcₖⱼ = (AB + AC)ᵢⱼ."},
+    {"clave": "distributiva_derecha", "grupo": "Producto", "nombre": "Distributividad por la derecha",
+     "izquierda": "(A + B)C", "derecha": "AC + BC", "general": True,
+     "condiciones": "A y B son m×n; C es n×p.",
+     "demostracion": "((A + B)C)ᵢⱼ = Σₖ (aᵢₖ + bᵢₖ)cₖⱼ = Σₖ aᵢₖcₖⱼ + Σₖ bᵢₖcₖⱼ = (AC + BC)ᵢⱼ."},
+    {"clave": "identidad_derecha", "grupo": "Producto", "nombre": "Identidad a la derecha",
+     "izquierda": "AI", "derecha": "A", "general": True, "extra": "identidad_columnas",
+     "condiciones": "Si A es m×n, I es la identidad n×n.",
+     "demostracion": "(AI)ᵢⱼ = Σₖ aᵢₖδₖⱼ = aᵢⱼ, porque δₖⱼ vale 1 si k = j y 0 en otro caso."},
+    {"clave": "identidad_izquierda", "grupo": "Producto", "nombre": "Identidad a la izquierda",
+     "izquierda": "IA", "derecha": "A", "general": True, "extra": "identidad_filas",
+     "condiciones": "Si A es m×n, I es la identidad m×m.",
+     "demostracion": "(IA)ᵢⱼ = Σₖ δᵢₖaₖⱼ = aᵢⱼ."},
+    {"clave": "transpuesta_doble", "grupo": "Transpuesta", "nombre": "Transpuesta de la transpuesta",
+     "izquierda": "(Aᵀ)ᵀ", "derecha": "A", "general": True,
+     "condiciones": "A de cualquier tamaño.",
+     "demostracion": "((Aᵀ)ᵀ)ᵢⱼ = (Aᵀ)ⱼᵢ = aᵢⱼ."},
+    {"clave": "transpuesta_suma", "grupo": "Transpuesta", "nombre": "Transpuesta de una suma",
+     "izquierda": "(A + B)ᵀ", "derecha": "Aᵀ + Bᵀ", "general": True,
+     "condiciones": "A y B del mismo tamaño.",
+     "demostracion": "((A + B)ᵀ)ᵢⱼ = (A + B)ⱼᵢ = aⱼᵢ + bⱼᵢ = (Aᵀ)ᵢⱼ + (Bᵀ)ᵢⱼ."},
+    {"clave": "transpuesta_escalar", "grupo": "Transpuesta", "nombre": "Transpuesta de un múltiplo escalar",
+     "izquierda": "(rA)ᵀ", "derecha": "rAᵀ", "general": True,
+     "condiciones": "A de cualquier tamaño; r número real.",
+     "demostracion": "((rA)ᵀ)ᵢⱼ = (rA)ⱼᵢ = r·aⱼᵢ = r(Aᵀ)ᵢⱼ."},
+    {"clave": "transpuesta_producto", "grupo": "Transpuesta", "nombre": "Transpuesta de un producto",
+     "izquierda": "(AB)ᵀ", "derecha": "BᵀAᵀ", "general": True, "error_comun": "AᵀBᵀ",
+     "condiciones": "A es m×n y B es n×p; entonces (AB)ᵀ y BᵀAᵀ son p×m.",
+     "demostracion": "((AB)ᵀ)ᵢⱼ = (AB)ⱼᵢ = Σₖ aⱼₖbₖᵢ = Σₖ (Bᵀ)ᵢₖ(Aᵀ)ₖⱼ = (BᵀAᵀ)ᵢⱼ. El orden de los factores se "
+                     "invierte; AᵀBᵀ en general es otra matriz o ni siquiera está definida."},
+    {"clave": "no_conmutatividad", "grupo": "Advertencias", "nombre": "El producto no es conmutativo",
+     "izquierda": "AB", "derecha": "BA", "general": False, "contraejemplo": "no_conmutatividad",
+     "condiciones": "Para que AB y BA estén definidos y se puedan comparar, A y B deben ser cuadradas del mismo tamaño.",
+     "advertencia": "AB = BA no es una propiedad: falla para la mayoría de las matrices. Que se cumpla en un ejemplo "
+                    "no la convierte en verdadera en general."},
+    {"clave": "cancelacion", "grupo": "Advertencias", "nombre": "La cancelación no siempre vale",
+     "tipo": "cancelacion", "general": False, "contraejemplo": "cancelacion",
+     "condiciones": "A es m×n; B y C son n×p, de modo que AB y AC estén definidos.",
+     "advertencia": "De AB = AC no se puede concluir B = C, salvo hipótesis adicionales (por ejemplo, A invertible)."},
+    {"clave": "divisores_cero", "grupo": "Advertencias", "nombre": "Matrices no nulas con producto cero",
+     "tipo": "divisores_cero", "general": False, "contraejemplo": "divisores_cero",
+     "condiciones": "A es m×n y B es n×p, de modo que AB esté definido.",
+     "advertencia": "AB = O no implica que A = O o B = O: existen matrices no nulas cuyo producto es la matriz cero."},
+]
+
+PROPIEDADES_POR_CLAVE = {p["clave"]: p for p in PROPIEDADES_MATRICIALES}
+
+
+def _matrices_extra(propiedad, A):
+    m, n = len(A), len(A[0])
+    extra = propiedad.get("extra")
+    if extra == "cero":
+        return {"O": matriz_cero(m, n)}
+    if extra == "identidad_columnas":
+        return {"I": matriz_identidad(n)}
+    if extra == "identidad_filas":
+        return {"I": matriz_identidad(m)}
+    return {}
+
+
+def _es_cero(matriz):
+    return all(v == 0 for fila in matriz for v in fila)
+
+
+def verificar_propiedad_matricial(clave, matrices, escalares=None):
+    """
+    Comprueba una propiedad con las matrices dadas calculando cada lado por
+    separado (con su propio procedimiento) y comparando entrada por entrada.
+    La conclusion distingue la comprobacion de este caso de la demostracion general.
+    """
+    propiedad = PROPIEDADES_POR_CLAVE[clave]
+    datos = {nombre: validar_matriz(M, nombre) for nombre, M in matrices.items()}
+    if "A" in datos:
+        datos.update(_matrices_extra(propiedad, datos["A"]))
+    escalares = {k: Fraction(v) for k, v in (escalares or {}).items()}
+    tipo = propiedad.get("tipo", "igualdad")
+    informe = {"propiedad": propiedad, "tipo": tipo, "lados": [], "comparaciones": [], "conclusion": "",
+               "cumple": None, "matrices_extra": {k: v for k, v in datos.items() if k in ("O", "I")}}
+
+    def lado(etiqueta, expresion):
+        resolucion = resolver_expresion_matricial(expresion, datos, escalares)
+        informe["lados"].append({"etiqueta": etiqueta, "resolucion": resolucion})
+        return resolucion
+
+    if tipo == "igualdad":
+        izquierda = lado("Lado izquierdo", propiedad["izquierda"])
+        derecha = lado("Lado derecho", propiedad["derecha"])
+        if izquierda["error"] or derecha["error"]:
+            motivo = izquierda["error"] or derecha["error"]
+            informe["conclusion"] = (f"No se puede comprobar con estas matrices: {motivo} "
+                                     f"Condiciones de la propiedad: {propiedad['condiciones']}")
+            return informe
+        comparacion = _comparar_valores(izquierda["resultado"], derecha["resultado"])
+        informe["comparaciones"].append({"titulo": f"{izquierda['expresion']}  frente a  {derecha['expresion']}",
+                                         "comparacion": comparacion})
+        informe["cumple"] = comparacion["coinciden"]
+        if propiedad["general"]:
+            informe["conclusion"] = (
+                f"Con estas matrices, {izquierda['expresion']} y {derecha['expresion']} coinciden en tamaño y en todas "
+                f"sus entradas. Esto comprueba la propiedad en este caso particular; que valga para todas las "
+                f"matrices lo garantiza la demostración general." if comparacion["coinciden"] else
+                f"Los dos lados no coinciden con estas matrices. Como la propiedad es verdadera en general, revisa "
+                f"los datos: alguna entrada no es la que se quería escribir.")
+        elif comparacion["coinciden"]:
+            informe["conclusion"] = (f"En este caso {izquierda['expresion']} = {derecha['expresion']}, pero eso no la "
+                                     f"convierte en propiedad: con otras matrices falla (carga el contraejemplo).")
+        else:
+            informe["conclusion"] = (f"{izquierda['expresion']} ≠ {derecha['expresion']} con estas matrices: este ejemplo es "
+                                     f"un contraejemplo y muestra que la igualdad no vale en general.")
+        if propiedad.get("error_comun"):
+            try:
+                comun = lado("Error frecuente", propiedad["error_comun"])
+                if not comun["error"]:
+                    informe["comparaciones"].append({
+                        "titulo": f"{comun['expresion']}  frente a  {izquierda['expresion']}",
+                        "comparacion": _comparar_valores(comun["resultado"], izquierda["resultado"])})
+            except ErrorExpresion:
+                pass
+        return informe
+
+    if tipo == "cancelacion":
+        AB, AC = lado("Producto AB", "AB"), lado("Producto AC", "AC")
+        if AB["error"] or AC["error"]:
+            informe["conclusion"] = f"No se puede estudiar la cancelación: {AB['error'] or AC['error']}"
+            return informe
+        productos = _comparar_valores(AB["resultado"], AC["resultado"])
+        factores = _comparar_valores(datos["B"], datos["C"])
+        informe["comparaciones"] += [{"titulo": "AB  frente a  AC", "comparacion": productos},
+                                     {"titulo": "B  frente a  C", "comparacion": factores}]
+        if productos["coinciden"] and not factores["coinciden"]:
+            informe["cumple"] = False
+            informe["conclusion"] = ("AB = AC pero B ≠ C: es un contraejemplo. No se puede «cancelar» A; haría falta, "
+                                     "por ejemplo, que A fuera invertible.")
+        elif productos["coinciden"]:
+            informe["conclusion"] = ("Aquí AB = AC y también B = C, así que este caso no contradice nada; aun así la "
+                                     "cancelación no vale en general (carga el contraejemplo).")
+        else:
+            informe["conclusion"] = ("AB ≠ AC, así que estas matrices no sirven para estudiar la cancelación. Carga el "
+                                     "contraejemplo para ver un caso con AB = AC y B ≠ C.")
+        return informe
+
+    AB = lado("Producto AB", "AB")
+    if AB["error"]:
+        informe["conclusion"] = f"No se puede calcular AB: {AB['error']}"
+        return informe
+    cero = matriz_cero(len(AB["resultado"]), len(AB["resultado"][0]))
+    informe["comparaciones"].append({"titulo": "AB  frente a  O", "comparacion": _comparar_valores(AB["resultado"], cero)})
+    a_nula, b_nula, producto_nulo = _es_cero(datos["A"]), _es_cero(datos["B"]), _es_cero(AB["resultado"])
+    if producto_nulo and not a_nula and not b_nula:
+        informe["cumple"] = False
+        informe["conclusion"] = ("AB = O aunque ni A ni B son la matriz cero: son divisores de cero. Por eso de AB = O "
+                                 "no se puede concluir A = O o B = O.")
+    elif producto_nulo:
+        informe["conclusion"] = "AB = O, pero A o B ya es la matriz cero, así que este caso no es un contraejemplo."
+    else:
+        informe["conclusion"] = ("AB ≠ O con estas matrices. Carga el contraejemplo para ver dos matrices no nulas "
+                                 "con producto cero.")
+    return informe
 
 
 def detalle_producto_matriz_vector(A, x):
@@ -1944,30 +3218,108 @@ def instalar_desplazamiento(raiz):
         pass
 
 
-class Contador(_Marco):
-    """Selector numerico  −  3  +  con limites."""
+def color_de_fondo(widget):
+    """Color de fondo efectivo de un widget (sigue subiendo mientras el fondo sea transparente)."""
+    while widget is not None:
+        try:
+            color = widget.cget("fg_color")
+        except (ValueError, tk.TclError, AttributeError):
+            try:
+                return widget.cget("bg")
+            except tk.TclError:
+                break
+        if color not in (None, "transparent"):
+            return resolver_color(color)
+        widget = getattr(widget, "master", None)
+    return resolver_color(PALETA["fondo"])
 
-    def __init__(self, parent, texto, valor, minimo, maximo, al_cambiar=None):
-        super().__init__(parent, fg_color="transparent")
+
+class _FichasCanvas(tk.Canvas):
+    """
+    Base para controles dibujados en un solo Canvas (zonas clicables con hover).
+    Es mucho mas liviano que varios CTkButton: en macOS cada widget extra encarece
+    el dibujado de toda la pagina.
+    """
+
+    def __init__(self, parent):
+        self._esc = escala_de(parent)
+        super().__init__(parent, bg=color_de_fondo(parent), highlightthickness=0, bd=0, width=10, height=10)
+        self._zonas = {}
+        self._hover = None
+        self.bind("<Motion>", self._mover)
+        self.bind("<Leave>", lambda _e: self._resaltar(None))
+        self.bind("<Button-1>", self._clic)
+
+    def _zona_en(self, x, y):
+        for clave, (x1, y1, x2, y2, _fondo, activa) in self._zonas.items():
+            if activa and x1 <= x <= x2 and y1 <= y <= y2:
+                return clave
+        return None
+
+    def _mover(self, evento):
+        self._resaltar(self._zona_en(evento.x, evento.y))
+
+    def _resaltar(self, clave):
+        if clave == self._hover:
+            return
+        self._hover = clave
+        for k, (_x1, _y1, _x2, _y2, fondo, _activa) in self._zonas.items():
+            self.itemconfigure(fondo, fill=resolver_color(PALETA["secundario_hover"] if k == clave
+                                                          else self._color_reposo(k)))
+        self.configure(cursor="hand2" if clave is not None else "")
+
+    def _color_reposo(self, _clave):
+        return PALETA["entrada"]
+
+    def _clic(self, evento):
+        clave = self._zona_en(evento.x, evento.y)
+        if clave is not None:
+            self._activar(clave)
+
+    def _activar(self, clave):
+        raise NotImplementedError
+
+
+class Contador(_FichasCanvas):
+    """Selector numerico  −  3  +  con limites, dibujado en un solo Canvas."""
+
+    def __init__(self, parent, texto, valor, minimo, maximo, al_cambiar=None, en_linea=False):
+        super().__init__(parent)
+        self.texto = texto
         self.minimo = minimo
         self.maximo = maximo
         self.valor = valor
         self.al_cambiar = al_cambiar
+        self.en_linea = en_linea
+        self._dibujar()
 
-        etiqueta(self, texto, FUENTE_PEQUENA_NEGRITA, "texto_3").pack(anchor="w", pady=(0, 4))
-        caja = ctk.CTkFrame(self, fg_color=PALETA["entrada"], corner_radius=10,
-                            border_width=1, border_color=PALETA["borde"])
-        caja.pack(anchor="w")
-        opciones = dict(width=30, height=28, corner_radius=8, fg_color="transparent",
-                        hover_color=PALETA["secundario_hover"], text_color=PALETA["primario"],
-                        text_color_disabled=PALETA["borde"], font=(FAMILIA, 17, "bold"))
-        self.boton_menos = ctk.CTkButton(caja, text="−", command=lambda: self.cambiar(-1), **opciones)
-        self.boton_menos.pack(side="left", padx=(3, 0), pady=3)
-        self.etiqueta_valor = ctk.CTkLabel(caja, text=str(valor), width=34, font=FUENTE_NEGRITA,
-                                           text_color=PALETA["texto"])
-        self.etiqueta_valor.pack(side="left")
-        self.boton_mas = ctk.CTkButton(caja, text="+", command=lambda: self.cambiar(1), **opciones)
-        self.boton_mas.pack(side="left", padx=(0, 3), pady=3)
+    def _dibujar(self):
+        esc = self._esc
+        self.delete("all")
+        px_rotulo = round(11 * esc)
+        ancho_rotulo = _fuente_medida(self, px_rotulo, True, FAMILIA).measure(self.texto)
+        ancho, alto = round(104 * esc), round(34 * esc)
+        if self.en_linea:
+            x0, y0 = ancho_rotulo + round(6 * esc), 0
+            self.create_text(0, alto / 2, text=self.texto, anchor="w", fill=resolver_color(PALETA["texto_3"]),
+                             font=(FAMILIA, -px_rotulo, "bold"))
+        else:
+            x0, y0 = 0, round(18 * esc)
+            self.create_text(0, 0, text=self.texto, anchor="nw", fill=resolver_color(PALETA["texto_3"]),
+                             font=(FAMILIA, -px_rotulo, "bold"))
+        _rectangulo_redondeado(self, x0 + 1, y0 + 1, x0 + ancho - 1, y0 + alto - 1, round(10 * esc),
+                               fill=resolver_color(PALETA["entrada"]), outline=resolver_color(PALETA["borde"]))
+        margen, boton = round(3 * esc), round(30 * esc)
+        self._zonas, self._signos = {}, {}
+        for clave, signo, x1 in (("menos", "−", x0 + margen), ("mas", "+", x0 + ancho - margen - boton)):
+            fondo = _rectangulo_redondeado(self, x1, y0 + margen, x1 + boton, y0 + alto - margen, round(8 * esc),
+                                           fill=resolver_color(PALETA["entrada"]), outline="")
+            self._signos[clave] = self.create_text(x1 + boton / 2, y0 + alto / 2, text=signo,
+                                                   font=(FAMILIA, -round(17 * esc), "bold"))
+            self._zonas[clave] = [x1, y0 + margen, x1 + boton, y0 + alto - margen, fondo, True]
+        self._valor_id = self.create_text(x0 + ancho / 2, y0 + alto / 2, text=str(self.valor),
+                                          fill=resolver_color(PALETA["texto"]), font=(FAMILIA, -round(13 * esc), "bold"))
+        self.configure(width=max(x0 + ancho, ancho_rotulo), height=y0 + alto)
         self._actualizar_botones()
 
     def get(self):
@@ -1977,22 +3329,56 @@ class Contador(_Marco):
         valor = max(self.minimo, min(self.maximo, int(valor)))
         cambio = valor != self.valor
         self.valor = valor
-        self.etiqueta_valor.configure(text=str(valor))
+        self.itemconfigure(self._valor_id, text=str(valor))
         self._actualizar_botones()
         if cambio:
             inicio = resolver_color(PALETA["primario"])
             fin = resolver_color(PALETA["texto"])
-            animar(self.etiqueta_valor, 450,
-                   lambda t: self.etiqueta_valor.configure(text_color=mezclar_colores(inicio, fin, t)))
+            animar(self, 450, lambda t: self.itemconfigure(self._valor_id, fill=mezclar_colores(inicio, fin, t)))
         if cambio and notificar and self.al_cambiar is not None:
             self.al_cambiar(valor)
 
     def cambiar(self, delta):
         self.set(self.valor + delta, notificar=True)
 
+    def _activar(self, clave):
+        self.cambiar(-1 if clave == "menos" else 1)
+        self._hover = None
+        self._resaltar(clave if self._zonas[clave][5] else None)
+
     def _actualizar_botones(self):
-        self.boton_menos.configure(state="normal" if self.valor > self.minimo else "disabled")
-        self.boton_mas.configure(state="normal" if self.valor < self.maximo else "disabled")
+        for clave, activa in (("menos", self.valor > self.minimo), ("mas", self.valor < self.maximo)):
+            self._zonas[clave][5] = activa
+            self.itemconfigure(self._signos[clave],
+                               fill=resolver_color(PALETA["primario"] if activa else PALETA["borde"]))
+
+
+class BarraFichas(_FichasCanvas):
+    """Fila de botones pequenos (por ejemplo los simbolos A, B, (, ᵀ, +) dibujados en un Canvas."""
+
+    def __init__(self, parent, fichas, fuente=None):
+        super().__init__(parent)
+        self.fichas = list(fichas)  # [(texto, comando)]
+        familia, tamano = (fuente or FUENTE_MONO)[:2]
+        esc = self._esc
+        px = round(tamano * esc)
+        medir = _fuente_medida(self, px, False, familia).measure
+        alto, separacion, x = round(32 * esc), round(3 * esc), 0
+        for indice, (texto, _comando) in enumerate(self.fichas):
+            ancho = max(round(30 * esc), medir(texto) + round(16 * esc))
+            fondo = _rectangulo_redondeado(self, x, 1, x + ancho, alto - 1, round(8 * esc),
+                                           fill=resolver_color(PALETA["secundario"]), outline="")
+            self.create_text(x + ancho / 2, alto / 2, text=texto, fill=resolver_color(PALETA["texto"]),
+                             font=(familia, -px))
+            self._zonas[indice] = [x, 1, x + ancho, alto - 1, fondo, True]
+            x += ancho + separacion
+        self.configure(width=x - separacion, height=alto)
+
+    def _color_reposo(self, _clave):
+        return PALETA["secundario"]
+
+    def _activar(self, clave):
+        self.fichas[clave][1]()
 
 
 TECLAS_SIN_CAMBIO = {"Return", "KP_Enter", "Up", "Down", "Left", "Right", "Tab", "Shift_L", "Shift_R",
@@ -2033,14 +3419,17 @@ class MatrizEntrada(_Marco):
         def columna_grid(j):
             return desplazamiento + j + (1 if separador is not None and j >= separador else 0)
 
+        # Encabezados como tk.Label (no CTkLabel): son muchos y asi la pagina se dibuja mas rapido.
+        fondo = color_de_fondo(self)
+        fuente = (FAMILIA, -round(11 * escala_de(self)), "bold")
         for j, texto in enumerate(encabezados):
-            ctk.CTkLabel(self, text=texto, font=FUENTE_PEQUENA_NEGRITA,
-                         text_color=PALETA["primario"]).grid(row=0, column=columna_grid(j), pady=(0, 4))
+            tk.Label(self, text=texto, font=fuente, bg=fondo, fg=resolver_color(PALETA["primario"])).grid(
+                row=0, column=columna_grid(j), pady=(0, 4))
 
         for i in range(filas):
             if encabezados_fila:
-                ctk.CTkLabel(self, text=encabezados_fila[i], font=FUENTE_PEQUENA_NEGRITA, width=30,
-                             text_color=PALETA["texto_3"]).grid(row=i + 1, column=0, padx=(0, 6))
+                tk.Label(self, text=encabezados_fila[i], font=fuente, bg=fondo, width=3,
+                         fg=resolver_color(PALETA["texto_3"])).grid(row=i + 1, column=0, padx=(0, 6))
             fila = []
             for j in range(columnas):
                 entrada = ctk.CTkEntry(
@@ -2286,9 +3675,12 @@ class TarjetaPaso(tk.Canvas):
 class PanelPasos(_Marco):
     """Muestra el procedimiento completo (en cascada) o paso a paso con reproduccion automatica."""
 
-    def __init__(self, parent, fondo, texto_vacio):
+    def __init__(self, parent, fondo, texto_vacio, constructor=None):
         super().__init__(parent, fg_color="transparent", corner_radius=0)
         self.texto_vacio = texto_vacio
+        # constructor(parent, pasos, indice, detallado) -> widget de la tarjeta (por defecto, Gauss-Jordan)
+        self.constructor = constructor or (
+            lambda contenedor, pasos, indice, detallado: TarjetaPaso(contenedor, pasos, indice, detallado=detallado))
         self.pasos = []
         self.indice = 0
         self._tarea_reproducir = None
@@ -2356,7 +3748,7 @@ class PanelPasos(_Marco):
             self.controles.pack_forget()
             self.progreso.grid_remove()
             self.area.llenar([
-                lambda p, i=i: TarjetaPaso(p, self.pasos, i).pack(fill="x", padx=2, pady=(0, 12))
+                lambda p, i=i: self.constructor(p, self.pasos, i, False).pack(fill="x", padx=2, pady=(0, 12))
                 for i in range(len(self.pasos))
             ])
 
@@ -2370,9 +3762,12 @@ class PanelPasos(_Marco):
         animar(self.progreso, 300, lambda t: self.progreso.set(inicio + (objetivo - inicio) * t))
 
         def construir(parent):
-            tarjeta = TarjetaPaso(parent, self.pasos, self.indice, detallado=True)
+            tarjeta = self.constructor(parent, self.pasos, self.indice, True)
             tarjeta.pack(fill="x", padx=2, pady=(0, 12))
-            tarjeta.destello()
+            if hasattr(tarjeta, "destello"):
+                tarjeta.destello()
+            else:
+                destello(tarjeta)
 
         self.area.llenar([construir])
 
@@ -2409,7 +3804,7 @@ class PanelPasos(_Marco):
 class SeccionPlegable(_Marco):
     """Seccion que se abre/cierra al hacer clic en su cabecera; el cuerpo se crea al abrirla."""
 
-    def __init__(self, parent, titulo, detalle, correcto, construir, abierto=False):
+    def __init__(self, parent, titulo, detalle, correcto, construir, abierto=False, estado=None):
         super().__init__(parent, fg_color=PALETA["entrada"], corner_radius=10,
                          border_width=1, border_color=PALETA["borde"])
         self._construir = construir
@@ -2422,9 +3817,11 @@ class SeccionPlegable(_Marco):
         self._flecha.pack(side="left")
         etiqueta(cabecera, titulo, FUENTE_PEQUENA_NEGRITA, "texto").pack(side="left", padx=(4, 10))
         etiqueta(cabecera, detalle, FUENTE_MONO, "texto_2").pack(side="left")
-        estado = "✓ Se cumple" if correcto else "✕ No se cumple"
-        etiqueta(cabecera, estado, FUENTE_PEQUENA_NEGRITA, "exito" if correcto else "error").pack(
-            side="right", padx=(10, 4))
+        # estado: (texto, color) propio; por defecto «Se cumple / No se cumple» segun correcto.
+        texto_estado, color_estado = estado if estado is not None else (
+            "✓ Se cumple" if correcto else "✕ No se cumple", "exito" if correcto else "error")
+        if texto_estado:
+            etiqueta(cabecera, texto_estado, FUENTE_PEQUENA_NEGRITA, color_estado).pack(side="right", padx=(10, 4))
 
         for widget in (cabecera, *cabecera.winfo_children()):
             widget.bind("<Button-1>", self.alternar)
@@ -3688,148 +5085,1025 @@ class PaginaPropiedades(PaginaSistema):
         return f"Av = {self._vector(datos['Av'])} · se cumple A(cv) = c(Av).", "exito"
 
 
-class PaginaMatrices(PaginaBase):
-    """Interfaz integrada para cálculo, verificación y práctica de matrices."""
-    titulo = "Operaciones con Matrices y Propiedades Teóricas"
-    subtitulo = "Resultados exactos, procedimientos verificables y conclusiones para examen"
+# --- Tarjetas del modulo de matrices ---------------------------------------------
 
-    OPCIONES = ("A + B", "A − B", "rA", "Aᵀ", "AB", "Propiedades de la transpuesta",
-                "Propiedades algebraicas", "Contraejemplos", "Ejercicios tipo examen")
+COLORES_OPERACION_MATRICIAL = {
+    "suma": "exito", "resta": "exito", "producto": "primario", "escalar": "advertencia",
+    "transpuesta": "texto_3", "aritmetica": "texto_3", "datos": "texto_3", "respuesta": "primario",
+}
+
+
+def _superindice_dimension(dimension):
+    return str(dimension[0]).translate(SUPERINDICES) + "ˣ" + str(dimension[1]).translate(SUPERINDICES)
+
+
+def dibujar_valores(parent, elementos, tamano=13):
+    """Dibuja en una fila pares (etiqueta, valor): las matrices como matriz y los numeros como texto."""
+    partes = []
+    for k, (nombre, valor) in enumerate(elementos):
+        prefijo = ("   " if k else "") + f"{nombre} ="
+        if isinstance(valor, list):
+            partes += [prefijo, valor]
+        else:
+            partes.append(f"{prefijo} {formatear_numero(Fraction(valor))}")
+    return dibujar_expresion(parent, partes, tamano=tamano)
+
+
+def _lineas(parent, lineas, color="texto_2", fuente=None, ajustar=40, pady=(0, 0)):
+    for linea in lineas:
+        etiqueta(parent, linea, fuente or FUENTE_NORMAL, color, ajustar=ajustar).pack(anchor="w", pady=pady)
+
+
+def _subtitulo_seccion(parent, texto):
+    etiqueta(parent, texto, FUENTE_PEQUENA_NEGRITA, "texto_3").pack(anchor="w", pady=(10, 2))
+
+
+def tarjeta_paso_matricial(parent, pasos, indice, detallado=False):
+    """Tarjeta de un paso del procedimiento con matrices (datos, operacion intermedia o respuesta)."""
+    paso = pasos[indice]
+    tipo = paso["tipo"]
+    if tipo == "seccion":
+        marco = ctk.CTkFrame(parent, fg_color="transparent")
+        etiqueta(marco, paso["titulo"], FUENTE_SECCION, "primario", ajustar=20).pack(anchor="w", pady=(6, 0))
+        if paso.get("detalle"):
+            etiqueta(marco, paso["detalle"], FUENTE_PEQUENA, "texto_3", ajustar=20).pack(anchor="w")
+        return marco
+
+    falla = tipo not in ("datos", "respuesta") and not paso["condicion"]["cumple"]
+    tarjeta = ctk.CTkFrame(parent, fg_color=PALETA["panel_2"], corner_radius=12, border_width=2 if falla else 1,
+                           border_color=PALETA["error"] if falla else PALETA["borde"])
+    cabecera = ctk.CTkFrame(tarjeta, fg_color="transparent")
+    cabecera.pack(fill="x", padx=14, pady=(12, 6))
+    prefijo = f"{paso['lado']} · " if paso.get("lado") else ""
+    chip(cabecera, f"{prefijo}Paso {paso['numero']}", "primario", TEXTO_SOBRE_PRIMARIO).pack(side="left")
+    chip(cabecera, TIPOS_OPERACION_MATRICIAL.get(tipo, tipo), "panel",
+         "error" if falla else COLORES_OPERACION_MATRICIAL.get(tipo, "primario")).pack(side="left", padx=(8, 0))
+    etiqueta(cabecera, paso["titulo"], FUENTE_NEGRITA, "texto", ajustar=230).pack(side="left", padx=(10, 0))
+
+    cuerpo = ctk.CTkFrame(tarjeta, fg_color="transparent")
+    cuerpo.pack(fill="x", padx=16, pady=(0, 12))
+    if tipo == "datos":
+        _cuerpo_datos(cuerpo, paso)
+    elif tipo == "respuesta":
+        _cuerpo_respuesta(cuerpo, paso)
+    else:
+        _cuerpo_operacion(cuerpo, paso, detallado)
+    if not falla:
+        efecto_hover(tarjeta)
+    return tarjeta
+
+
+def _cuerpo_datos(cuerpo, paso):
+    etiqueta(cuerpo, f"Expresión:  {paso['expresion']}", (FAMILIA_MONO, 15, "bold"), "primario", ajustar=40).pack(anchor="w")
+    etiqueta(cuerpo, f"Se calcula como:  {paso['interpretacion']}", FUENTE_MONO, "texto_2", ajustar=40).pack(
+        anchor="w", pady=(2, 0))
+    if paso["matrices"]:
+        _subtitulo_seccion(cuerpo, "MATRICES Y DIMENSIONES")
+        rejilla = ctk.CTkFrame(cuerpo, fg_color="transparent")
+        rejilla.pack(anchor="w")
+        for k, (nombre, M) in enumerate(paso["matrices"]):
+            celda = ctk.CTkFrame(rejilla, fg_color="transparent")
+            celda.grid(row=k // 2, column=k % 2, sticky="nw", padx=(0, 18), pady=(0, 6))
+            dimension = (len(M), len(M[0]))
+            etiqueta(celda, f"{nombre} ∈ ℝ{_superindice_dimension(dimension)}  ({formatear_dimension(dimension)})",
+                     FUENTE_PEQUENA_NEGRITA, "texto").pack(anchor="w")
+            dibujar_valores(celda, [(nombre, M)]).pack(anchor="w")
+    if paso["escalares"]:
+        etiqueta(cuerpo, "Escalares:  " + ",  ".join(f"{k} = {formatear_numero(v)}" for k, v in paso["escalares"].items()),
+                 FUENTE_MONO, "texto").pack(anchor="w", pady=(6, 0))
+    if paso["condiciones"]:
+        _subtitulo_seccion(cuerpo, "CONDICIONES DE DIMENSIÓN (EN EL ORDEN DE CÁLCULO)")
+        for k, condicion in enumerate(paso["condiciones"], start=1):
+            marca = "✓" if condicion["cumple"] else "✗"
+            etiqueta(cuerpo, f"{k}. {marca}  {condicion['operacion']}:  {condicion['requisito']}", FUENTE_MONO,
+                     "exito" if condicion["cumple"] else "error", ajustar=40).pack(anchor="w")
+        if not paso["condiciones"][-1]["cumple"]:
+            etiqueta(cuerpo, "Las operaciones siguientes no se revisan porque esta no está definida.",
+                     FUENTE_PEQUENA, "texto_3", ajustar=40).pack(anchor="w")
+    _subtitulo_seccion(cuerpo, "PRIMERA OPERACIÓN")
+    etiqueta(cuerpo, paso["primera"], FUENTE_NORMAL, "texto_2", ajustar=40).pack(anchor="w")
+    if paso["propiedad"]:
+        nombre, enunciado = paso["propiedad"]
+        _subtitulo_seccion(cuerpo, "PROPIEDAD QUE SE USARÁ PARA VERIFICAR")
+        etiqueta(cuerpo, f"{nombre}:  {enunciado}", FUENTE_NORMAL, "texto_2", ajustar=40).pack(anchor="w")
+
+
+def _cuerpo_operacion(cuerpo, paso, detallado):
+    condicion = paso["condicion"]
+    etiqueta(cuerpo, ("✓  " if condicion["cumple"] else "✗  ") + "Condición: " + condicion["texto"],
+             FUENTE_PEQUENA_NEGRITA, "exito" if condicion["cumple"] else "error", ajustar=40).pack(anchor="w")
+    if not condicion["cumple"]:
+        etiqueta(cuerpo, paso["descripcion"], FUENTE_NORMAL, "error", ajustar=40).pack(anchor="w", pady=(6, 8))
+        dibujar_valores(cuerpo, paso["operandos"]).pack(anchor="w")
+        etiqueta(cuerpo, paso["siguiente"], FUENTE_PEQUENA_NEGRITA, "texto_3", ajustar=40).pack(anchor="w", pady=(8, 0))
+        return
+    etiqueta(cuerpo, "Regla:  " + paso["regla"], FUENTE_MONO, "texto_2", ajustar=40).pack(anchor="w", pady=(6, 0))
+    etiqueta(cuerpo, paso["descripcion"], FUENTE_NORMAL, "texto_2", ajustar=40).pack(anchor="w", pady=(4, 8))
+    _subtitulo_seccion(cuerpo, "OPERANDOS")
+    dibujar_valores(cuerpo, paso["operandos"]).pack(anchor="w")
+    for linea in paso["extra"]:
+        etiqueta(cuerpo, linea, FUENTE_MONO, "texto_3", ajustar=40).pack(anchor="w")
+    _subtitulo_seccion(cuerpo, "RESULTADO DE ESTE PASO")
+    fila = ctk.CTkFrame(cuerpo, fg_color="transparent")
+    fila.pack(anchor="w")
+    dibujar_valores(fila, [(paso["expresion"], paso["resultado"])]).pack(side="left")
+    if paso["dimension"]:
+        chip(fila, formatear_dimension(paso["dimension"]), "panel", "primario").pack(side="left", padx=(10, 0))
+
+    entradas = paso["entradas"]
+    if entradas:
+        def construir(marco):
+            for entrada in entradas:
+                etiqueta(marco, "\n".join(entrada["lineas"]), FUENTE_MONO, "texto_2", ajustar=80).pack(
+                    anchor="w", pady=(0, 4))
+        SeccionPlegable(cuerpo, "Cálculo de cada entrada", _plural(len(entradas), "entrada", "entradas"), True,
+                        construir, abierto=detallado or len(entradas) <= 4, estado=("", "texto_3")).pack(
+            fill="x", pady=(10, 0))
+    for advertencia in paso["advertencias"]:
+        etiqueta(cuerpo, "⚠  " + advertencia, FUENTE_PEQUENA, "advertencia", ajustar=40).pack(anchor="w", pady=(6, 0))
+    etiqueta(cuerpo, "Siguiente:  " + paso["siguiente"], FUENTE_PEQUENA_NEGRITA, "texto_3", ajustar=40).pack(
+        anchor="w", pady=(8, 0))
+
+
+def _cuerpo_respuesta(cuerpo, paso):
+    etiqueta(cuerpo, f"Expresión original:  {paso['expresion']}", FUENTE_MONO, "texto", ajustar=40).pack(anchor="w")
+    fila = ctk.CTkFrame(cuerpo, fg_color="transparent")
+    fila.pack(anchor="w", pady=(6, 0))
+    dibujar_valores(fila, [(paso["expresion"], paso["resultado"])]).pack(side="left")
+    if paso["dimension"]:
+        chip(fila, f"matriz {formatear_dimension(paso['dimension'])}", "panel", "primario").pack(side="left", padx=(10, 0))
+    if paso["orden"]:
+        _subtitulo_seccion(cuerpo, "ORDEN DE LAS OPERACIONES")
+        _lineas(cuerpo, [f"{k}. {expresion}" for k, expresion in enumerate(paso["orden"], start=1)], fuente=FUENTE_MONO)
+        _subtitulo_seccion(cuerpo, "REGLAS UTILIZADAS")
+        _lineas(cuerpo, [f"• {regla}" for regla in paso["definiciones"]])
+    if paso["propiedad"]:
+        _subtitulo_seccion(cuerpo, "PROPIEDAD USADA EN LA VERIFICACIÓN")
+        etiqueta(cuerpo, f"{paso['propiedad'][0]}:  {paso['propiedad'][1]}", FUENTE_NORMAL, "texto_2", ajustar=40).pack(anchor="w")
+    _subtitulo_seccion(cuerpo, "CONCLUSIÓN")
+    etiqueta(cuerpo, paso["conclusion"], FUENTE_NORMAL, "texto", ajustar=40).pack(anchor="w")
+
+
+def _texto_comparacion(comparacion):
+    """(linea, correcta) que explican una comparacion: dimensiones, entradas que coinciden y diferencias."""
+    di, dd = comparacion["dimensiones_izquierda"], comparacion["dimensiones_derecha"]
+    if di is None:
+        return [(("✓ " if comparacion["coinciden"] else "✕ ") + comparacion["conclusion"], comparacion["coinciden"])]
+    lineas = [(f"{'✓' if di == dd else '✕'} Dimensiones: {formatear_dimension(di)} y {formatear_dimension(dd)} "
+               + ("coinciden" if di == dd else "no coinciden"), di == dd)]
+    if di == dd:
+        total = di[0] * di[1]
+        iguales = total - len(comparacion["diferencias"])
+        lineas.append((f"{'✓' if iguales == total else '✕'} Entradas que coinciden: {iguales} de {total}", iguales == total))
+    lineas += [(linea, False) for linea in describir_diferencias(comparacion["diferencias"]) if di == dd]
+    return lineas
+
+
+def _tarjeta_comparacion(parent, titulo, izquierda, derecha, comparacion, nota=None):
+    tarjeta = tarjeta_seccion(parent, titulo, nota)
+    # Una matriz debajo de la otra: con expresiones largas no caben lado a lado.
+    for elemento in (izquierda, derecha):
+        dibujar_valores(tarjeta, [elemento]).pack(anchor="w", padx=14)
+    for linea, correcta in _texto_comparacion(comparacion):
+        etiqueta(tarjeta, linea, FUENTE_PEQUENA_NEGRITA, "exito" if correcta else "error", ajustar=44).pack(
+            anchor="w", padx=16)
+    ctk.CTkFrame(tarjeta, fg_color="transparent", height=10).pack()
+    return tarjeta
+
+
+def constructores_resultado_expresion(resolucion, informe, app):
+    expresion = resolucion["expresion"]
+    if resolucion["error"]:
+        hechas = [p for p in resolucion["operaciones"] if p["condicion"]["cumple"]]
+
+        def realizadas(parent):
+            tarjeta = tarjeta_seccion(parent, "Operaciones realizadas antes del error")
+            if not hechas:
+                etiqueta(tarjeta, "Ninguna: la primera operación ya no está definida.", FUENTE_NORMAL, "texto_2",
+                         ajustar=44).pack(anchor="w", padx=16, pady=(0, 14))
+                return
+            for paso in hechas:
+                dibujar_valores(tarjeta, [(paso["expresion"], paso["resultado"])]).pack(anchor="w", padx=14)
+            ctk.CTkFrame(tarjeta, fg_color="transparent", height=10).pack()
+
+        def condiciones(parent):
+            tarjeta = tarjeta_seccion(parent, "Condiciones de dimensión")
+            for condicion in resolucion["condiciones"]:
+                etiqueta(tarjeta, f"{'✓' if condicion['cumple'] else '✗'}  {condicion['operacion']}:  "
+                                  f"{condicion['requisito']}", FUENTE_MONO,
+                         "exito" if condicion["cumple"] else "error", ajustar=44).pack(anchor="w", padx=16)
+            ctk.CTkFrame(tarjeta, fg_color="transparent", height=10).pack()
+
+        return [
+            lambda p: tarjeta_estado(p, f"{expresion} no está definida", resolucion["error"], PALETA["error"], "✕"),
+            condiciones, realizadas,
+        ]
+
+    resultado, dimension = resolucion["resultado"], resolucion["dimension"]
+    correcto = informe["correcto"]
+    titulo = f"{expresion} = matriz {formatear_dimension(dimension)}" if dimension else \
+        f"{expresion} = {formatear_numero(resultado)}"
+    descripcion = ("Verificación superada: cada operación intermedia y el resultado final se recalcularon por "
+                   "caminos independientes y coinciden." if correcto else
+                   "La verificación encontró diferencias: revisa la pestaña Verificación.")
+    respuesta = resolucion["pasos"][-1]
+
+    def resultado_final(parent):
+        tarjeta = tarjeta_seccion(parent, "Resultado")
+        fila = ctk.CTkFrame(tarjeta, fg_color="transparent")
+        fila.pack(anchor="w", padx=14, pady=(0, 14))
+        dibujar_valores(fila, [(expresion, resultado)], tamano=14).pack(side="left")
+        if dimension:
+            chip(fila, formatear_dimension(dimension), "panel", "primario").pack(side="left", padx=(10, 0))
+
+    def orden(parent):
+        tarjeta = tarjeta_seccion(parent, "Orden de las operaciones",
+                                  f"Se calcula como {resolucion['interpretacion']}: primero lo de adentro de los "
+                                  f"paréntesis, luego transpuestas, productos y por último sumas y restas.")
+        if not resolucion["operaciones"]:
+            etiqueta(tarjeta, "No hay operaciones: la expresión es un solo dato.", FUENTE_NORMAL, "texto_2",
+                     ajustar=44).pack(anchor="w", padx=16, pady=(0, 14))
+            return
+        for k, paso in enumerate(resolucion["operaciones"], start=1):
+            dimension_paso = f"  ({formatear_dimension(paso['dimension'])})" if paso["dimension"] else ""
+            etiqueta(tarjeta, f"{k}. {paso['expresion']}{dimension_paso}", FUENTE_MONO, "texto").pack(anchor="w", padx=16)
+        ctk.CTkFrame(tarjeta, fg_color="transparent", height=10).pack()
+
+    def reglas(parent):
+        tarjeta = tarjeta_seccion(parent, "Reglas y propiedades")
+        _lineas(tarjeta, [f"• {regla}" for regla in respuesta["definiciones"]] or ["• Ninguna operación."], ajustar=60)
+        if respuesta["propiedad"]:
+            etiqueta(tarjeta, f"Verificación por la propiedad «{respuesta['propiedad'][0]}»: {respuesta['propiedad'][1]}",
+                     FUENTE_NORMAL, "texto_2", ajustar=44).pack(anchor="w", padx=16, pady=(6, 0))
+        ctk.CTkFrame(tarjeta, fg_color="transparent", height=10).pack()
+
+    def conclusion(parent):
+        tarjeta = tarjeta_seccion(parent, "Conclusión")
+        etiqueta(tarjeta, respuesta["conclusion"], FUENTE_NORMAL, "texto", ajustar=44).pack(anchor="w", padx=16)
+        etiqueta(tarjeta, ALCANCE_VERIFICACION, FUENTE_PEQUENA, "texto_3", ajustar=44).pack(anchor="w", padx=16, pady=(6, 14))
+
+    texto_copia = "\n".join([
+        f"Expresión: {expresion}",
+        f"Se calcula como: {resolucion['interpretacion']}",
+        "Orden: " + " → ".join(p["expresion"] for p in resolucion["operaciones"]),
+        f"Resultado ({formatear_dimension(dimension)}):" if dimension else f"Resultado: {formatear_numero(resultado)}",
+        matriz_a_texto(resultado, aumentada=False) if dimension else "",
+        f"Verificación: {'superada' if correcto else 'con diferencias'}",
+    ])
+    return [
+        lambda p: tarjeta_estado(p, titulo, descripcion, PALETA["exito"] if correcto else PALETA["error"],
+                                 "✓" if correcto else "✕"),
+        resultado_final, orden, reglas, conclusion,
+        lambda p: fila_copiar(p, app, texto_copia),
+    ]
+
+
+def constructores_verificacion(resolucion, informe):
+    if not informe["aplicable"]:
+        return [
+            lambda p: tarjeta_estado(p, "No hay resultado que verificar", informe["motivo"], PALETA["error"], "✕"),
+            lambda p: tarjeta_mensajes(p, "¿Qué se revisó?", [
+                "Se revisaron las dimensiones de cada operación en el orden de cálculo; la operación marcada con ✗ "
+                "no está definida, así que no existe un resultado que comprobar."], "error"),
+        ]
+    correcto = informe["correcto"]
+    lista = [lambda p: tarjeta_estado(
+        p, "Verificación superada" if correcto else "Se encontraron diferencias",
+        "Todas las comprobaciones coinciden en dimensiones y en cada entrada." if correcto else
+        "Al menos una comprobación no coincide: revisa los detalles marcados con ✕.",
+        PALETA["exito"] if correcto else PALETA["error"], "✓" if correcto else "✕")]
+
+    def por_paso(parent):
+        tarjeta = tarjeta_seccion(parent, "1. Cada operación intermedia",
+                                  "Cada resultado se recalcula desde sus propios operandos con un método independiente "
+                                  "y se compara entrada por entrada.")
+        if not informe["pasos"]:
+            etiqueta(tarjeta, "No hay operaciones intermedias.", FUENTE_NORMAL, "texto_2").pack(anchor="w", padx=16, pady=(0, 14))
+            return
+        for chequeo in informe["pasos"]:
+            def cuerpo(marco, c=chequeo):
+                lineas = [f"Método: {c['metodo']}"]
+                if c["dimension_esperada"]:
+                    lineas.append(f"Dimensión esperada {formatear_dimension(c['dimension_esperada'])} · obtenida "
+                                  f"{formatear_dimension(c['dimension_obtenida']) if c['dimension_obtenida'] else '—'}  "
+                                  + ("✓" if c["dimensiones_ok"] else "✕"))
+                lineas.append(f"Entradas que coinciden: {c['entradas_ok']} de {c['entradas_total']}")
+                lineas += describir_diferencias(c["diferencias"])
+                _lineas(marco, lineas, ajustar=80)
+            SeccionPlegable(tarjeta, f"Paso {chequeo['numero']}", chequeo["expresion"], chequeo["ok"], cuerpo,
+                            abierto=not chequeo["ok"],
+                            estado=(f"{'✓' if chequeo['ok'] else '✕'} {chequeo['entradas_ok']}/{chequeo['entradas_total']} "
+                                    f"entradas", "exito" if chequeo["ok"] else "error")).pack(fill="x", padx=14, pady=(0, 8))
+        ctk.CTkFrame(tarjeta, fg_color="transparent", height=6).pack()
+
+    def recalculo(parent):
+        global_ = informe["global"]
+        nota = global_["metodo"]
+        esperada = resolucion["dimension_esperada"]
+        if esperada:
+            nota += f" Dimensión esperada según las reglas: {formatear_dimension(esperada)}."
+        _tarjeta_comparacion(parent, "2. Recálculo independiente desde los datos originales",
+                             ("Procedimiento", resolucion["resultado"]), ("Recálculo", global_["esperado"]),
+                             global_["comparacion"], nota)
+
+    lista += [por_paso, recalculo]
+    identidad = informe["identidad"]
+    if identidad:
+        def ruta(parent):
+            titulo = f"3. Ruta alternativa: {identidad['nombre']}"
+            if not identidad["definida"]:
+                tarjeta_mensajes(parent, titulo, [f"La ruta {identidad['expresion']} no está definida: {identidad['motivo']}"])
+                return
+            nota = (f"Propiedad {identidad['enunciado']}. Se calcula {identidad['expresion']} desde las matrices "
+                    f"originales, sin reutilizar el resultado del procedimiento, y se compara.")
+            tarjeta = _tarjeta_comparacion(parent, titulo, (resolucion["expresion"], resolucion["resultado"]),
+                                           (identidad["expresion"], identidad["resolucion"]["resultado"]),
+                                           identidad["comparacion"], nota)
+            operaciones = identidad["resolucion"]["operaciones"]
+
+            def cuerpo(marco):
+                _lineas(marco, [f"{k}. {p['expresion']} = "
+                                + (matriz_en_linea(p["resultado"]) if isinstance(p["resultado"], list)
+                                   else formatear_numero(p["resultado"]))
+                                for k, p in enumerate(operaciones, start=1)], fuente=FUENTE_MONO, ajustar=80)
+            SeccionPlegable(tarjeta, "Cálculos de la ruta alternativa", _plural(len(operaciones), "operación", "operaciones"),
+                            True, cuerpo, estado=("", "texto_3")).pack(fill="x", padx=14, pady=(0, 12))
+        lista.append(ruta)
+    lista.append(lambda p: tarjeta_mensajes(p, "Alcance de esta verificación", [
+        ALCANCE_VERIFICACION,
+        "Para la demostración general de una propiedad, usa el modo Propiedades: allí se muestra el argumento "
+        "algebraico válido para todas las matrices de dimensiones compatibles."], "primario"))
+    return lista
+
+
+def constructores_resultado_propiedad(informe, al_cargar_contraejemplo):
+    propiedad = informe["propiedad"]
+    general, cumple = propiedad["general"], informe["cumple"]
+    if general and cumple:
+        estado = (propiedad["nombre"], "Se comprobó con tus matrices: ambos lados coinciden. La propiedad vale en "
+                  "general por la demostración de abajo.", PALETA["exito"], "✓")
+    elif general and cumple is False:
+        estado = (propiedad["nombre"], "Los lados no coinciden con estas matrices.", PALETA["error"], "✕")
+    elif general:
+        estado = (propiedad["nombre"], "No se pudo comprobar con estas matrices (revisa las dimensiones).",
+                  PALETA["advertencia"], "!")
+    elif cumple is False:
+        estado = (propiedad["nombre"], "Con tus matrices se obtiene un contraejemplo: la afirmación es falsa en "
+                  "general.", PALETA["advertencia"], "!")
+    else:
+        estado = (propiedad["nombre"], "La afirmación es falsa en general; estas matrices no la contradicen, pero "
+                  "el contraejemplo sí.", PALETA["advertencia"], "!")
+
+    if informe["tipo"] == "igualdad":
+        enunciado = f"{informe['lados'][0]['resolucion']['expresion']} = {informe['lados'][1]['resolucion']['expresion']}" \
+            if len(informe["lados"]) >= 2 else f"{propiedad['izquierda']} = {propiedad['derecha']}"
+    elif informe["tipo"] == "cancelacion":
+        enunciado = "Si AB = AC, ¿se puede concluir que B = C?"
+    else:
+        enunciado = "Si AB = O, ¿se puede concluir que A = O o B = O?"
+
+    def enunciado_y_condiciones(parent):
+        tarjeta = tarjeta_seccion(parent, "Enunciado y condiciones")
+        etiqueta(tarjeta, enunciado, (FAMILIA_MONO, 16, "bold"), "primario", ajustar=44).pack(anchor="w", padx=16)
+        etiqueta(tarjeta, "Condiciones: " + propiedad["condiciones"], FUENTE_NORMAL, "texto_2", ajustar=44).pack(
+            anchor="w", padx=16, pady=(4, 0))
+        if informe["matrices_extra"]:
+            dibujar_valores(tarjeta, list(informe["matrices_extra"].items())).pack(anchor="w", padx=14, pady=(6, 0))
+        ctk.CTkFrame(tarjeta, fg_color="transparent", height=10).pack()
+
+    lista = [lambda p: tarjeta_estado(p, *estado), enunciado_y_condiciones]
+    for lado in informe["lados"]:
+        def tarjeta_lado(parent, lado=lado):
+            resolucion = lado["resolucion"]
+            tarjeta = tarjeta_seccion(parent, f"{lado['etiqueta']}:  {resolucion['expresion']}")
+            if resolucion["error"]:
+                etiqueta(tarjeta, resolucion["error"], FUENTE_NORMAL, "error", ajustar=44).pack(anchor="w", padx=16, pady=(0, 14))
+                return
+            fila = ctk.CTkFrame(tarjeta, fg_color="transparent")
+            fila.pack(anchor="w", padx=14)
+            dibujar_valores(fila, [(resolucion["expresion"], resolucion["resultado"])]).pack(side="left")
+            if resolucion["dimension"]:
+                chip(fila, formatear_dimension(resolucion["dimension"]), "panel", "primario").pack(side="left", padx=(10, 0))
+            etiqueta(tarjeta, f"Calculado con {_plural(len(resolucion['operaciones']), 'operación', 'operaciones')}; "
+                              f"el detalle está en la pestaña Procedimiento.", FUENTE_PEQUENA, "texto_3", ajustar=44).pack(
+                anchor="w", padx=16, pady=(4, 14))
+        lista.append(tarjeta_lado)
+    for comparacion in informe["comparaciones"]:
+        def tarjeta_comp(parent, c=comparacion):
+            nota = None
+            if propiedad.get("error_comun") and c["titulo"].startswith(propiedad["error_comun"]):
+                nota = ("Este cálculo muestra el error frecuente de no invertir el orden: en general "
+                        f"{propiedad['error_comun']} no es igual a {propiedad['izquierda']}.")
+            izquierda, _, derecha = c["titulo"].partition("  frente a  ")
+            _tarjeta_comparacion(parent, f"Comparación: {izquierda} y {derecha}",
+                                 (izquierda, c["comparacion"]["izquierda"]), (derecha, c["comparacion"]["derecha"]),
+                                 c["comparacion"], nota)
+        lista.append(tarjeta_comp)
+
+    def conclusion(parent):
+        tarjeta = tarjeta_seccion(parent, "Conclusión")
+        etiqueta(tarjeta, informe["conclusion"], FUENTE_NORMAL, "texto", ajustar=44).pack(anchor="w", padx=16, pady=(0, 14))
+
+    def teoria(parent):
+        if general:
+            tarjeta = tarjeta_seccion(parent, "Demostración general",
+                                      "Válida para todas las matrices de dimensiones compatibles (no depende de los "
+                                      "números de este ejemplo).")
+            etiqueta(tarjeta, propiedad["demostracion"], FUENTE_MONO, "texto_2", ajustar=44).pack(anchor="w", padx=16, pady=(0, 14))
+            return
+        tarjeta = tarjeta_seccion(parent, "Advertencia")
+        etiqueta(tarjeta, propiedad["advertencia"], FUENTE_NORMAL, "advertencia", ajustar=44).pack(anchor="w", padx=16)
+        if propiedad.get("contraejemplo"):
+            boton_secundario(tarjeta, "Cargar el contraejemplo en A, B y C",
+                             lambda: al_cargar_contraejemplo(propiedad["contraejemplo"]), width=260).pack(
+                anchor="w", padx=16, pady=(8, 14))
+        else:
+            ctk.CTkFrame(tarjeta, fg_color="transparent", height=10).pack()
+
+    return lista + [conclusion, teoria]
+
+
+def constructores_verificacion_propiedad(informe):
+    lista = []
+    todo_correcto = True
+    for lado in informe["lados"]:
+        resolucion = lado["resolucion"]
+        verificacion = verificar_resolucion(resolucion)
+        todo_correcto = todo_correcto and (verificacion["correcto"] or not verificacion["aplicable"])
+
+        def tarjeta_lado(parent, lado=lado, resolucion=resolucion, verificacion=verificacion):
+            titulo = f"{lado['etiqueta']}:  {resolucion['expresion']}"
+            if not verificacion["aplicable"]:
+                tarjeta_mensajes(parent, titulo, [verificacion["motivo"]], "error")
+                return
+            lineas = [f"{'✓' if c['ok'] else '✕'}  Paso {c['numero']} · {c['expresion']}: {c['entradas_ok']} de "
+                      f"{c['entradas_total']} entradas coinciden" for c in verificacion["pasos"]]
+            lineas.append(f"{'✓' if verificacion['global']['ok'] else '✕'}  Recálculo independiente desde los datos "
+                          f"originales")
+            if verificacion["identidad"] and verificacion["identidad"]["definida"]:
+                lineas.append(f"{'✓' if verificacion['identidad']['ok'] else '✕'}  Ruta alternativa "
+                              f"({verificacion['identidad']['nombre']}): {verificacion['identidad']['expresion']}")
+            tarjeta = tarjeta_seccion(parent, titulo)
+            for linea in lineas:
+                etiqueta(tarjeta, linea, FUENTE_PEQUENA_NEGRITA, "exito" if linea.startswith("✓") else "error",
+                         ajustar=44).pack(anchor="w", padx=16)
+            ctk.CTkFrame(tarjeta, fg_color="transparent", height=10).pack()
+        lista.append(tarjeta_lado)
+
+    lista.insert(0, lambda p: tarjeta_estado(
+        p, "Cálculos verificados" if todo_correcto else "Hay cálculos con diferencias",
+        "Cada lado se calculó por separado y cada operación se recalculó de forma independiente." if todo_correcto
+        else "Revisa los pasos marcados con ✕.", PALETA["exito"] if todo_correcto else PALETA["error"],
+        "✓" if todo_correcto else "✕"))
+    lista.append(lambda p: tarjeta_mensajes(p, "Comprobación frente a demostración", [
+        "Comparar los dos lados con tus matrices es una comprobación de un caso particular.",
+        "La demostración general (en la pestaña Resultado) es la que garantiza la propiedad para todas las matrices "
+        "de dimensiones compatibles; un solo ejemplo numérico nunca la demuestra."], "primario"))
+    return lista
+
+
+class PaginaMatrices(PaginaBase):
+    """
+    Operaciones con matrices y propiedades teoricas. Permite escribir o construir
+    expresiones con A, B y C (sumas, restas, escalares, productos, transpuestas y
+    parentesis anidados), ver cada operacion intermedia, verificar el resultado por
+    caminos independientes, comprobar propiedades y estudiar contraejemplos.
+    """
+
+    titulo = "Operaciones con Matrices y Propiedades Teóricas"
+    subtitulo = "Expresiones con A, B y C paso a paso, verificación independiente y propiedades teóricas"
+    MODOS = ("Expresión", "Propiedades", "Contraejemplos", "Ejercicios")
+    EXPRESIONES = ("A + B", "A − B", "3A", "Aᵀ", "AB", "A + B − C", "2A − 3B + C", "A(B + C)", "AB + AC",
+                   "(A + B)C", "A(B − C)", "AB − AC", "(AB)ᵀ", "BᵀAᵀ", "(A + B)ᵀ", "Aᵀ + Bᵀ", "AᵀBC", "r(A + B)ᵀ")
+    TOKENS = ("A", "B", "C", "(", ")", "ᵀ", "+", "−", "r")
+    MATRICES_INICIALES = {"A": [[1, 2], [3, 4]], "B": [[0, 1], [-1, 2]], "C": [[2, 0], [1, -3]]}
+    ESCALARES_INICIALES = {"r": "2", "s": "1/2"}
+    CONTRAEJEMPLOS = {
+        "no_conmutatividad": ("El producto no es conmutativo", "propiedad", "no_conmutatividad"),
+        "orden_rectangular": ("AB está definido pero BA no", "expresion", "BA"),
+        "cancelacion": ("La cancelación no siempre vale", "propiedad", "cancelacion"),
+        "divisores_cero": ("Matrices no nulas con producto cero", "propiedad", "divisores_cero"),
+    }
 
     def __init__(self, parent, app):
         super().__init__(parent, app)
-        self.grid_rowconfigure(1, weight=1)
-        cuerpo = ctk.CTkFrame(self, fg_color="transparent")
-        cuerpo.grid(row=1, column=0, sticky="nsew", padx=24, pady=(0, 20))
-        cuerpo.grid_columnconfigure(0, weight=1)
-        cuerpo.grid_columnconfigure(1, weight=1)
-        cuerpo.grid_rowconfigure(1, weight=1)
-        controles = crear_tarjeta(cuerpo, "Datos y operación")
-        controles.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 12))
-        fila = ctk.CTkFrame(controles, fg_color="transparent")
-        fila.pack(fill="x", padx=16, pady=12)
-        self.dimension_a = ctk.CTkEntry(fila, width=68, placeholder_text="2×2")
-        self.dimension_b = ctk.CTkEntry(fila, width=68, placeholder_text="2×2")
-        self.dimension_c = ctk.CTkEntry(fila, width=68, placeholder_text="2×2")
-        self.dimension_a.insert(0, "2x2")
-        self.dimension_b.insert(0, "2x2")
-        self.dimension_c.insert(0, "2x2")
-        etiqueta(fila, "A:", FUENTE_PEQUENA_NEGRITA, "texto").pack(side="left")
-        self.dimension_a.pack(side="left", padx=(5, 14))
-        etiqueta(fila, "B:", FUENTE_PEQUENA_NEGRITA, "texto").pack(side="left")
-        self.dimension_b.pack(side="left", padx=(5, 14))
-        etiqueta(fila, "C:", FUENTE_PEQUENA_NEGRITA, "texto").pack(side="left")
-        self.dimension_c.pack(side="left", padx=(5, 14))
-        boton_secundario(fila, "Actualizar dimensiones", self.reconstruir, width=170).pack(side="left", padx=(0, 14))
-        self.operacion = ctk.CTkOptionMenu(fila, values=list(self.OPCIONES), width=230)
-        self.operacion.set("A + B")
-        self.operacion.pack(side="left", padx=(0, 12))
-        etiqueta(fila, "r:", FUENTE_PEQUENA_NEGRITA, "texto").pack(side="left")
-        self.escalar = ctk.CTkEntry(fila, width=75)
-        self.escalar.insert(0, "1/2")
-        self.escalar.pack(side="left", padx=5)
-        boton_primario(fila, "Calcular y comprobar", self.calcular, width=195).pack(side="right")
+        self.modo = "Expresión"
+        self.propiedad = "distributiva_izquierda"
+        self.hay_resultado = False
+        self._tarea_previa = None
+        self.grid_rowconfigure(2, weight=1)
+        self._crear_barra()
+        self._crear_contenido()
+        self._cambiar_modo("Expresión")
 
-        izquierda = crear_tarjeta(cuerpo, "Matrices de entrada")
-        izquierda.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
-        self.entrada_area = AreaDesplazable(izquierda, PALETA["panel"])
-        self.entrada_area.pack(fill="both", expand=True, padx=12, pady=12)
-        derecha = crear_tarjeta(cuerpo, "Resultado, procedimiento y comprobación")
-        derecha.grid(row=1, column=1, sticky="nsew", padx=(10, 0))
-        self.salida = ctk.CTkTextbox(derecha, wrap="word", font=FUENTE_MONO, fg_color=PALETA["entrada"], text_color=PALETA["texto"])
-        self.salida.pack(fill="both", expand=True, padx=12, pady=12)
-        self.reconstruir()
+    # --- construccion ---------------------------------------------------
+
+    def _crear_barra(self):
+        barra = crear_tarjeta(self)
+        barra.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 14))
+        fila = ctk.CTkFrame(barra, fg_color="transparent")
+        fila.pack(fill="x", padx=18, pady=(12, 8))
+        self.selector_modo = ctk.CTkSegmentedButton(
+            fila, values=list(self.MODOS), command=self._cambiar_modo, font=FUENTE_PEQUENA_NEGRITA, height=32,
+            fg_color=PALETA["panel_2"], selected_color=PALETA["primario"], selected_hover_color=PALETA["primario_hover"],
+            unselected_color=PALETA["panel_2"], unselected_hover_color=PALETA["secundario_hover"],
+            text_color=PALETA["texto"])
+        self.selector_modo.pack(side="left")
+
+        escalares = ctk.CTkFrame(fila, fg_color="transparent")
+        escalares.pack(side="right")
+        self.entradas_escalares = {}
+        for nombre in ("r", "s"):
+            etiqueta(escalares, f"{nombre} =", FUENTE_MONO, "texto_3").pack(side="left", padx=(12, 4))
+            entrada = ctk.CTkEntry(escalares, width=64, height=32, justify="center", font=FUENTE_MONO, corner_radius=8,
+                                   border_width=2, fg_color=PALETA["entrada"], border_color=PALETA["borde"],
+                                   text_color=PALETA["texto"])
+            entrada.insert(0, self.ESCALARES_INICIALES[nombre])
+            entrada.pack(side="left")
+            entrada.bind("<KeyRelease>", lambda _e, en=entrada: self._validar_escalar(en))
+            self.entradas_escalares[nombre] = entrada
+
+        self.fila_controles = ctk.CTkFrame(barra, fg_color="transparent")
+        self.fila_controles.pack(fill="x", padx=18, pady=(0, 12))
+
+        self.controles_expresion = ctk.CTkFrame(self.fila_controles, fg_color="transparent")
+        etiqueta(self.controles_expresion, "Expresión", FUENTE_PEQUENA_NEGRITA, "texto_3").pack(side="left", padx=(0, 8))
+        self.entrada_expresion = ctk.CTkEntry(
+            self.controles_expresion, width=230, height=36, font=(FAMILIA_MONO, 15), corner_radius=10, border_width=2,
+            fg_color=PALETA["entrada"], border_color=PALETA["borde"], text_color=PALETA["texto"])
+        self.entrada_expresion.insert(0, "A(B + C)")
+        self.entrada_expresion.pack(side="left")
+        self.entrada_expresion.bind("<KeyRelease>", lambda e: None if e.keysym in ("Return", "KP_Enter")
+                                    else self._programar_previa())
+        self.entrada_expresion.bind("<Return>", lambda _e: self.resolver())
+        BarraFichas(self.controles_expresion, [(t, lambda t=t: self._insertar(t)) for t in self.TOKENS]).pack(
+            side="left", padx=(8, 0))
+        self.boton_expresiones = boton_secundario(self.controles_expresion, "Ejemplos  ▾", self._abrir_expresiones,
+                                                  width=112, height=34)
+        self.boton_expresiones.pack(side="left", padx=(8, 0))
+        self.menu_expresiones = self._menu()
+        for expresion in self.EXPRESIONES:
+            self.menu_expresiones.add_command(label=expresion, command=lambda e=expresion: self._usar_expresion(e))
+
+        self.controles_propiedad = ctk.CTkFrame(self.fila_controles, fg_color="transparent")
+        etiqueta(self.controles_propiedad, "Propiedad", FUENTE_PEQUENA_NEGRITA, "texto_3").pack(side="left", padx=(0, 8))
+        self.boton_propiedad = boton_secundario(self.controles_propiedad, "", self._abrir_propiedades, width=330,
+                                                height=34, anchor="w")
+        self.boton_propiedad.pack(side="left")
+        self.boton_contraejemplo = boton_secundario(self.controles_propiedad, "Cargar contraejemplo",
+                                                    lambda: self._estudiar_contraejemplo(
+                                                        PROPIEDADES_POR_CLAVE[self.propiedad]["contraejemplo"]),
+                                                    width=170, height=34)
+        self.menu_propiedades = self._menu()
+        grupos = []
+        for propiedad in PROPIEDADES_MATRICIALES:
+            if propiedad["grupo"] not in grupos:
+                grupos.append(propiedad["grupo"])
+        for grupo in grupos:
+            submenu = self._menu(self.menu_propiedades)
+            for propiedad in PROPIEDADES_MATRICIALES:
+                if propiedad["grupo"] == grupo:
+                    submenu.add_command(label=self._texto_propiedad(propiedad),
+                                        command=lambda c=propiedad["clave"]: self._usar_propiedad(c))
+            self.menu_propiedades.add_cascade(label=grupo, menu=submenu)
+
+        self.controles_info = etiqueta(self.fila_controles, "", FUENTE_PEQUENA, "texto_3", ajustar=None)
+
+    def _menu(self, padre=None):
+        return tk.Menu(padre or self, tearoff=0, font=FUENTE_NORMAL, bd=0, relief="flat",
+                       bg=resolver_color(PALETA["panel_2"]), fg=resolver_color(PALETA["texto"]),
+                       activebackground=resolver_color(PALETA["primario"]), activeforeground=TEXTO_SOBRE_PRIMARIO)
 
     @staticmethod
-    def _dimension(texto):
-        partes = texto.lower().replace("×", "x").split("x")
-        if len(partes) != 2:
-            raise ValueError("Usa dimensiones positivas con el formato filas×columnas; por ejemplo, 2x3.")
-        filas, columnas = (int(x.strip()) for x in partes)
-        if not (1 <= filas <= LIMITE_DIMENSION and 1 <= columnas <= LIMITE_DIMENSION):
-            raise ValueError(f"Cada dimensión debe estar entre 1 y {LIMITE_DIMENSION}.")
-        return filas, columnas
+    def _texto_propiedad(propiedad):
+        if propiedad.get("tipo", "igualdad") == "igualdad":
+            return f"{propiedad['nombre']}:  {propiedad['izquierda']} = {propiedad['derecha']}"
+        return propiedad["nombre"]
 
-    def reconstruir(self):
-        try:
-            fa, ca = self._dimension(self.dimension_a.get())
-            fb, cb = self._dimension(self.dimension_b.get())
-            fc, cc = self._dimension(self.dimension_c.get())
-        except ValueError as error:
-            self._escribir("Error de dimensiones\n\n" + str(error))
-            return
-        self.entrada_area.limpiar()
-        p = self.entrada_area.interior
-        etiqueta(p, f"A ({fa}×{ca})", FUENTE_SECCION, "primario").pack(anchor="w")
-        self.entrada_a = MatrizEntrada(p)
-        self.entrada_a.pack(anchor="w", padx=4, pady=(4, 14))
-        self.entrada_a.configurar(fa, ca, [f"a{j + 1}" for j in range(ca)], valores=[[1 if i == j else 0 for j in range(ca)] for i in range(fa)])
-        etiqueta(p, f"B ({fb}×{cb})", FUENTE_SECCION, "primario").pack(anchor="w")
-        self.entrada_b = MatrizEntrada(p)
-        self.entrada_b.pack(anchor="w", padx=4, pady=(4, 14))
-        self.entrada_b.configurar(fb, cb, [f"b{j + 1}" for j in range(cb)], valores=[[1 if i == j else 0 for j in range(cb)] for i in range(fb)])
-        etiqueta(p, f"C ({fc}×{cc})", FUENTE_SECCION, "primario").pack(anchor="w")
-        self.entrada_c = MatrizEntrada(p)
-        self.entrada_c.pack(anchor="w", padx=4, pady=(4, 14))
-        self.entrada_c.configurar(fc, cc, [f"c{j + 1}" for j in range(cc)], valores=[[1 if i == j else 0 for j in range(cc)] for i in range(fc)])
-        etiqueta(p, "Para las propiedades algebraicas, elija A, B y C con las dimensiones compatibles requeridas por cada producto.", FUENTE_PEQUENA, "texto_3", ajustar=45).pack(anchor="w", padx=4)
-        self._escribir("Ingrese las matrices. Se aceptan enteros, decimales y fracciones exactas como −3/2.")
+    def _crear_contenido(self):
+        contenido = ctk.CTkFrame(self, fg_color="transparent")
+        contenido.grid(row=2, column=0, sticky="nsew", padx=24, pady=(0, 22))
+        contenido.grid_columnconfigure(0, weight=1, uniform="columnas")
+        contenido.grid_columnconfigure(1, weight=1, uniform="columnas")
+        contenido.grid_rowconfigure(0, weight=1)
 
-    def _escribir(self, texto):
-        self.salida.configure(state="normal")
-        self.salida.delete("1.0", "end")
-        self.salida.insert("1.0", texto)
-        self.salida.configure(state="disabled")
+        self.tarjeta_datos = crear_tarjeta(contenido)
+        self.tarjeta_datos.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
+        self.tarjeta_datos.grid_columnconfigure(0, weight=1)
+        self.tarjeta_datos.grid_rowconfigure(1, weight=1)
+        cabecera = ctk.CTkFrame(self.tarjeta_datos, fg_color="transparent")
+        cabecera.grid(row=0, column=0, sticky="ew", padx=18, pady=(16, 8))
+        etiqueta(cabecera, "Matrices A, B y C", FUENTE_SECCION, "texto").pack(side="left")
+        chip(cabecera, "tamaño con − y +", "panel_2", "texto_3", FUENTE_PEQUENA).pack(side="right")
+
+        self.area_datos = AreaDesplazable(self.tarjeta_datos, PALETA["panel"])
+        self.area_datos.grid(row=1, column=0, sticky="nsew", padx=(14, 10), pady=(0, 8))
+        self.bloques = {}
+        for nombre in ("A", "B", "C"):
+            self._crear_bloque(self.area_datos.interior, nombre)
+        marco_previa = ctk.CTkFrame(self.area_datos.interior, fg_color=PALETA["panel_2"], corner_radius=10)
+        marco_previa.pack(fill="x", anchor="w", padx=4, pady=(6, 6))
+        etiqueta(marco_previa, "INTERPRETACIÓN Y DIMENSIONES", FUENTE_PEQUENA_NEGRITA, "primario").pack(
+            anchor="w", padx=14, pady=(10, 4))
+        self.contenido_previa = ctk.CTkFrame(marco_previa, fg_color="transparent")
+        self.contenido_previa.pack(fill="x", padx=14, pady=(0, 12))
+
+        acciones = ctk.CTkFrame(self.tarjeta_datos, fg_color="transparent")
+        acciones.grid(row=2, column=0, sticky="ew", padx=18, pady=(4, 16))
+        boton_primario(acciones, "Calcular y verificar", self.resolver, height=44, width=180).pack(side="left")
+        boton_secundario(acciones, "⚄  Aleatorio", self.aleatorio, width=104, height=34).pack(side="left", padx=(10, 0))
+        boton_secundario(acciones, "↺  Limpiar", self.limpiar, width=92, height=34).pack(side="left", padx=(8, 0))
+
+        self.pestanas = ctk.CTkTabview(
+            contenido, fg_color=PALETA["panel"], corner_radius=14, border_width=1, border_color=PALETA["borde"],
+            segmented_button_fg_color=PALETA["panel_2"], segmented_button_selected_color=PALETA["primario"],
+            segmented_button_selected_hover_color=PALETA["primario_hover"],
+            segmented_button_unselected_color=PALETA["panel_2"],
+            segmented_button_unselected_hover_color=PALETA["secundario_hover"], text_color=PALETA["texto"])
+        self.pestanas.grid(row=0, column=1, sticky="nsew")
+        pestana_resultado = self.pestanas.add("Resultado")
+        pestana_pasos = self.pestanas.add("Procedimiento")
+        pestana_verificacion = self.pestanas.add("Verificación")
+        pestana_resultado.grid_columnconfigure(0, weight=1)
+        pestana_resultado.grid_rowconfigure(1, weight=1)
+        self.aviso = ctk.CTkLabel(
+            pestana_resultado, text="⟳  Los datos cambiaron. Presiona «Calcular y verificar» para actualizar.",
+            font=FUENTE_PEQUENA_NEGRITA, fg_color=PALETA["panel_2"], text_color=PALETA["advertencia"],
+            corner_radius=8, height=32)
+        self.area_resultado = AreaDesplazable(pestana_resultado, PALETA["panel"])
+        self.area_resultado.grid(row=1, column=0, sticky="nsew")
+        self.panel_pasos = PanelPasos(pestana_pasos, PALETA["panel"],
+                                      "Aquí aparecerá cada operación intermedia: condición de dimensiones, regla, "
+                                      "cálculo de cada entrada y resultado.", constructor=tarjeta_paso_matricial)
+        self.panel_pasos.pack(fill="both", expand=True)
+        self.area_verificacion = AreaDesplazable(pestana_verificacion, PALETA["panel"])
+        self.area_verificacion.pack(fill="both", expand=True)
+
+    def _crear_bloque(self, parent, nombre):
+        valores = self.MATRICES_INICIALES[nombre]
+        marco = ctk.CTkFrame(parent, fg_color="transparent")
+        marco.pack(anchor="w", fill="x", padx=4, pady=(4, 12))
+        cabecera = ctk.CTkFrame(marco, fg_color="transparent")
+        cabecera.pack(anchor="w")
+        chip(cabecera, nombre, "primario", TEXTO_SOBRE_PRIMARIO, (FAMILIA, 14, "bold")).pack(side="left", padx=(0, 12))
+        filas = Contador(cabecera, "filas", len(valores), 1, LIMITE_DIMENSION,
+                         lambda _v, n=nombre: self._redimensionar(n), en_linea=True)
+        filas.pack(side="left", padx=(0, 12))
+        columnas = Contador(cabecera, "columnas", len(valores[0]), 1, LIMITE_DIMENSION,
+                            lambda _v, n=nombre: self._redimensionar(n), en_linea=True)
+        columnas.pack(side="left")
+        matriz = MatrizEntrada(marco, al_cambiar=self._al_cambiar_datos)
+        matriz.pack(anchor="w", pady=(6, 0))
+        self.bloques[nombre] = {"filas": filas, "columnas": columnas, "matriz": matriz}
+        self._configurar_matriz(nombre, valores)
+
+    # --- datos ---------------------------------------------------------------
+
+    def _configurar_matriz(self, nombre, valores=None):
+        bloque = self.bloques[nombre]
+        filas, columnas = bloque["filas"].get(), bloque["columnas"].get()
+        bloque["matriz"].configurar(filas, columnas, [str(j + 1) for j in range(columnas)],
+                                    [str(i + 1) for i in range(filas)], None, valores)
+
+    def _redimensionar(self, nombre):
+        self._configurar_matriz(nombre)
+        self._al_cambiar_datos()
+
+    def establecer_matriz(self, nombre, valores):
+        bloque = self.bloques[nombre]
+        bloque["filas"].set(len(valores))
+        bloque["columnas"].set(len(valores[0]))
+        self._configurar_matriz(nombre, valores)
+
+    def _dimensiones(self):
+        return {nombre: (b["filas"].get(), b["columnas"].get()) for nombre, b in self.bloques.items()}
+
+    def _leer_matrices(self, nombres):
+        matrices = {}
+        for nombre in sorted(nombres):
+            if nombre in self.bloques:
+                try:
+                    matrices[nombre] = self.bloques[nombre]["matriz"].valores()
+                except ValueError as error:
+                    raise ValueError(f"Matriz {nombre}: {error}") from None
+        return matrices
+
+    def _leer_escalares(self, nombres):
+        escalares = {}
+        for nombre in sorted(nombres):
+            entrada = self.entradas_escalares[nombre]
+            try:
+                escalares[nombre] = convertir_numero(entrada.get())
+            except ValueError as error:
+                entrada.configure(border_color=PALETA["error"])
+                raise ValueError(f"Escalar {nombre}: {error}") from None
+        return escalares
+
+    def _validar_escalar(self, entrada):
+        valido = _numero_o_nada(entrada.get()) is not None
+        entrada.configure(border_color=PALETA["borde"] if valido else PALETA["error"])
+        self._al_cambiar_datos()
+
+    def _insertar(self, token):
+        self.entrada_expresion.insert("insert", token)
+        self.entrada_expresion.focus_set()
+        self._programar_previa()
+
+    def _usar_expresion(self, expresion):
+        self.entrada_expresion.delete(0, "end")
+        self.entrada_expresion.insert(0, expresion)
+        self._al_cambiar_datos()
+
+    def _usar_propiedad(self, clave):
+        self.propiedad = clave
+        propiedad = PROPIEDADES_POR_CLAVE[clave]
+        self.boton_propiedad.configure(text="  " + self._texto_propiedad(propiedad) + "  ▾")
+        if propiedad.get("contraejemplo"):
+            self.boton_contraejemplo.pack(side="left", padx=(8, 0))
+        else:
+            self.boton_contraejemplo.pack_forget()
+        self._al_cambiar_datos()
+
+    def _abrir_expresiones(self):
+        boton = self.boton_expresiones
+        self.menu_expresiones.tk_popup(boton.winfo_rootx(), boton.winfo_rooty() + boton.winfo_height() + 4)
+
+    def _abrir_propiedades(self):
+        boton = self.boton_propiedad
+        self.menu_propiedades.tk_popup(boton.winfo_rootx(), boton.winfo_rooty() + boton.winfo_height() + 4)
+
+    def _programar_previa(self):
+        if self._tarea_previa is not None:
+            self.after_cancel(self._tarea_previa)
+        self._tarea_previa = self.after(150, self._al_cambiar_datos)
+
+    def _al_cambiar_datos(self):
+        self._tarea_previa = None
+        self._actualizar_previa()
+        if self.hay_resultado and self.modo in ("Expresión", "Propiedades"):
+            self.aviso.grid(row=0, column=0, sticky="ew", padx=4, pady=(0, 8))
+
+    # --- vista previa -----------------------------------------------------
+
+    def _actualizar_previa(self):
+        for hijo in self.contenido_previa.winfo_children():
+            hijo.destroy()
+        parent = self.contenido_previa
+        dimensiones = self._dimensiones()
+        escalares = {n for n, e in self.entradas_escalares.items() if _numero_o_nada(e.get()) is not None}
+        if self.modo == "Expresión":
+            texto = self.entrada_expresion.get()
+            try:
+                nodo = analizar_expresion_matricial(texto)
+                condiciones, final = revisar_dimensiones(nodo, dimensiones, escalares)
+            except ErrorExpresion as error:
+                self.entrada_expresion.configure(border_color=PALETA["error"])
+                if error.posicion is not None and texto.strip():
+                    marca = " " * min(error.posicion, len(texto)) + "▲"
+                    etiqueta(parent, texto + "\n" + marca, FUENTE_MONO, "error").pack(anchor="w")
+                etiqueta(parent, str(error), FUENTE_NORMAL, "error", ajustar=48).pack(anchor="w", pady=(4, 0))
+                return
+            self.entrada_expresion.configure(border_color=PALETA["borde"])
+            self._previa_expresion(parent, nodo, condiciones, final)
+        elif self.modo == "Propiedades":
+            propiedad = PROPIEDADES_POR_CLAVE[self.propiedad]
+            if propiedad.get("tipo", "igualdad") != "igualdad":
+                etiqueta(parent, propiedad["advertencia"], FUENTE_NORMAL, "texto_2", ajustar=48).pack(anchor="w")
+                etiqueta(parent, "Condiciones: " + propiedad["condiciones"], FUENTE_PEQUENA, "texto_3", ajustar=48).pack(
+                    anchor="w", pady=(4, 0))
+                return
+            etiqueta(parent, f"{propiedad['izquierda']}  =  {propiedad['derecha']}", (FAMILIA_MONO, 15, "bold"),
+                     "primario").pack(anchor="w")
+            etiqueta(parent, "Condiciones: " + propiedad["condiciones"], FUENTE_PEQUENA, "texto_3", ajustar=48).pack(
+                anchor="w", pady=(2, 6))
+            extra = {}
+            if propiedad.get("extra"):
+                m, n = dimensiones["A"]
+                extra = {"cero": {"O": (m, n)}, "identidad_columnas": {"I": (n, n)},
+                         "identidad_filas": {"I": (m, m)}}[propiedad["extra"]]
+            for lado in (propiedad["izquierda"], propiedad["derecha"]):
+                nodo = analizar_expresion_matricial(lado)
+                try:
+                    condiciones, final = revisar_dimensiones(nodo, {**dimensiones, **extra}, escalares)
+                except ErrorExpresion as error:
+                    etiqueta(parent, f"{nodo.texto()}:  {error}", FUENTE_PEQUENA_NEGRITA, "error", ajustar=48).pack(anchor="w")
+                    continue
+                etiqueta(parent, f"{nodo.texto()}:  " + (f"matriz {formatear_dimension(final)}" if final else
+                                                         "no está definida con estos tamaños" if condiciones else "—"),
+                         FUENTE_PEQUENA_NEGRITA, "exito" if final else "error").pack(anchor="w")
+        elif self.modo == "Contraejemplos":
+            etiqueta(parent, "Cada contraejemplo muestra que una afirmación es falsa en general. Usa «Estudiar paso a "
+                             "paso» para cargarlo en A, B y C.", FUENTE_NORMAL, "texto_2", ajustar=48).pack(anchor="w")
+        else:
+            etiqueta(parent, "Elige un ejercicio y presiona «Resolver en la calculadora»: se cargan sus matrices y se "
+                             "resuelve con procedimiento y verificación.", FUENTE_NORMAL, "texto_2", ajustar=48).pack(anchor="w")
 
     @staticmethod
-    def _matriz_texto(A):
-        return matriz_a_texto(validar_matriz(A))
+    def _previa_expresion(parent, nodo, condiciones, final):
+        etiqueta(parent, "Se calcula como:  " + nodo.texto_completo(), FUENTE_MONO, "primario", ajustar=48).pack(anchor="w")
+        if condiciones:
+            etiqueta(parent, "Orden de cálculo y condiciones:", FUENTE_PEQUENA_NEGRITA, "texto_3").pack(anchor="w", pady=(6, 0))
+            for k, condicion in enumerate(condiciones, start=1):
+                etiqueta(parent, f"{k}. {'✓' if condicion['cumple'] else '✗'}  {condicion['operacion']}:  "
+                                 f"{condicion['requisito']}", FUENTE_MONO, "exito" if condicion["cumple"] else "error",
+                         ajustar=48).pack(anchor="w")
+        if final:
+            etiqueta(parent, f"Resultado esperado: matriz {formatear_dimension(final)}", FUENTE_PEQUENA_NEGRITA,
+                     "texto").pack(anchor="w", pady=(6, 0))
+        elif condiciones and not condiciones[-1]["cumple"]:
+            etiqueta(parent, "Con estos tamaños la expresión no está definida: cambia las dimensiones o la expresión.",
+                     FUENTE_PEQUENA_NEGRITA, "error", ajustar=48).pack(anchor="w", pady=(6, 0))
 
-    def _comparacion_texto(self, nombre, dato):
-        if dato.get("definida") is False:
-            return f"{nombre}: no aplicable\n{dato['error']}\n"
-        lineas = [f"{nombre}", f"Lado izquierdo ({dato['dimensiones_izquierda'][0]}×{dato['dimensiones_izquierda'][1]}):\n{self._matriz_texto(dato['izquierda'])}",
-                  f"Lado derecho ({dato['dimensiones_derecha'][0]}×{dato['dimensiones_derecha'][1]}):\n{self._matriz_texto(dato['derecha'])}",
-                  ("✓ Coinciden exactamente entrada por entrada." if dato["coinciden"] else f"✗ Diferencias: {dato['diferencias']}"),
-                  "Esta es una verificación del caso introducido; no sustituye la demostración algebraica general.\n"]
-        return "\n".join(lineas)
+    # --- modos y acciones -------------------------------------------------
 
-    def calcular(self):
+    def _cambiar_modo(self, modo):
+        self.modo = modo
+        self.selector_modo.set(modo)
+        for controles in (self.controles_expresion, self.controles_propiedad, self.controles_info):
+            controles.pack_forget()
+        if modo == "Expresión":
+            self.controles_expresion.pack(side="left")
+        elif modo == "Propiedades":
+            self.controles_propiedad.pack(side="left")
+            self._usar_propiedad(self.propiedad)
+        else:
+            self.controles_info.configure(text="Contraejemplos clásicos del producto de matrices." if modo == "Contraejemplos"
+                                          else "Ejercicios tipo examen con su resolución guiada.")
+            self.controles_info.pack(side="left")
+        self.hay_resultado = False
+        self.aviso.grid_remove()
+        if modo == "Contraejemplos":
+            self._mostrar_contraejemplos()
+        elif modo == "Ejercicios":
+            self._mostrar_ejercicios()
+        else:
+            texto = ("Escribe una expresión (o elige un ejemplo) y presiona «Calcular y verificar»." if modo == "Expresión"
+                     else "Elige una propiedad y presiona «Calcular y verificar» para comprobarla con tus matrices.")
+            self._vaciar(texto)
+        self._actualizar_previa()
+
+    def _vaciar(self, texto):
+        self.area_resultado.llenar([lambda p: placeholder(p, "▦", texto)])
+        self.panel_pasos.mostrar_placeholder()
+        self.area_verificacion.llenar([lambda p: placeholder(
+            p, "✓", "Aquí aparecerá la verificación: cada operación recalculada, el recálculo independiente y, cuando "
+                    "exista, una ruta alternativa por propiedad.")])
+
+    def resolver(self):
         try:
-            A, B, C, r = self.entrada_a.valores(), self.entrada_b.valores(), self.entrada_c.valores(), convertir_numero(self.escalar.get())
-            op = self.operacion.get()
-            if op in ("A + B", "A − B", "rA", "Aᵀ", "AB"):
-                clave = {"A + B": "suma", "A − B": "resta", "rA": "escalar", "Aᵀ": "transpuesta", "AB": "producto"}[op]
-                dato = procedimiento_operacion_matrices(A, clave, B, r)
-                texto = f"{op}\n\nA =\n{self._matriz_texto(A)}\n\n" + (f"B =\n{self._matriz_texto(B)}\n\n" if clave in ("suma", "resta", "producto") else "")
-                texto += "PROCEDIMIENTO\n" + "\n".join(f"{i + 1}. {x}" for i, x in enumerate(dato["pasos"]))
-                texto += f"\n\nRESULTADO\n{self._matriz_texto(dato['resultado'])}\n\nCONCLUSIÓN\n{dato['conclusion']}"
-            elif op == "Propiedades de la transpuesta":
-                datos = verificar_propiedades_transpuesta(A, B, r)
-                nombres = {"doble": "(Aᵀ)ᵀ = A", "suma": "(A+B)ᵀ = Aᵀ+Bᵀ", "escalar": "(rA)ᵀ = rAᵀ", "producto": "(AB)ᵀ = BᵀAᵀ"}
-                texto = "PROPIEDADES DE LA TRANSPUESTA\n\n" + "\n".join(self._comparacion_texto(nombres[k], v) for k, v in datos.items())
-            elif op == "Propiedades algebraicas":
-                datos = verificar_propiedades_algebraicas(A, B, C, r, Fraction(2))
-                texto = "PROPIEDADES ALGEBRAICAS (s = 2)\n\n" + "\n".join(self._comparacion_texto(k.replace("_", " "), v) for k, v in datos.items())
-            elif op == "Contraejemplos":
-                datos = contraejemplos_matriciales()
-                texto = "CONTRAEJEMPLOS: AFIRMACIONES FALSAS EN GENERAL\n\n"
-                for nombre, dato in datos.items():
-                    texto += nombre.replace("_", " ").upper() + "\n"
-                    for clave, valor in dato.items():
-                        texto += f"{clave} =\n{self._matriz_texto(valor)}\n" if isinstance(valor, list) else f"{clave}: {valor}\n"
-                    texto += "\n"
+            if self.modo == "Expresión":
+                self._resolver_expresion()
+            elif self.modo == "Propiedades":
+                self._resolver_propiedad()
+            elif self.modo == "Contraejemplos":
+                self._mostrar_contraejemplos()
             else:
-                texto = "EJERCICIOS TIPO EXAMEN\n\n"
-                for numero, ejercicio in enumerate(ejercicios_matrices(), 1):
-                    texto += f"{numero}. {ejercicio['tema']}\n{ejercicio['consigna']}\n"
-                    for clave in ("A", "B"):
-                        if clave in ejercicio:
-                            texto += f"{clave} =\n{self._matriz_texto([[convertir_numero(x) for x in fila] for fila in ejercicio[clave]])}\n"
-                    texto += "\n"
-            self._escribir(texto)
-        except ValueError as error:
-            self._escribir("OPERACIÓN NO REALIZADA\n\n" + str(error) + "\n\nRevise las dimensiones antes de calcular.")
+                self._mostrar_ejercicios()
+        except (ErrorExpresion, ValueError) as error:
+            self.app.notificar(str(error), "error")
+
+    def _resolver_expresion(self):
+        nodo = analizar_expresion_matricial(self.entrada_expresion.get())
+        matrices = self._leer_matrices(nodo.nombres_matrices())
+        escalares = self._leer_escalares(nodo.nombres_escalares())
+        resolucion = resolver_expresion_matricial(nodo, matrices, escalares)
+        informe = verificar_resolucion(resolucion)
+        self.hay_resultado = True
+        self.aviso.grid_remove()
+        self.area_resultado.llenar(constructores_resultado_expresion(resolucion, informe, self.app), retardo=70)
+        self.panel_pasos.mostrar_pasos(resolucion["pasos"])
+        self.area_verificacion.llenar(constructores_verificacion(resolucion, informe), retardo=60)
+        self.pestanas.set("Resultado")
+        if resolucion["error"]:
+            self.app.notificar(f"{resolucion['expresion']} no está definida con estas dimensiones (ver paso marcado).", "error")
+        elif informe["correcto"]:
+            self.app.notificar(f"{resolucion['expresion']} calculada · verificación superada ✓", "exito")
+        else:
+            self.app.notificar("La verificación encontró diferencias: revisa la pestaña Verificación.", "error")
+
+    def _resolver_propiedad(self):
+        propiedad = PROPIEDADES_POR_CLAVE[self.propiedad]
+        tipo = propiedad.get("tipo", "igualdad")
+        if tipo == "igualdad":
+            nombres, escalares = set(), set()
+            for expresion in (propiedad["izquierda"], propiedad["derecha"], propiedad.get("error_comun")):
+                if expresion:
+                    nodo = analizar_expresion_matricial(expresion)
+                    nombres |= nodo.nombres_matrices()
+                    escalares |= nodo.nombres_escalares()
+            nombres = {n for n in nombres if n in self.bloques} | {"A"}
+        else:
+            nombres, escalares = ({"A", "B", "C"} if tipo == "cancelacion" else {"A", "B"}), set()
+        informe = verificar_propiedad_matricial(self.propiedad, self._leer_matrices(nombres),
+                                                self._leer_escalares(escalares))
+        self.hay_resultado = True
+        self.aviso.grid_remove()
+        self.area_resultado.llenar(constructores_resultado_propiedad(informe, self._estudiar_contraejemplo), retardo=70)
+        pasos = []
+        abreviaturas = {"Lado izquierdo": "Izq.", "Lado derecho": "Der.", "Error frecuente": "Error frecuente"}
+        for lado in informe["lados"]:
+            resolucion = lado["resolucion"]
+            pasos.append({"tipo": "seccion", "titulo": f"{lado['etiqueta']}:  {resolucion['expresion']}",
+                          "detalle": f"Se calcula por separado desde los datos originales ("
+                                     f"{_plural(len(resolucion['operaciones']), 'operación', 'operaciones')})."})
+            for paso in resolucion["pasos"]:
+                copia = dict(paso)
+                copia["lado"] = abreviaturas.get(lado["etiqueta"], lado["etiqueta"])
+                pasos.append(copia)
+        if pasos:
+            self.panel_pasos.mostrar_pasos(pasos)
+        else:
+            self.panel_pasos.mostrar_placeholder()
+        self.area_verificacion.llenar(constructores_verificacion_propiedad(informe), retardo=60)
+        self.pestanas.set("Resultado")
+        tipo_aviso = "exito" if informe["cumple"] and propiedad["general"] else "aviso"
+        self.app.notificar(f"{propiedad['nombre']}: {informe['conclusion'].split('.')[0]}.", tipo_aviso)
+
+    def _mostrar_contraejemplos(self):
+        datos = contraejemplos_matriciales()
+
+        def tarjeta(parent, clave, dato):
+            titulo, _tipo, _objetivo = self.CONTRAEJEMPLOS[clave]
+            caja = tarjeta_seccion(parent, titulo)
+            matrices = [(k, dato[k]) for k in ("A", "B", "C") if k in dato]
+            productos = [(k, dato[k]) for k in ("AB", "BA", "AC") if k in dato]
+            dibujar_valores(caja, matrices).pack(anchor="w", padx=14)
+            if productos:
+                dibujar_valores(caja, productos).pack(anchor="w", padx=14, pady=(4, 0))
+            etiqueta(caja, dato["conclusion"], FUENTE_NORMAL, "texto_2", ajustar=44).pack(anchor="w", padx=16, pady=(6, 0))
+            boton_secundario(caja, "Estudiar paso a paso", lambda: self._estudiar_contraejemplo(clave), width=190).pack(
+                anchor="w", padx=16, pady=(8, 14))
+
+        self.hay_resultado = False
+        self.area_resultado.llenar([lambda p, c=c, d=d: tarjeta(p, c, d) for c, d in datos.items()], retardo=60)
+        self.panel_pasos.mostrar_placeholder("Usa «Estudiar paso a paso» en un contraejemplo para ver aquí sus cálculos.")
+        self.area_verificacion.llenar([lambda p: placeholder(
+            p, "✓", "Al estudiar un contraejemplo, aquí se verifican los cálculos de cada lado.")])
+
+    def _estudiar_contraejemplo(self, clave):
+        dato = contraejemplos_matriciales()[clave]
+        for nombre in ("A", "B", "C"):
+            if nombre in dato:
+                self.establecer_matriz(nombre, dato[nombre])
+        _titulo, tipo, objetivo = self.CONTRAEJEMPLOS[clave]
+        if tipo == "expresion":
+            self._cambiar_modo("Expresión")
+            self._usar_expresion(objetivo)
+        else:
+            self.propiedad = objetivo
+            self._cambiar_modo("Propiedades")
+        destello(self.tarjeta_datos)
+        self.resolver()
+
+    def _mostrar_ejercicios(self):
+        def tarjeta(parent, numero, ejercicio):
+            caja = tarjeta_seccion(parent, f"{numero}. {ejercicio['tema']}")
+            etiqueta(caja, ejercicio["consigna"], FUENTE_NORMAL, "texto_2", ajustar=44).pack(anchor="w", padx=16)
+            matrices = [(k, [[convertir_numero(v) for v in fila] for fila in ejercicio[k]])
+                        for k in ("A", "B", "C") if k in ejercicio]
+            if matrices:
+                dibujar_valores(caja, matrices).pack(anchor="w", padx=14, pady=(6, 0))
+            boton_secundario(caja, "Resolver en la calculadora", lambda: self._resolver_ejercicio(ejercicio),
+                             width=210).pack(anchor="w", padx=16, pady=(8, 14))
+
+        self.hay_resultado = False
+        self.area_resultado.llenar([lambda p, n=n, e=e: tarjeta(p, n, e)
+                                    for n, e in enumerate(ejercicios_matrices(), start=1)], retardo=60)
+        self.panel_pasos.mostrar_placeholder("Elige un ejercicio y presiona «Resolver en la calculadora».")
+        self.area_verificacion.llenar([lambda p: placeholder(p, "✓", "Aquí aparecerá la verificación del ejercicio.")])
+
+    def _resolver_ejercicio(self, ejercicio):
+        for nombre in ("A", "B", "C"):
+            if nombre in ejercicio:
+                self.establecer_matriz(nombre, ejercicio[nombre])
+        if ejercicio.get("contraejemplo"):
+            self._estudiar_contraejemplo(ejercicio["contraejemplo"])
+            return
+        if ejercicio.get("propiedad"):
+            self.propiedad = ejercicio["propiedad"]
+            self._cambiar_modo("Propiedades")
+        else:
+            self._cambiar_modo("Expresión")
+            self._usar_expresion(ejercicio.get("expresion", "A + B"))
+        destello(self.tarjeta_datos)
+        self.resolver()
+
+    def aleatorio(self):
+        for nombre, bloque in self.bloques.items():
+            filas, columnas = bloque["filas"].get(), bloque["columnas"].get()
+            self._configurar_matriz(nombre, [[random.randint(-4, 4) for _ in range(columnas)] for _ in range(filas)])
+        self._al_cambiar_datos()
+        destello(self.tarjeta_datos)
+        self.app.notificar("Se generaron matrices aleatorias con los tamaños actuales.", "info")
+
+    def limpiar(self):
+        for bloque in self.bloques.values():
+            bloque["matriz"].limpiar()
+        self.hay_resultado = False
+        self.aviso.grid_remove()
+        if self.modo in ("Expresión", "Propiedades"):
+            self._vaciar("Las matrices quedaron en cero. Escribe sus entradas y presiona «Calcular y verificar».")
+        self._actualizar_previa()
 
 
 class PaginaInformativa(PaginaBase):
@@ -3923,6 +6197,8 @@ class PaginaAyuda(PaginaInformativa):
         f"Presiona el botón para resolver (o {ATAJO_RESOLVER}). El resultado aparece en la pestaña «Resultado».",
         "En «Procedimiento» elige «Todos» para ver cada operación o «Paso a paso» para avanzar (o reproducir) una a una.",
         "¿Sin datos? Usa «Cargar ejemplo…» o «Aleatorio». «Limpiar» pone todas las casillas en 0.",
+        "En «Operaciones con matrices» escribe una expresión con A, B y C (por ejemplo 2A − 3B + C, A(B + C) o "
+        "(AB)ᵀ) o constrúyela con los botones de símbolos; la transpuesta también se escribe A^T o A'.",
     ]
     ATAJOS = [
         ("Enter", "Ir a la siguiente casilla"),
@@ -3944,6 +6220,8 @@ class PaginaAyuda(PaginaInformativa):
                                  "en la forma escalonada de [A | 0] hay un pivote en cada columna."),
         ("Sistema homogéneo", "Todos los términos independientes son 0 (Ax = 0). Siempre tiene al menos la solución trivial."),
         ("Producto Ax", "Si A = [a1 … an], entonces Ax = x1·a1 + … + xn·an: una combinación lineal de las columnas de A."),
+        ("Producto de matrices", "AB existe si columnas(A) = filas(B); (AB)ᵢⱼ = Σₖ aᵢₖbₖⱼ. En general AB ≠ BA."),
+        ("Transpuesta", "Aᵀ intercambia filas y columnas: (Aᵀ)ᵢⱼ = aⱼᵢ, y (AB)ᵀ = BᵀAᵀ (se invierte el orden)."),
         ("Linealidad de Ax", "Para toda matriz A: A(u + v) = Au + Av y A(cu) = c(Au)."),
     ]
 
@@ -4004,7 +6282,7 @@ class AplicacionAlgebraLineal(_Ventana):
         ("vectorial", "Σ", "Combinaciones lineales", PaginaCombinaciones),
         ("axb", "≡", "Ecuación Ax = b", PaginaAxb),
         ("propiedades_ax", "⇄", "Propiedades de Ax", PaginaPropiedades),
-        ("matrices", "▦", "Operaciones con matrices", PaginaMatrices),
+        ("matrices", "⊞", "Operaciones con matrices", PaginaMatrices),
         ("independencia", "⊥", "Independencia lineal", PaginaIndependencia),
         ("metodo", "☰", "Método de eliminación", PaginaMetodo),
         ("ayuda", "?", "Ayuda", PaginaAyuda),
@@ -4140,9 +6418,9 @@ class AplicacionAlgebraLineal(_Ventana):
             self.bind_all(secuencia, self._atajo_resolver, add="+")
 
     def _atajo_resolver(self, _evento=None):
-        pagina = self.paginas.get(self.pagina_actual)
-        if isinstance(pagina, PaginaSistema):
-            pagina.resolver()
+        resolver = getattr(self.paginas.get(self.pagina_actual), "resolver", None)
+        if resolver is not None:
+            resolver()
         return "break"
 
     def notificar(self, texto, tipo="info"):
