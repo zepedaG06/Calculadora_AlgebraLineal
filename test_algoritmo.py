@@ -1006,6 +1006,49 @@ class PruebasRegresionModulos(unittest.TestCase):
         self.assertEqual(datos["Av"], [3, 6])
 
 
+class PruebasRegresionBugFraction(unittest.TestCase):
+    """Pruebas de regresión para asegurar que no se produzca contaminación por float ni AttributeError."""
+
+    def test_caso1_independencia_enteros_dependientes(self):
+        """Caso 1: matriz con enteros nativos dependiente [[1, 2], [2, 4]]."""
+        res = programa.analizar_independencia([[1, 2], [2, 4]])
+        self.assertFalse(res["independiente"])
+        self.assertEqual(res["num_pivotes"], 1)
+        self.assertIsNotNone(res["relacion"])
+        self.assertEqual(programa.multiplicar_matriz_vector([[1, 2], [2, 4]], res["relacion"]), [0, 0])
+
+    def test_caso2_independencia_enteros_independientes(self):
+        """Caso 2: matriz sencilla con enteros nativos linealmente independiente."""
+        res = programa.analizar_independencia([[1, 0], [0, 1]])
+        self.assertTrue(res["independiente"])
+        self.assertEqual(res["num_pivotes"], 2)
+        self.assertIsNone(res["relacion"])
+
+    def test_caso3_independencia_con_fracciones(self):
+        """Caso 3: matriz con objetos Fraction explícitos."""
+        res = programa.analizar_independencia([[Fraction(1, 2), Fraction(1, 3)], [Fraction(1, 4), Fraction(1, 6)]])
+        self.assertFalse(res["independiente"])
+
+    def test_caso4_independencia_mezcla_de_tipos(self):
+        """Caso 4: mezcla de enteros y Fraction."""
+        matriz = [[1, Fraction(1, 2)], [2, Fraction(3, 2)]]
+        res = programa.analizar_independencia(matriz)
+        self.assertTrue(res["independiente"])
+        self.assertEqual(res["num_pivotes"], 2)
+
+    def test_caso5_forma_escalonada_directa_con_enteros(self):
+        """Caso 5: llamada directa a forma_escalonada con enteros sin producir floats ni AttributeError."""
+        matriz = [[1, 2, 0], [2, 4, 0]]
+        escalonada, pivotes, pasos = programa.forma_escalonada(matriz, 2, ["x1", "x2"])
+        self.assertEqual(escalonada, [[Fraction(1), Fraction(2), Fraction(0)], [Fraction(0), Fraction(0), Fraction(0)]])
+        self.assertEqual(pivotes, [0])
+        for paso in pasos:
+            self.assertIsInstance(paso.operacion, str)
+            for fila in paso.matriz:
+                for val in fila:
+                    self.assertIsInstance(val, Fraction)
+
+
 if __name__ == "__main__":
     unittest.main()
 

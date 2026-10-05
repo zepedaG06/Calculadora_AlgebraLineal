@@ -81,3 +81,83 @@ En Windows usa `py` en lugar de `python3`.
 ## Framework elegido
 
 Se usa CustomTkinter porque permite una interfaz de escritorio moderna con modo oscuro, tarjetas, botones estilizados y entradas claras para matrices. No resuelve operaciones matemáticas: solo mejora la presentación visual y se conecta con el algoritmo manual del programa. Las matrices de cada paso se dibujan en un `Canvas` de Tkinter para que incluso un sistema de 10 × 10 (unos 100 pasos) se muestre con fluidez.
+
+## Determinantes, inversas y teoremas
+
+Ejecuta `py main.py` en Windows. El archivo histórico sigue funcionando como
+punto de entrada compatible. En **Determinantes e inversas** introduce una fila
+por línea y separa entradas con espacios o punto y coma. Acepta fracciones,
+enteros y decimales. B solo se utiliza para la propiedad de la inversa de AB;
+k se utiliza para multiplicar una fila o sumar un múltiplo de otra.
+
+Métodos de determinante: fórmula 2×2, Sarrus (exclusivamente 3×3), expansión por
+cofactores y reducción triangular para cualquier orden. Los menores se calculan
+por reducción triangular; se define el menor de una entrada de una matriz 1×1
+como 1. En la reducción no se escalan filas: solo se intercambian y se suman
+múltiplos, registrando el signo y multiplicando la diagonal final.
+
+La inversa se calcula por Gauss-Jordan sobre `[A|I]` o mediante
+`adj(A)/det(A)`. Cada resultado verifica exactamente ambos productos con A.
+La opción de comparación calcula los dos métodos y comprueba igualdad exacta.
+Una matriz singular produce un diagnóstico, nunca una inversa falsa.
+
+Las propiedades muestran ambos lados, comparación y conclusión, comprobando
+primero las condiciones necesarias. Las verificaciones de familias paramétricas
+comprueban tanto `Ap=b` como `Av=0` para cada vector dirección. Una comprobación
+numérica de una propiedad es un caso particular, no una demostración general.
+
+La sección **0. Ver Teoremas Clave del Módulo** conserva un resumen académico;
+también puedes consultarlo sin abrir la GUI con `py -X utf8 main.py --teoremas`.
+Los procedimientos tienen desplazamiento vertical y horizontal; el menú lateral
+también permite desplazarse cuando el tamaño o escalado de pantalla lo requiere.
+
+## Organización y pruebas completas
+
+```text
+main.py                    Entrada limpia (sin abrir ventanas al importar)
+Programa 1_Grupo3.py        GUI y compatibilidad con imports históricos
+modulos/modulo_matrices.py  Núcleo exacto, sin dependencias gráficas ni E/S
+teoremas/teoremas_matrices.py  Contenido académico y logo ASCII de consola
+test_algoritmo.py           Suite histórica, conservada
+test_matrices_avanzadas.py  Determinantes, inversas, propiedades y regresión
+```
+
+Ejecuta `py -m unittest discover -v` para incluir todos los tests. Las pruebas
+contrastan determinantes con la definición independiente por permutaciones,
+comparan las inversas y verifican singularidad, Fraction y vectores del espacio
+nulo. No se necesitan bibliotecas matemáticas externas.
+
+El núcleo admite matrices mayores que las de la GUI; esta limita la captura
+a 10×10. Para matrices grandes conviene reducción triangular y Gauss-Jordan:
+la adjunta requiere muchos menores y genera procedimientos más extensos.
+
+## Resultado, procedimiento y verificación
+
+Todas las páginas de cálculo y el ejemplo del método de eliminación separan
+**Resultado**, **Procedimiento** y **Verificación**. El resultado muestra la
+respuesta y su interpretación. El procedimiento muestra las condiciones reales,
+fórmulas, operandos, operaciones, matrices intermedias, pivotes y parámetros.
+La verificación utiliza los datos originales: sustituciones en sistemas,
+reconstrucción de combinaciones, ambos productos de inversas y comparación de
+determinantes por métodos distintos.
+
+Los pasos se pueden consultar completos o uno por uno. Los cálculos de cada
+entrada y el desarrollo de menores se pueden desplegar; las matrices conservan
+desplazamiento horizontal. La barra de `[A|I]` separa los bloques de n columnas;
+la de `[A|b]` separa la última columna, y A se representa sin barra.
+
+Las propiedades calculan cada lado por separado. Las básicas tienen un recálculo
+independiente de la expresión sin usar la identidad que se está verificando.
+Las de inversas/determinantes se contrastan cambiando Gauss-Jordan por adjunta y
+reducción triangular por cofactores. La comparación muestra las entradas de
+ambos lados y concluye «Se cumple» o «No se cumple».
+
+Para un sistema inconsistente se comprueba una combinación de las ecuaciones
+originales: `yᵀA=0` y `yᵀb≠0`, lo que produciría una contradicción si existiera
+solución. Para independencia se comprueba una relación no trivial cuando hay
+dependencia; cuando hay independencia se construye L y se verifica `LA=I`:
+si `Ac=0`, entonces `c=LAc=0`.
+
+Los datos visuales viven en `modulos/pasos.py` y `modulos/informes.py`, sin
+dependencias gráficas. `test_presentacion_matematica.py` comprueba estructura,
+condiciones, ambas rutas y detección de resultados deliberadamente incorrectos.
