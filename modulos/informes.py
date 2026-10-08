@@ -7,6 +7,7 @@ Las verificaciones incluyen sustituciones, productos y certificados exactos.
 from fractions import Fraction
 from . import modulo_matrices as m
 from .pasos import etapa, valor, condicion
+from teoremas.teoremas_matrices import DEMOSTRACIONES_PROPIEDADES
 
 
 def comparar(izquierda, derecha, titulo="Comparación exacta"):
@@ -24,7 +25,7 @@ def comparar(izquierda, derecha, titulo="Comparación exacta"):
     else:
         calculos = [f"Dimensiones diferentes: {len(L)}×{len(L[0])} y {len(R)}×{len(R[0])}."]
     return etapa(titulo, valores=[valor("Lado izquierdo", izquierda), valor("Lado derecho", derecha)],
-                 calculos=calculos, conclusion="Se cumple" if iguales else "No se cumple")
+                 calculos=calculos, conclusion="Se cumple para las matrices ingresadas" if iguales else "No se cumple para las matrices ingresadas")
 
 
 def condiciones_propiedad(informe):
@@ -38,6 +39,27 @@ def condiciones_propiedad(informe):
             condiciones.append(condicion(f"{lado['etiqueta']} · {c['operacion']}: {c['requisito']}", c["cumple"]))
     return etapa("Datos y condiciones de ambos lados", formula=informe["propiedad"]["condiciones"],
                  valores=[valor(n, M) for n, M in valores.items()], condiciones=condiciones)
+
+
+def pasos_expresion(resolucion, verificacion):
+    """Panel completo: conserva datos y operaciones de cada ruta independiente."""
+    identidad = verificacion.get("identidad")
+    if not identidad:
+        return list(resolucion["pasos"])
+    pasos = []
+    lados = [("Lado izquierdo", resolucion)]
+    if identidad.get("resolucion"):
+        lados.append(("Lado derecho", identidad["resolucion"]))
+    for etiqueta, ruta in lados:
+        pasos.append({"tipo": "seccion", "titulo": f"{etiqueta}: {ruta['expresion']}",
+                      "detalle": "Evaluación desde las matrices originales; cada operación tiene sus propios operandos."})
+        for paso in ruta["pasos"]:
+            pasos.append({**paso, "lado": etiqueta})
+    if identidad["definida"]:
+        pasos.append({"tipo": "didactica", "etapa": comparar(resolucion["resultado"], identidad["resolucion"]["resultado"], "Verificación de ambos lados")})
+    else:
+        pasos.append({"tipo": "didactica", "etapa": etapa("Identidad no evaluable con estos datos", conclusion=identidad["motivo"])})
+    return pasos
 
 
 def producto(A, B, nombre="AB"):
@@ -89,6 +111,8 @@ def verificacion_inversa(A, inversa):
 
 
 def informe_inversa(A, metodo="gauss_jordan"):
+    if metodo not in ("gauss_jordan", "adjunta"):
+        raise ValueError("Método de inversa desconocido.")
     A = m.validar_cuadrada(A)
     det = m.calcular_determinante(A)
     if det["determinante"] == 0:
@@ -128,6 +152,22 @@ def informe_comparacion_inversas(A):
 
 def informe_propiedad_avanzada(clave, matrices, escalares=None):
     """Expone cada ruta y la verifica cambiando algoritmos de inversa y determinante."""
+    if clave.startswith("inversa_") or clave == "det_inversa":
+        datos, etapas, chequeos = {}, [], []
+        for nombre in (("A", "B") if clave == "inversa_producto" else ("A",)):
+            A = m.validar_cuadrada(matrices[nombre])
+            datos[nombre] = A
+            det = m.calcular_determinante(A)
+            etapas.append(etapa(f"Comprobar invertibilidad de {nombre}", valores=[valor(nombre, A)], subpasos=det["etapas"],
+                                condiciones=[condicion(f"det({nombre})={det['determinante']}≠0", det["determinante"] != 0)]))
+            if det["determinante"] == 0:
+                chequeos.extend(informe_inversa(A)["verificacion"]["etapas"])
+        if clave == "inversa_producto" and len(datos["A"]) != len(datos["B"]):
+            raise ValueError("A y B deben ser cuadradas del mismo orden.")
+        if chequeos:
+            return {"definido": False, "titulo": "Propiedad no evaluable", "resultado": None,
+                    "conclusion": "La propiedad no puede evaluarse: alguna matriz es singular (det=0) y su inversa no está definida.",
+                    "procedimiento": etapas, "verificacion": {"aplicable": False, "correcto": False, "etapas": chequeos}}
     calculo = m.verificar_propiedad_avanzada(clave, matrices, escalares)
     etapas = [etapa("Datos y condiciones", formula=calculo["propiedad"],
                     valores=[valor(nombre, M) for nombre, M in matrices.items()], condiciones=calculo["condiciones"])]
@@ -141,9 +181,14 @@ def informe_propiedad_avanzada(clave, matrices, escalares=None):
     verificacion += [comparar(calculo["izquierda"], alternativo["izquierda"], "Lado izquierdo: cálculo frente a recálculo"),
                      comparar(calculo["derecha"], alternativo["derecha"], "Lado derecho: cálculo frente a recálculo"),
                      comparar(alternativo["izquierda"], alternativo["derecha"], "Comparar los dos lados recalculados")]
+    if clave == "inversa_producto":
+        AB, paso = producto(matrices["A"], matrices["B"], "AB (desde datos originales)")
+        verificacion += [paso, *verificacion_inversa(AB, calculo["izquierda"])["etapas"]]
     correcto = calculo["izquierda"] == alternativo["izquierda"] and calculo["derecha"] == alternativo["derecha"]
     return {"definido": True, "titulo": calculo["conclusion"], "resultado": None, "lados": calculo["lados"],
             "conclusion": calculo["propiedad"] + ": " + calculo["conclusion"], "procedimiento": etapas,
+            "teoria": etapa("Demostración general", "Esta explicación usa las hipótesis del teorema; es independiente de la comprobación numérica.",
+                             formula=calculo["propiedad"], conclusion=DEMOSTRACIONES_PROPIEDADES[clave]),
             "verificacion": {"correcto": correcto, "etapas": verificacion}}
 
 
@@ -154,7 +199,7 @@ def etapas_eliminacion(pasos, n, bloques=False):
         texto = paso["explicacion"] if not bloques else "La operación se aplica a todas las columnas de ambos bloques."
         etapas.append(etapa(paso["operacion"], texto,
             valores=[valor("Matriz aumentada", paso["matriz"], separador=n, pivotes=paso.get("pivotes", []), filas=paso.get("filas", []))],
-            calculos=[f"Pivote ({i+1},{j+1}) = {paso['matriz'][i][j]}" for i, j in paso.get("pivotes", [])]))
+            calculos=paso.get("calculos", []) + [f"Pivote ({i+1},{j+1}) = {paso['matriz'][i][j]}" for i, j in paso.get("pivotes", [])]))
     return etapas
 
 
@@ -193,7 +238,7 @@ def certificado_inconsistencia(A, b):
     """Encuentra y con yᵀA=0 e yᵀb≠0 y lo verifica contra datos originales."""
     n, filas = len(A[0]), len(A)
     I = m.matriz_identidad(filas)
-    reducida, _, _ = m.gauss_jordan([a + [bi] + e for a, bi, e in zip(A, b, I)], n)
+    reducida, _, operaciones = m.gauss_jordan([a + [bi] + e for a, bi, e in zip(A, b, I)], n)
     for f in reducida:
         if all(v == 0 for v in f[:n]) and f[n] != 0:
             y = f[n+1:]
@@ -201,7 +246,9 @@ def certificado_inconsistencia(A, b):
             yb = sum((yi * bi for yi, bi in zip(y, b)), Fraction(0))
             correcto = ya == [0] * n and yb != 0
             return {"correcto": correcto, "y": y, "yA": ya, "yb": yb,
-                "etapas": [etapa("Certificado independiente de inconsistencia", "Si Ax=b tuviera solución, yᵀAx=yᵀb implicaría 0=yᵀb≠0.",
+                "etapas": [etapa("Construir el certificado", "Se reduce [A | b | I]; el bloque I registra la combinación de filas y.",
+                    subpasos=etapas_eliminacion(operaciones, n, bloques=True)),
+                    etapa("Certificado independiente de inconsistencia", "Si Ax=b tuviera solución, yᵀAx=yᵀb implicaría 0=yᵀb≠0.",
                     valores=[valor("y", y), valor("A original", A), valor("b original", b)],
                     calculos=[f"yᵀA = {ya}", "yᵀb = " + " + ".join(f"({yi})·({bi})" for yi, bi in zip(y, b)) + f" = {yb}"],
                     conclusion="Se cumple: el sistema original es inconsistente." if correcto else "No se cumple") ]}
@@ -213,12 +260,14 @@ def verificacion_sistema(r, combinacion=False, independencia=False):
     b = [f[-1] for f in r["matriz_inicial"]]
     if independencia and r["independiente"]:
         filas, n = len(A), len(A[0])
-        reducida, pivotes, _ = m.gauss_jordan([a + e for a, e in zip(A, m.matriz_identidad(filas))], n)
+        reducida, pivotes, operaciones = m.gauss_jordan([a + e for a, e in zip(A, m.matriz_identidad(filas))], n)
         L = [f[n:] for f in reducida[:n]]
         LA, paso = producto(L, A, "L·A")
         I = m.matriz_identidad(n)
         correcto = len(pivotes) == n and LA == I
-        return {"correcto": correcto, "etapas": [etapa("Certificado de independencia", "Una inversa por la izquierda L con LA=I prueba: Ac=0 ⇒ LAc=c=0. No basta comprobar un único vector trivial.",
+        return {"correcto": correcto, "etapas": [etapa("Certificado: obtener L desde [A | I]", "Se conservan las primeras n filas del bloque derecho de la reducción.",
+            subpasos=etapas_eliminacion(operaciones, n, bloques=True)),
+            etapa("Certificado de independencia", "Una inversa por la izquierda L con LA=I prueba: Ac=0 ⇒ LAc=c=0. No basta comprobar un único vector trivial.",
             valores=[valor("L", L)]), paso, comparar(LA, I), etapa("Conclusión", conclusion="Se cumple: solo existe la solución trivial." if correcto else "No se cumple")]}
     if independencia:
         c = r["relacion"]

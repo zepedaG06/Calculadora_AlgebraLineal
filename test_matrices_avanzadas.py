@@ -110,8 +110,8 @@ class Propiedades(unittest.TestCase):
                 r = m.verificar_propiedad_matricial(clave, {"A": A, "B": [[2, 0], [1, 3]]}, {"k": F(-3, 2)})
                 self.assertTrue(r["cumple"])
                 self.assertEqual(r["izquierda"], r["derecha"])
-                self.assertEqual(r["conclusion"], "Se cumple")
-                self.assertEqual(r["pasos"][-1], "Se cumple")
+                self.assertEqual(r["conclusion"], "Se cumple para las matrices ingresadas")
+                self.assertEqual(r["pasos"][-1], "Se cumple para las matrices ingresadas")
 
     def test_hipotesis(self):
         for clave in ("inversa_inversa", "inversa_producto", "inversa_transpuesta", "det_inversa"):

@@ -191,7 +191,7 @@ class PropiedadesDidacticas(unittest.TestCase):
         r = d.comparar([[1, 2], [3, 4]], [[1, 2], [3, 5]])
         self.assertEqual(len(r["calculos"]), 4)
         self.assertIn("≠", r["calculos"][-1])
-        self.assertEqual(r["conclusion"], "No se cumple")
+        self.assertEqual(r["conclusion"], "No se cumple para las matrices ingresadas")
 
 
 if __name__ == "__main__":

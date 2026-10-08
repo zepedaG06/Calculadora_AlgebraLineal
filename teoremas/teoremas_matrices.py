@@ -29,6 +29,21 @@ LOGO_ASCII = r"""
 """
 
 
+DEMOSTRACIONES_PROPIEDADES = {
+    "inversa_inversa": "Si X=A⁻¹, AX=XA=I. Por definición y unicidad de la inversa, X⁻¹=A.",
+    "inversa_producto": "Sean A y B cuadradas invertibles del mismo orden. (AB)(B⁻¹A⁻¹)=A(BB⁻¹)A⁻¹=I y (B⁻¹A⁻¹)(AB)=B⁻¹(A⁻¹A)B=I. Por unicidad, (AB)⁻¹=B⁻¹A⁻¹.",
+    "inversa_transpuesta": "Transponer AA⁻¹=A⁻¹A=I da (A⁻¹)ᵀAᵀ=Aᵀ(A⁻¹)ᵀ=I. Por unicidad, (Aᵀ)⁻¹=(A⁻¹)ᵀ.",
+    "det_inversa": "Por multiplicatividad, det(A)det(A⁻¹)=det(AA⁻¹)=det(I)=1. Como det(A)≠0, det(A⁻¹)=1/det(A).",
+    "det_producto": "Las columnas de AB son combinaciones de las columnas de A con coeficientes de B. Al expandir por multilinealidad del determinante, los términos con columnas repetidas son cero; los restantes son det(A) multiplicado por la suma con signos de permutaciones que define det(B). Así det(AB)=det(A)det(B).",
+    "det_transpuesta": "En la fórmula de Leibniz, cambiar cada permutación por su inversa conserva su signo e intercambia los índices de fila y columna. Las sumas para det(A) y det(Aᵀ) son iguales.",
+    "det_identidad": "En la fórmula de Leibniz para I, solo la permutación identidad aporta un término distinto de cero: su signo y su producto son 1.",
+    "det_intercambio": "El determinante es alternante en sus filas: intercambiar dos filas cambia el signo de cada término de la suma de Leibniz.",
+    "det_escalar_fila": "Por multilinealidad en las filas, det(...,kFi,...)=k det(...,Fi,...), incluso si k=0.",
+    "det_suma_fila": "Para i≠j, la multilinealidad da det(...,Fi+kFj,...)=det(A)+k det(...,Fj,...,Fj,...). El segundo determinante es cero por tener dos filas iguales.",
+    "det_triangular": "En una matriz triangular, toda permutación distinta de la identidad selecciona alguna entrada del lado nulo de la diagonal. En Leibniz solo permanece el producto de la diagonal.",
+}
+
+
 def texto_teoremas():
     """Devuelve el contenido académico listo para consulta sin realizar E/S."""
     return "\n\n".join(f"{i}. {titulo}\n{texto}" for i, (titulo, texto) in enumerate(TEOREMAS_MATRICES, 1))

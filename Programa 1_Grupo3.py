@@ -1744,9 +1744,9 @@ def cuerpo_etapa(parent, paso, detallado=False):
     if paso["subpasos"]:
         def desarrollar(marco):
             for i in range(len(paso["subpasos"])):
-                tarjeta_etapa(marco, paso["subpasos"], i).pack(fill="x", padx=4, pady=(0, 8))
+                tarjeta_etapa(marco, paso["subpasos"], i, detallado).pack(fill="x", padx=4, pady=(0, 8))
         SeccionPlegable(parent, "Desarrollar el cálculo", "Operaciones intermedias", True, desarrollar,
-                        abierto=False, estado=("Ver pasos", "primario")).pack(fill="x", padx=12, pady=(6, 8))
+                        abierto=detallado, estado=("Ver pasos", "primario")).pack(fill="x", padx=12, pady=(6, 8))
     if paso["conclusion"]:
         etiqueta(parent, paso["conclusion"], FUENTE_NEGRITA,
                  "error" if paso["conclusion"].startswith("No se cumple") else "exito", ajustar=40).pack(anchor="w", padx=16, pady=(6, 8))
@@ -1780,6 +1780,9 @@ def constructores_informe(informe):
     """Respuesta breve y prominente; los cálculos pertenecen a las otras pestañas."""
     lista = [lambda p: tarjeta_estado(p, informe["titulo"], informe["conclusion"],
              PALETA["exito"] if informe["definido"] else PALETA["advertencia"], "✓" if informe["definido"] else "!")]
+    if informe.get("datos_resultado"):
+        datos_originales = informe["datos_resultado"]
+        lista.append(lambda p: cuerpo_etapa(tarjeta_seccion(p, "Datos y operación"), datos_originales))
     if informe["resultado"] is not None:
         datos = didactica.etapa("Respuesta final", valores=[didactica.valor("Resultado", informe["resultado"])])
         lista.append(lambda p: cuerpo_etapa(tarjeta_seccion(p, "Respuesta final"), datos))
@@ -1787,6 +1790,8 @@ def constructores_informe(informe):
         datos = didactica.comparar(informe["lados"][0]["resultado"], informe["lados"][1]["resultado"])
         datos["calculos"] = []
         lista.append(lambda p: cuerpo_etapa(tarjeta_seccion(p, "Los dos lados"), datos))
+    if informe.get("teoria"):
+        lista.append(lambda p: cuerpo_etapa(tarjeta_seccion(p, "Demostración general"), informe["teoria"]))
     return lista
 
 
@@ -2776,6 +2781,8 @@ def _cuerpo_operacion(cuerpo, paso, detallado):
     if not condicion["cumple"]:
         etiqueta(cuerpo, paso["descripcion"], FUENTE_NORMAL, "error", ajustar=40).pack(anchor="w", pady=(6, 8))
         dibujar_valores(cuerpo, paso["operandos"]).pack(anchor="w")
+        for i in range(len(paso.get("etapas", []))):
+            tarjeta_etapa(cuerpo, paso["etapas"], i, detallado).pack(fill="x", pady=6)
         etiqueta(cuerpo, paso["siguiente"], FUENTE_PEQUENA_NEGRITA, "texto_3", ajustar=40).pack(anchor="w", pady=(8, 0))
         return
     etiqueta(cuerpo, "Regla:  " + paso["regla"], FUENTE_MONO, "texto_2", ajustar=40).pack(anchor="w", pady=(6, 0))
@@ -2784,6 +2791,8 @@ def _cuerpo_operacion(cuerpo, paso, detallado):
     dibujar_valores(cuerpo, paso["operandos"]).pack(anchor="w")
     for linea in paso["extra"]:
         etiqueta(cuerpo, linea, FUENTE_MONO, "texto_3", ajustar=40).pack(anchor="w")
+    for i in range(len(paso.get("etapas", []))):
+        tarjeta_etapa(cuerpo, paso["etapas"], i, detallado).pack(fill="x", pady=6)
     _subtitulo_seccion(cuerpo, "RESULTADO DE ESTE PASO")
     fila = ctk.CTkFrame(cuerpo, fg_color="transparent")
     fila.pack(anchor="w")
@@ -2956,7 +2965,11 @@ def constructores_verificacion(resolucion, informe):
                                   + ("✓" if c["dimensiones_ok"] else "✕"))
                 lineas.append(f"Entradas que coinciden: {c['entradas_ok']} de {c['entradas_total']}")
                 lineas += describir_diferencias(c["diferencias"])
+                lineas += c.get("calculos", [])
                 _lineas(marco, lineas, ajustar=80)
+                for i in range(len(c.get("etapas", []))):
+                    tarjeta_etapa(marco, c["etapas"], i, True).pack(fill="x", pady=6)
+                tarjeta_etapa(marco, [didactica.comparar(c["obtenido"], c["esperado"], f"Comparar {c['expresion']}")], 0, True).pack(fill="x", pady=6)
             SeccionPlegable(tarjeta, f"Paso {chequeo['numero']}", chequeo["expresion"], chequeo["ok"], cuerpo,
                             abierto=not chequeo["ok"],
                             estado=(f"{'✓' if chequeo['ok'] else '✕'} {chequeo['entradas_ok']}/{chequeo['entradas_total']} "
@@ -2989,12 +3002,12 @@ def constructores_verificacion(resolucion, informe):
             operaciones = identidad["resolucion"]["operaciones"]
 
             def cuerpo(marco):
-                _lineas(marco, [f"{k}. {p['expresion']} = "
-                                + (matriz_en_linea(p["resultado"]) if isinstance(p["resultado"], list)
-                                   else formatear_numero(p["resultado"]))
-                                for k, p in enumerate(operaciones, start=1)], fuente=FUENTE_MONO, ajustar=80)
+                for etiqueta_lado, r in (("Lado izquierdo", resolucion), ("Lado derecho", identidad["resolucion"])):
+                    etiqueta(marco, etiqueta_lado, FUENTE_SECCION, "primario").pack(anchor="w", pady=8)
+                    for k in range(len(r["pasos"])):
+                        tarjeta_paso_matricial(marco, r["pasos"], k, True).pack(fill="x", pady=6)
             SeccionPlegable(tarjeta, "Cálculos de la ruta alternativa", _plural(len(operaciones), "operación", "operaciones"),
-                            True, cuerpo, estado=("", "texto_3")).pack(fill="x", padx=14, pady=(0, 12))
+                            True, cuerpo, abierto=True, estado=("", "texto_3")).pack(fill="x", padx=14, pady=(0, 12))
         lista.append(ruta)
     lista.append(lambda p: tarjeta_mensajes(p, "Alcance de esta verificación", [
         ALCANCE_VERIFICACION,
@@ -3093,10 +3106,15 @@ def constructores_resultado_propiedad(informe, al_cargar_contraejemplo):
 def constructores_verificacion_propiedad(informe):
     lista = []
     todo_correcto = True
+    no_evaluable = False
     for lado in informe["lados"]:
         resolucion = lado["resolucion"]
         verificacion = verificar_resolucion(resolucion, usar_identidades=False)
-        todo_correcto = todo_correcto and verificacion["correcto"] and verificacion["aplicable"]
+        if lado["etiqueta"] != "Error frecuente":
+            no_evaluable = no_evaluable or not verificacion["aplicable"]
+            todo_correcto = todo_correcto and verificacion["correcto"] and verificacion["aplicable"]
+        elif verificacion["aplicable"]:
+            todo_correcto = todo_correcto and verificacion["correcto"]
 
         def tarjeta_lado(parent, lado=lado, resolucion=resolucion, verificacion=verificacion):
             titulo = f"{lado['etiqueta']}:  {resolucion['expresion']}"
@@ -3122,9 +3140,10 @@ def constructores_verificacion_propiedad(informe):
             lista.extend(constructores_etapas([chequeo]))
 
     lista.insert(0, lambda p: tarjeta_estado(
-        p, "Cálculos verificados" if todo_correcto else "Hay cálculos con diferencias",
+        p, "Propiedad no evaluable con estos datos" if no_evaluable else "Cálculos verificados" if todo_correcto else "Hay cálculos con diferencias",
         "Cada lado se calculó por separado y cada operación se recalculó de forma independiente." if todo_correcto
-        else "Revisa los pasos marcados con ✕.", PALETA["exito"] if todo_correcto else PALETA["error"],
+        else "Algún lado no está definido: revisa las condiciones; esto no refuta el teorema." if no_evaluable
+        else "Revisa los pasos marcados con ✕.", PALETA["advertencia"] if no_evaluable else PALETA["exito"] if todo_correcto else PALETA["error"],
         "✓" if todo_correcto else "✕"))
     lista.append(lambda p: tarjeta_mensajes(p, "Comprobación frente a demostración", [
         "Comparar los dos lados con tus matrices es una comprobación de un caso particular.",
@@ -3547,7 +3566,7 @@ class PaginaMatrices(PaginaBase):
         self.hay_resultado = True
         self.aviso.grid_remove()
         self.area_resultado.llenar(constructores_resultado_expresion(resolucion, informe, self.app), retardo=70)
-        self.panel_pasos.mostrar_pasos(resolucion["pasos"])
+        self.panel_pasos.mostrar_pasos(didactica.pasos_expresion(resolucion, informe))
         self.area_verificacion.llenar(constructores_verificacion(resolucion, informe), retardo=60)
         self.pestanas.set("Resultado")
         if resolucion["error"]:
@@ -3781,7 +3800,7 @@ class PaginaAyuda(PaginaInformativa):
         "En «Procedimiento» elige «Todos» para ver cada operación o «Paso a paso» para avanzar (o reproducir) una a una.",
         "¿Sin datos? Usa «Cargar ejemplo…» o «Aleatorio». «Limpiar» pone todas las casillas en 0.",
         "En «Operaciones con matrices» escribe una expresión con A, B y C (por ejemplo 2A − 3B + C, A(B + C) o "
-        "(AB)ᵀ) o constrúyela con los botones de símbolos; la transpuesta también se escribe A^T o A'.",
+        "(AB)ᵀ) o constrúyela con los botones de símbolos; la transpuesta también se escribe A^T o A'. La inversa se escribe A^-1, A^(-1) o A⁻¹.",
     ]
     ATAJOS = [
         ("Enter", "Ir a la siguiente casilla"),
@@ -3957,7 +3976,7 @@ class PaginaDeterminantes(PaginaBase):
             elif tipo == "comparar":
                 informe = didactica.informe_comparacion_inversas(A)
             else:
-                if metodo == "inversa_producto":
+                if metodo in ("inversa_producto", "det_producto"):
                     datos["B"] = self._leer("B")
                 escalares = {"k": convertir_numero(self.escalar.get())} if metodo in ("det_escalar_fila", "det_suma_fila") else None
                 informe = didactica.informe_propiedad_avanzada(metodo, datos, escalares)
@@ -3969,6 +3988,8 @@ class PaginaDeterminantes(PaginaBase):
                        "procedimiento": [condiciones], "verificacion": {"aplicable": False, "correcto": False,
                        "motivo": "No existe resultado: la condición necesaria no se cumple.", "etapas": [condiciones]}}
             self.app.notificar(mensaje, "error")
+        informe["datos_resultado"] = didactica.etapa("Datos y operación", formula=self.operacion.get(),
+            valores=[didactica.valor(n, M) for n, M in datos.items()])
         self.informe = informe
         self.area_resultado.llenar(constructores_informe(informe), retardo=45)
         self.panel_pasos.mostrar_pasos(informe["procedimiento"])
@@ -4016,6 +4037,13 @@ class AplicacionAlgebraLineal(_Ventana):
         instalar_desplazamiento(self)
         self._configurar_atajos()
         self.cambiar_pagina("calculadora")
+
+    def destroy(self):
+        """Cancela animaciones y tareas diferidas antes de destruir los widgets."""
+        for identificador in self.tk.splitlist(self.tk.call("after", "info")):
+            self.tk.call("after", "cancel", identificador)
+        _FUENTES_MEDIDA.clear()
+        super().destroy()
 
     def _centrar(self, ancho, alto):
         ancho = min(ancho, self.winfo_screenwidth() - 60)
