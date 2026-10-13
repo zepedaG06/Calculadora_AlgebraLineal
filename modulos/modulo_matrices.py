@@ -1062,6 +1062,8 @@ def comparar_metodos_inversa(A):
 
 
 PROPIEDADES_AVANZADAS = {
+    "inversa_izquierda": "A⁻¹A = I",
+    "inversa_derecha": "AA⁻¹ = I",
     "inversa_inversa": "(A⁻¹)⁻¹ = A",
     "inversa_producto": "(AB)⁻¹ = B⁻¹A⁻¹",
     "inversa_transpuesta": "(Aᵀ)⁻¹ = (A⁻¹)ᵀ",
@@ -1111,7 +1113,15 @@ def verificar_propiedad_avanzada(clave, matrices, escalares=None, metodo_inversa
         etapas.append(etapa(f"Calcular {nombre}", formula="(Mᵀ)ij = Mji", valores=[valor_visual("M", M), valor_visual(nombre, resultado)],
             calculos=[f"({i+1},{j+1}): {resultado[i][j]} ← M{j+1},{i+1}" for i in range(len(resultado)) for j in range(len(resultado[0]))]))
         return resultado
-    if clave == "inversa_inversa":
+    if clave in ("inversa_izquierda", "inversa_derecha"):
+        inversa = invertir(A, "A⁻¹", izq)
+        izquierda = (detallar_producto(inversa, A, "A⁻¹A", izq) if clave == "inversa_izquierda"
+                     else detallar_producto(A, inversa, "AA⁻¹", izq))
+        derecha = matriz_identidad(n)
+        der.append(etapa("Construir la identidad", f"I es {n}×{n}: unos en la diagonal y ceros fuera de ella.",
+                         valores=[valor_visual("I", derecha)]))
+        pasos += ["A⁻¹:", matriz_a_texto(inversa, False)]
+    elif clave == "inversa_inversa":
         izquierda = invertir(invertir(A, "A⁻¹", izq), "(A⁻¹)⁻¹", izq)
         derecha = copiar_matriz(A)
         der.append(etapa("Leer A original", valores=[valor_visual("A", derecha)]))
@@ -2262,6 +2272,10 @@ def identidad_para_verificar(nodo):
                 and izquierda.es_matricial() and derecha.es_matricial()):
             return ("Transpuesta de un producto", "BᵀAᵀ = (AB)ᵀ",
                     _nodo("transpuesta", _nodo("producto", derecha.hijos[0], izquierda.hijos[0])))
+        for inversa, otro, enunciado in ((izquierda, derecha, "A⁻¹A = I"), (derecha, izquierda, "AA⁻¹ = I")):
+            if inversa.tipo == "inversa" and otro.es_matricial() and inversa.hijos[0].texto() == otro.texto():
+                # El orden de I se conoce al calcular; resolver_expresion_matricial lo completa.
+                return ("Producto por la inversa", enunciado, NodoExpresion("identidad", valor=None))
         if izquierda.tipo == "inversa" and derecha.tipo == "inversa":
             return ("Inversa de un producto", "B⁻¹A⁻¹ = (AB)⁻¹", _nodo("inversa", _nodo("producto", derecha.hijos[0], izquierda.hijos[0])))
         if izquierda.tipo == "producto" and all(h.es_matricial() for h in (*izquierda.hijos, derecha)):
@@ -2366,6 +2380,8 @@ def resolver_expresion_matricial(expresion, matrices, escalares=None):
     texto = nodo.texto()
     if identidad:
         nombre, _, alternativa = identidad
+        if alternativa.tipo == "identidad" and alternativa.valor is None:
+            alternativa = NodoExpresion("identidad", valor=len(resultado))
         identidad = (nombre, f"{texto} = {alternativa.texto()}", alternativa)
     datos = {
         "tipo": "datos",

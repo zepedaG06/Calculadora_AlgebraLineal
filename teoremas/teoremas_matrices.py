@@ -19,6 +19,8 @@ TEOREMAS_MATRICES = (
     ("Triangulares y producto", "El determinante de una matriz triangular es el producto de su diagonal. det(I)=1; det(Aᵀ)=det(A); det(AB)=det(A)det(B) para matrices cuadradas del mismo orden."),
     ("Ax=b y soluciones infinitas", "Una fila [0…0|d], d≠0, es contradicción; [0…0|0] no lo es. Sin variables libres hay solución única; con libres y sin contradicción hay infinitas. Para x=p+Σ tv, comprobar Ap=b y Av=0."),
     ("Independencia y combinación lineal", "Los vectores son columnas de A. Resolver Ac=0: solo solución trivial significa L.I.; una solución no trivial significa L.D. Resolver Ac=b comprueba si b es combinación de las columnas; calcular Ax es una operación distinta."),
+    ("Factorización LU", "Si A (m×n) se lleva a una forma escalonada U solo con reemplazos Fi−mFk (i>k), entonces A=LU: L es m×m triangular inferior con unos en la diagonal y guarda cada multiplicador m en (i,k). Si una posición pivote es 0 con un valor no nulo debajo, hace falta un intercambio y A=LU no existe (se usa PA=LU)."),
+    ("Ax=b con A=LU", "Ax=b equivale a L(Ux)=b. Primero Ly=b por sustitución hacia adelante (y1, y2, …); después Ux=y por sustitución hacia atrás (desde la última fila con pivote). Una fila nula de U con yi≠0 es inconsistencia; una columna sin pivote es una variable libre. Si A es cuadrada, det(A)=∏uii."),
 )
 
 LOGO_ASCII = r"""
@@ -30,6 +32,8 @@ LOGO_ASCII = r"""
 
 
 DEMOSTRACIONES_PROPIEDADES = {
+    "inversa_izquierda": "Si det(A)≠0, Gauss-Jordan reduce [A|I] a [I|X]; las mismas operaciones son E=Eₖ…E₁ con EA=I y EI=X, así que X=E y XA=I. Por definición, X=A⁻¹ y A⁻¹A=I.",
+    "inversa_derecha": "Por la propiedad anterior, A⁻¹A=I. Tomando determinantes, det(A⁻¹)det(A)=1, así que A⁻¹ es invertible; multiplicar A⁻¹A=I por (A⁻¹)⁻¹ a la izquierda da A=(A⁻¹)⁻¹. Luego AA⁻¹=(A⁻¹)⁻¹A⁻¹=I.",
     "inversa_inversa": "Si X=A⁻¹, AX=XA=I. Por definición y unicidad de la inversa, X⁻¹=A.",
     "inversa_producto": "Sean A y B cuadradas invertibles del mismo orden. (AB)(B⁻¹A⁻¹)=A(BB⁻¹)A⁻¹=I y (B⁻¹A⁻¹)(AB)=B⁻¹(A⁻¹A)B=I. Por unicidad, (AB)⁻¹=B⁻¹A⁻¹.",
     "inversa_transpuesta": "Transponer AA⁻¹=A⁻¹A=I da (A⁻¹)ᵀAᵀ=Aᵀ(A⁻¹)ᵀ=I. Por unicidad, (Aᵀ)⁻¹=(A⁻¹)ᵀ.",

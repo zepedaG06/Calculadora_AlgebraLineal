@@ -8,6 +8,7 @@ Secciones:
 - Ecuacion matricial Ax = b.
 - Propiedades del producto matriz-vector Ax.
 - Independencia lineal.
+- Factorizacion LU (A = LU) y solucion de Ax = b con Ly = b y Ux = y.
 
 Restricciones cumplidas:
 - No usa PySide6.
@@ -25,6 +26,7 @@ import tkinter.font as tkfont
 from fractions import Fraction
 from teoremas.teoremas_matrices import TEOREMAS_MATRICES, texto_teoremas, LOGO_ASCII
 from modulos import informes as didactica
+from modulos import modulo_lu
 
 try:
     import customtkinter as ctk
@@ -1811,6 +1813,15 @@ def fila_copiar(parent, app, texto):
     return fila
 
 
+def tarjeta_encadenar(parent, titulo, descripcion, acciones):
+    """Botones que llevan un resultado a otra sección sin volver a escribirlo."""
+    tarjeta = tarjeta_seccion(parent, titulo, descripcion)
+    for texto, comando in acciones:
+        boton_secundario(tarjeta, "↪  " + texto, comando, height=34).pack(anchor="w", padx=16, pady=(0, 8))
+    ctk.CTkFrame(tarjeta, fg_color="transparent", height=6).pack()
+    return tarjeta
+
+
 def columnas_de(matriz):
     return [[fila[j] for fila in matriz] for j in range(len(matriz[0]))]
 
@@ -2037,12 +2048,15 @@ class PaginaSistema(PaginaBase):
 
     # --- acciones ------------------------------------------------------------
 
-    def cargar_ejemplo(self, nombre):
-        filas, columnas, valores = self.ejemplos[nombre]
+    def establecer_datos(self, filas, columnas, valores):
+        """Carga datos completos (un ejemplo o el resultado de otra sección) ajustando el tamaño."""
         self.contador_filas.set(filas)
         self.contador_columnas.set(columnas)
         self.reconstruir(valores)
         destello(self.tarjeta_datos)
+
+    def cargar_ejemplo(self, nombre):
+        self.establecer_datos(*self.ejemplos[nombre])
         self.app.notificar(f"Ejemplo cargado: {nombre}. Presiona «{self.texto_boton}».", "info")
 
     def aleatorio(self):
@@ -2230,8 +2244,155 @@ class PaginaAxb(PaginaSistema):
             lambda p: tarjeta_estado(p, resultado["clasificacion"], resultado["descripcion"], color, icono),
             lambda p: indicadores_sistema(p, resultado),
         ] + constructores_solucion(resultado, incluir_verificacion=False)
-
+        constructores.append(lambda p: tarjeta_encadenar(
+            p, "Encadenar con «Factorización LU»", "Los mismos A y b se resuelven con A = LU, Ly = b y Ux = y.",
+            [("Resolver este sistema por factorización LU", lambda: self._enviar_a_lu(A, b))]))
         return constructores
+
+    def _enviar_a_lu(self, A, b):
+        pagina = self.app.ir_a("lu")
+        pagina.establecer_datos(len(A), len(A[0]), [fila + [bi] for fila, bi in zip(A, b)])
+        pagina.resolver()
+
+
+class PaginaLU(PaginaSistema):
+    titulo = "Factorización LU y Ax = b"
+    subtitulo = ("A = LU solo con reemplazos de filas, verificación LU = A y solución en dos etapas: "
+                 "Ly = b (hacia adelante) y Ux = y (hacia atrás)")
+    etiqueta_filas = "Filas de A (m)"
+    etiqueta_columnas = "Columnas de A (n)"
+    titulo_datos = "Matriz A y vector b"
+    texto_boton = "Factorizar y resolver"
+    ejemplos = {
+        "Ejemplo del libro (4×4)": (4, 4, [[3, -7, -2, 2, -9], [-3, 5, 1, 0, 5], [6, -4, 0, -5, 7],
+                                           [-9, 5, -5, 12, 11]]),
+        "Solución única (3×3)": (3, 3, [[2, 1, 1, 5], [4, -6, 0, -2], [-2, 7, 2, 9]]),
+        "Rectangular 4×5 (infinitas)": (4, 5, [[2, 4, -1, 5, -2, 7], [-4, -5, 3, -8, 1, -12],
+                                               [2, -5, -4, 1, 8, 3], [-6, 0, 7, -3, 1, -9]]),
+        "Columna sin pivote (3×3)": (3, 3, [[1, 2, 3, 6], [2, 4, 7, 13], [3, 6, 10, 19]]),
+        "Sistema inconsistente": (3, 3, [[1, 2, 3, 6], [2, 4, 7, 13], [3, 6, 10, 20]]),
+        "Con fracciones": (2, 2, [["1/2", "1/3", "5/6"], [1, -1, 0]]),
+        "Requiere intercambio (sin LU)": (3, 3, [[0, 2, 1, 3], [1, 1, 1, 3], [2, 1, 3, 6]]),
+    }
+    ejemplo_inicial = "Ejemplo del libro (4×4)"
+    vacio_resultado = "Escribe A y b y presiona «Factorizar y resolver»."
+    vacio_pasos = ("Aquí aparecerá cada reemplazo con su multiplicador, la sustitución hacia adelante (Ly = b) "
+                   "y la sustitución hacia atrás (Ux = y).")
+
+    def configuracion_rejilla(self, filas, columnas):
+        return {
+            "columnas": columnas + 1,
+            "encabezados": [f"a{j + 1}" for j in range(columnas)] + ["b"],
+            "encabezados_fila": [f"F{i + 1}" for i in range(filas)],
+            "separador": columnas,
+        }
+
+    def texto_dimension(self, filas, columnas):
+        return f"A {filas} × {columnas} · L {filas} × {filas} · U {filas} × {columnas}"
+
+    def construir_previa(self, parent, valores):
+        A = [fila[:-1] for fila in valores]
+        b = [fila[-1] for fila in valores]
+        dibujar_expresion(parent, [A, obtener_nombres_variables(len(A[0])), "=", b], tamano=12).pack(anchor="w")
+        for texto in ("1. A = LU con reemplazos Fi → Fi − m·Fk (sin intercambios ni escalamientos).",
+                      "2. Hacia adelante: Ly = b da el vector intermedio y.",
+                      "3. Hacia atrás: Ux = y da la solución x."):
+            etiqueta(parent, texto, FUENTE_PEQUENA, "texto_3", ajustar=48).pack(anchor="w", pady=(4, 0))
+
+    def valores_aleatorios(self, filas, columnas):
+        # Se parte de L y U enteras para que A = LU exista y la solución sea entera.
+        L = [[1 if i == j else random.randint(-3, 3) if j < i else 0 for j in range(filas)] for i in range(filas)]
+        U = [[random.choice([-3, -2, -1, 1, 2, 3]) if i == j else random.randint(-4, 4) if j > i else 0
+              for j in range(columnas)] for i in range(filas)]
+        x = [random.randint(-3, 3) for _ in range(columnas)]
+        return [fila + [sum(a * v for a, v in zip(fila, x))] for fila in multiplicar_matrices(L, U)]
+
+    def calcular(self, matriz):
+        return modulo_lu.resolver_lu([fila[:-1] for fila in matriz], [fila[-1] for fila in matriz])
+
+    def construir_resultado(self, resultado):
+        a_gauss = ("Resolver con Gauss-Jordan en «Ecuación Ax = b»", lambda: self._enviar_a_axb(resultado))
+        if not resultado["existe"]:
+            bloqueo = resultado["factorizacion"]["etapas"][-1]
+            return [
+                lambda p: tarjeta_estado(p, "A = LU no existe sin intercambios", resultado["motivo"],
+                                         PALETA["advertencia"], "!"),
+                lambda p: cuerpo_etapa(tarjeta_seccion(p, "Dónde se detiene la eliminación"), bloqueo),
+                lambda p: tarjeta_encadenar(p, "Encadenar con otra sección",
+                                            "Gauss-Jordan sí permite intercambios y resuelve el mismo sistema.", [a_gauss]),
+            ]
+        color, icono = estado_de_sistema(resultado)
+        operaciones = resultado["factorizacion"]["operaciones"]
+        factorizacion = didactica.etapa(
+            "A = LU", valores=[didactica.valor("L", resultado["L"]),
+                               didactica.valor("U", resultado["U"], pivotes=resultado["pivotes"])],
+            calculos=[f"l{o['fila'] + 1},{o['fila_pivote'] + 1} = {formatear_numero(o['multiplicador'])}   ({o['operacion']})"
+                      for o in operaciones] or ["Sin reemplazos: A ya estaba en forma escalonada y L = I."])
+        intermedio = didactica.etapa("y", valores=[didactica.valor("y", resultado["y"])])
+        constructores = [
+            lambda p: tarjeta_estado(p, f"A = LU · {resultado['clasificacion']}",
+                                     f"{resultado['descripcion']} La comprobación LU = A y la de cada etapa están en "
+                                     f"la pestaña Verificación.", color, icono),
+            lambda p: fila_indicadores(p, [(resultado["rango"], "Pivotes"), (len(operaciones), "Reemplazos"),
+                                           (resultado["m"], "Filas (m)"), (resultado["n"], "Columnas (n)")]),
+            lambda p: cuerpo_etapa(tarjeta_seccion(p, "Factorización A = LU",
+                                                   "L guarda los multiplicadores en el orden en que se usaron; "
+                                                   "U es la forma escalonada de A."), factorizacion),
+            lambda p: cuerpo_etapa(tarjeta_seccion(p, "1. Sustitución hacia adelante: Ly = b",
+                                                   "Vector intermedio y; es la entrada de la etapa siguiente."), intermedio),
+        ]
+        titulo = "2. Sustitución hacia atrás: Ux = y"
+        if resultado["solucion"] is not None:
+            constructores.append(lambda p: tarjeta_solucion_unica(p, resultado["solucion"], resultado["nombres_variables"],
+                                                                  titulo=f"{titulo} → solución única"))
+        elif resultado["expresiones"] is not None:
+            constructores.append(lambda p: tarjeta_solucion_parametrica(p, resultado,
+                                                                        titulo=f"{titulo} → infinitas soluciones"))
+        else:
+            constructores.append(lambda p: tarjeta_inconsistente(p, resultado))
+        if resultado["determinante"] is not None:
+            det = resultado["determinante"]
+            constructores.append(lambda p: tarjeta_mensajes(p, "Determinante a partir de U", [
+                f"det(A) = det(L)·det(U) = ∏ uᵢᵢ = {formatear_numero(det)}",
+                "A es invertible (det(A) ≠ 0)." if det != 0 else "A es singular (det(A) = 0): no tiene inversa."],
+                "primario"))
+        constructores.append(lambda p: tarjeta_encadenar(
+            p, "Encadenar con otras secciones", "Los datos pasan tal cual, sin volver a escribirlos.",
+            [("Comprobar LU = A en «Operaciones matriciales»", lambda: self._enviar_a_operaciones(resultado)),
+             a_gauss]))
+        return constructores
+
+    def _enviar_a_operaciones(self, resultado):
+        pagina = self.app.ir_a("matrices")
+        for nombre, matriz in (("A", resultado["L"]), ("B", resultado["U"]), ("C", resultado["A"])):
+            pagina.establecer_matriz(nombre, matriz)
+        pagina._cambiar_modo("Expresión")
+        pagina._usar_expresion("AB − C")
+        pagina.resolver()
+        self.app.notificar("Se cargaron A = L, B = U y C = A original: si LU = A, AB − C es la matriz cero.", "info")
+
+    def _enviar_a_axb(self, resultado):
+        pagina = self.app.ir_a("axb")
+        pagina.establecer_datos(resultado["m"], resultado["n"],
+                                [fila + [bi] for fila, bi in zip(resultado["A"], resultado["b"])])
+        pagina.resolver()
+
+    def mostrar_procedimiento(self, resultado):
+        self.panel_pasos.mostrar_pasos(resultado["etapas"])
+
+    def mostrar_verificacion(self, resultado):
+        self.area_verificacion.llenar(constructores_chequeo(modulo_lu.verificar_lu(resultado)), retardo=45)
+
+    def texto_copiar(self, resultado):
+        return modulo_lu.resumen_texto_lu(resultado)
+
+    def mensaje_resuelto(self, resultado):
+        if not resultado["existe"]:
+            return "A = LU no existe sin intercambios de filas.", "aviso"
+        tipo = {"Sistema inconsistente": "error",
+                "Sistema consistente indeterminado": "aviso"}.get(resultado["clasificacion"], "exito")
+        reemplazos = _plural(len(resultado["factorizacion"]["operaciones"]), "reemplazo", "reemplazos")
+        return f"A = LU con {reemplazos} · {resultado['clasificacion']}.", tipo
 
 
 class PaginaCombinaciones(PaginaSistema):
@@ -2868,7 +3029,7 @@ def _tarjeta_comparacion(parent, titulo, izquierda, derecha, comparacion, nota=N
     return tarjeta
 
 
-def constructores_resultado_expresion(resolucion, informe, app):
+def constructores_resultado_expresion(resolucion, informe, app, al_guardar=None):
     expresion = resolucion["expresion"]
     if resolucion["error"]:
         hechas = [p for p in resolucion["operaciones"] if p["condicion"]["cumple"]]
@@ -2926,10 +3087,20 @@ def constructores_resultado_expresion(resolucion, informe, app):
         matriz_a_texto(resultado, aumentada=False) if dimension else "",
         f"Verificación: {'superada' if correcto else 'con diferencias'}",
     ])
+    def encadenar(parent):
+        tarjeta = tarjeta_seccion(parent, "Usar el resultado en otra expresión",
+                                  "Se guarda como A, B o C (con su tamaño) para encadenar el siguiente cálculo.")
+        fila = ctk.CTkFrame(tarjeta, fg_color="transparent")
+        fila.pack(anchor="w", padx=16, pady=(0, 14))
+        for k, nombre in enumerate(("A", "B", "C")):
+            boton_secundario(fila, f"↪  Usar como {nombre}", lambda n=nombre: al_guardar(n, resultado),
+                             width=128, height=34).pack(side="left", padx=(0 if k == 0 else 8, 0))
+
     return [
         lambda p: tarjeta_estado(p, titulo, descripcion, PALETA["exito"] if correcto else PALETA["error"],
                                  "✓" if correcto else "✕"),
         resultado_final, conclusion,
+        *([encadenar] if dimension and al_guardar else []),
         lambda p: fila_copiar(p, app, texto_copia),
     ]
 
@@ -3167,8 +3338,9 @@ class PaginaMatrices(PaginaBase):
     subtitulo = "Expresiones con A, B y C paso a paso, verificación independiente y propiedades teóricas"
     MODOS = ("Expresión", "Propiedades", "Contraejemplos", "Ejercicios")
     EXPRESIONES = ("A + B", "A − B", "3A", "Aᵀ", "AB", "A + B − C", "2A − 3B + C", "A(B + C)", "AB + AC",
-                   "(A + B)C", "A(B − C)", "AB − AC", "(AB)ᵀ", "BᵀAᵀ", "(A + B)ᵀ", "Aᵀ + Bᵀ", "AᵀBC", "r(A + B)ᵀ")
-    TOKENS = ("A", "B", "C", "(", ")", "ᵀ", "+", "−", "r")
+                   "(A + B)C", "A(B − C)", "AB − AC", "(AB)ᵀ", "BᵀAᵀ", "(A + B)ᵀ", "Aᵀ + Bᵀ", "AᵀBC", "r(A + B)ᵀ",
+                   "A⁻¹A", "AA⁻¹", "(AB)⁻¹")
+    TOKENS = ("A", "B", "C", "(", ")", "ᵀ", "⁻¹", "+", "−", "r")
     MATRICES_INICIALES = {"A": [[1, 2], [3, 4]], "B": [[0, 1], [-1, 2]], "C": [[2, 0], [1, -3]]}
     ESCALARES_INICIALES = {"r": "2", "s": "1/2"}
     CONTRAEJEMPLOS = {
@@ -3407,6 +3579,13 @@ class PaginaMatrices(PaginaBase):
         self.entrada_expresion.insert(0, expresion)
         self._al_cambiar_datos()
 
+    def _guardar_resultado(self, nombre, matriz):
+        """Encadena: el resultado pasa a ser la matriz «nombre» de la siguiente expresión."""
+        self.establecer_matriz(nombre, matriz)
+        self._al_cambiar_datos()
+        destello(self.tarjeta_datos)
+        self.app.notificar(f"El resultado se guardó en {nombre}. Escribe la siguiente expresión y calcula.", "info")
+
     def _usar_propiedad(self, clave):
         self.propiedad = clave
         propiedad = PROPIEDADES_POR_CLAVE[clave]
@@ -3565,7 +3744,8 @@ class PaginaMatrices(PaginaBase):
         informe = verificar_resolucion(resolucion)
         self.hay_resultado = True
         self.aviso.grid_remove()
-        self.area_resultado.llenar(constructores_resultado_expresion(resolucion, informe, self.app), retardo=70)
+        self.area_resultado.llenar(constructores_resultado_expresion(resolucion, informe, self.app,
+                                                                    al_guardar=self._guardar_resultado), retardo=70)
         self.panel_pasos.mostrar_pasos(didactica.pasos_expresion(resolucion, informe))
         self.area_verificacion.llenar(constructores_verificacion(resolucion, informe), retardo=60)
         self.pestanas.set("Resultado")
@@ -3801,6 +3981,10 @@ class PaginaAyuda(PaginaInformativa):
         "¿Sin datos? Usa «Cargar ejemplo…» o «Aleatorio». «Limpiar» pone todas las casillas en 0.",
         "En «Operaciones con matrices» escribe una expresión con A, B y C (por ejemplo 2A − 3B + C, A(B + C) o "
         "(AB)ᵀ) o constrúyela con los botones de símbolos; la transpuesta también se escribe A^T o A'. La inversa se escribe A^-1, A^(-1) o A⁻¹.",
+        "En «Factorización LU» escribe A y b: se obtiene A = LU con reemplazos de filas, se verifica LU = A y se "
+        "resuelve Ly = b (hacia adelante) y luego Ux = y (hacia atrás).",
+        "Los botones «↪» encadenan datos: llevan un resultado (L y U, A⁻¹, el resultado de una expresión o un "
+        "sistema) a otra sección sin volver a escribirlo.",
     ]
     ATAJOS = [
         ("Enter", "Ir a la siguiente casilla"),
@@ -3825,6 +4009,9 @@ class PaginaAyuda(PaginaInformativa):
         ("Producto de matrices", "AB existe si columnas(A) = filas(B); (AB)ᵢⱼ = Σₖ aᵢₖbₖⱼ. En general AB ≠ BA."),
         ("Transpuesta", "Aᵀ intercambia filas y columnas: (Aᵀ)ᵢⱼ = aⱼᵢ, y (AB)ᵀ = BᵀAᵀ (se invierte el orden)."),
         ("Linealidad de Ax", "Para toda matriz A: A(u + v) = Au + Av y A(cu) = c(Au)."),
+        ("Factorización LU", "A = LU: L es triangular inferior con unos en la diagonal y guarda los multiplicadores; "
+                             "U es la forma escalonada de A. Ax = b se resuelve con Ly = b y después Ux = y."),
+        ("Inversa", "A⁻¹ existe solo si det(A) ≠ 0 y cumple A⁻¹A = AA⁻¹ = I."),
     ]
 
     def constructores(self):
@@ -3991,10 +4178,26 @@ class PaginaDeterminantes(PaginaBase):
         informe["datos_resultado"] = didactica.etapa("Datos y operación", formula=self.operacion.get(),
             valores=[didactica.valor(n, M) for n, M in datos.items()])
         self.informe = informe
-        self.area_resultado.llenar(constructores_informe(informe), retardo=45)
+        constructores = constructores_informe(informe)
+        if informe["definido"] and self.OPERACIONES[self.operacion.get()][0] == "inv":
+            A, inversa = datos["A"], informe["resultado"]
+            constructores.append(lambda p: tarjeta_encadenar(
+                p, "Encadenar con «Operaciones matriciales»",
+                "La A original pasa como A y la inversa calculada como B: BA = A⁻¹A y AB = AA⁻¹ deben dar I.",
+                [("Comprobar A⁻¹A = I con B = A⁻¹", lambda: self._enviar_inversa(A, inversa))]))
+        self.area_resultado.llenar(constructores, retardo=45)
         self.panel_pasos.mostrar_pasos(informe["procedimiento"])
         self.area_verificacion.llenar(constructores_chequeo(informe["verificacion"]), retardo=45)
         self.pestanas.set("Resultado")
+
+    def _enviar_inversa(self, A, inversa):
+        pagina = self.app.ir_a("matrices")
+        pagina.establecer_matriz("A", A)
+        pagina.establecer_matriz("B", inversa)
+        pagina._cambiar_modo("Expresión")
+        pagina._usar_expresion("BA")
+        pagina.resolver()
+        self.app.notificar("B = A⁻¹ viene de «Determinantes e inversas»: BA = A⁻¹A debe ser la identidad.", "info")
 
 
 class AplicacionAlgebraLineal(_Ventana):
@@ -4008,6 +4211,7 @@ class AplicacionAlgebraLineal(_Ventana):
         ("propiedades_ax", "⇄", "Propiedades de Ax", PaginaPropiedades),
         ("matrices", "⊞", "Operaciones matriciales", PaginaMatrices),
         ("determinantes", "Δ", "Determinantes e inversas", PaginaDeterminantes),
+        ("lu", "◩", "Factorización LU", PaginaLU),
         ("independencia", "⊥", "Independencia lineal", PaginaIndependencia),
         ("metodo", "☰", "Método de eliminación", PaginaMetodo),
         ("ayuda", "?", "Ayuda", PaginaAyuda),
@@ -4112,6 +4316,11 @@ class AplicacionAlgebraLineal(_Ventana):
     def obtener_pagina(self, clave):
         if clave not in self.paginas:
             self.paginas[clave] = self._clases_pagina[clave](self.contenedor, self)
+        return self.paginas[clave]
+
+    def ir_a(self, clave):
+        """Muestra una sección y la devuelve para cargarle datos encadenados desde otra."""
+        self.cambiar_pagina(clave)
         return self.paginas[clave]
 
     def cambiar_pagina(self, pagina):
