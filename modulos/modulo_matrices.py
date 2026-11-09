@@ -1,20 +1,44 @@
-"""Álgebra lineal exacta implementada manualmente.
+"""Núcleo de álgebra lineal exacta de la Calculadora (listas anidadas y Fraction).
 
-+Resuelve sistemas, operaciones, expresiones e independencia lineal.
-+Las funciones reciben datos y devuelven resultados y procedimientos.
-+Este módulo no depende de widgets ni realiza entrada/salida interactiva.
-+"""
+Propósito: sistemas Ax = b, operaciones y expresiones matriciales, determinantes,
+inversas, independencia lineal y verificador de propiedades con «Se cumple»/«No se cumple».
+Unidad: Álgebra Lineal (MTM0120), matrices, determinantes, inversas y sistemas lineales.
+Autores (Grupo 3, UAM): Andrés Eduardo Mejía Castro, José Andrés Zepeda Grijalba,
+Eddy Alfonso Almendárez Ruiz y Brandon Javier Rocha Varela.
+Funciones puras: reciben listas anidadas y retornan resultados; no usan input() ni print().
+"""
 from fractions import Fraction
-from math import lcm
 import random
 from .pasos import etapa, valor as valor_visual, condicion
 
 LIMITE_DIMENSION = 10
 
-def convertir_numero(texto):
+
+def maximo_comun_divisor(a, b):
+    """Calcula el máximo común divisor con el algoritmo de Euclides (sin el módulo math).
+
+    Entrada: enteros a y b. Salida: entero no negativo mcd(a, b).
     """
-    Convierte la entrada del usuario a Fraction para trabajar con valores exactos.
-    Acepta enteros (3), decimales con punto o coma (0.5 o 0,5) y fracciones (3/2).
+    a, b = abs(a), abs(b)
+    while b:
+        a, b = b, a % b
+    return a
+
+
+def minimo_comun_multiplo(enteros):
+    """Calcula el mínimo común múltiplo con mcm(a, b) = a·b / mcd(a, b).
+
+    Entrada: iterable de enteros positivos. Salida: su mcm (1 si está vacío).
+    """
+    resultado = 1
+    for entero in enteros:
+        resultado = resultado * entero // maximo_comun_divisor(resultado, entero)
+    return resultado
+
+def convertir_numero(texto):
+    """Convierte el texto ingresado (entero, decimal con punto o coma, o fracción como 3/2) en Fraction.
+
+    Entrada: texto. Salida: Fraction exacta; lanza ValueError si está vacío o no es un número.
     """
     texto = str(texto).strip().replace(" ", "").replace("−", "-")
     if not texto:
@@ -32,7 +56,10 @@ def convertir_numero(texto):
 
 
 def formatear_numero(numero):
-    """Muestra las fracciones de forma legible: 2 en lugar de 2/1."""
+    """Escribe un número exacto de forma legible: 2 en lugar de 2/1 y -1/2 como fracción.
+
+    Entrada: número (Fraction, int o texto numérico). Salida: cadena.
+    """
     numero = Fraction(numero)
     if numero == 0:
         return "0"
@@ -42,9 +69,9 @@ def formatear_numero(numero):
 
 
 def formatear_coeficiente(valor):
-    """
-    Texto del valor absoluto de un coeficiente que va pegado a una variable.
-    Las fracciones van entre parentesis para evitar ambiguedades: (1/2)x1.
+    """Escribe el valor absoluto de un coeficiente que va junto a una variable; las fracciones van entre paréntesis.
+
+    Entrada: valor numérico. Salida: cadena, por ejemplo '2' o '(1/2)'.
     """
     valor = abs(Fraction(valor))
     texto = formatear_numero(valor)
@@ -52,29 +79,41 @@ def formatear_coeficiente(valor):
 
 
 def copiar_matriz(matriz):
-    """Copia una matriz para no modificar los datos originales usados en la verificacion."""
+    """Copia una matriz fila por fila para no alterar los datos originales que luego se verifican.
+
+    Entrada: matriz (lista anidada). Salida: copia independiente.
+    """
     return [fila[:] for fila in matriz]
 
 
 def crear_matriz_aumentada(A, b):
-    """Construye la matriz aumentada [A | b]."""
+    """Construye la matriz aumentada [A | b].
+
+    Entrada: A (m × n) y b (m componentes). Salida: lista anidada m × (n + 1).
+    """
     return [A[i][:] + [b[i]] for i in range(len(A))]
 
 
 def intercambiar_filas(matriz, i, j):
-    """Operacion elemental Fi <-> Fj."""
+    """Aplica la operación elemental Fi ↔ Fj sobre la misma matriz.
+
+    Entrada: matriz y los índices i y j (desde 0). Salida: None; modifica la matriz.
+    """
     matriz[i], matriz[j] = matriz[j], matriz[i]
 
 
 def multiplicar_fila(matriz, i, escalar):
-    """Operacion elemental Fi -> kFi."""
+    """Aplica la operación elemental Fi ← k·Fi sobre la misma matriz.
+
+    Entrada: matriz, índice i y escalar k. Salida: None; modifica la matriz.
+    """
     matriz[i] = [escalar * valor for valor in matriz[i]]
 
 
 def sumar_multiplo_fila(matriz, destino, origen, factor):
-    """
-    Operacion elemental Fdestino -> Fdestino + factor * Forigen.
-    Se usa para generar ceros arriba o debajo de un pivote.
+    """Aplica el reemplazo Fdestino ← Fdestino + factor·Forigen, usado para crear ceros junto a un pivote.
+
+    Entrada: matriz, índices destino y origen, y factor. Salida: None; modifica la matriz.
     """
     matriz[destino] = [
         matriz[destino][c] + factor * matriz[origen][c]
@@ -83,9 +122,9 @@ def sumar_multiplo_fila(matriz, destino, origen, factor):
 
 
 def matriz_a_texto(matriz, aumentada=True):
-    """
-    Convierte una matriz en texto alineado (se usa al copiar resultados).
-    Con aumentada=True separa la ultima columna con '|' como en [A | b].
+    """Convierte una matriz en texto alineado; con aumentada=True separa la última columna con '|'.
+
+    Entrada: matriz y aumentada (bool). Salida: cadena de varias líneas ('' si la matriz está vacía).
     """
     if not matriz or not matriz[0]:
         return ""
@@ -107,7 +146,10 @@ def matriz_a_texto(matriz, aumentada=True):
 
 
 def buscar_fila_pivote(matriz, fila_inicio, columna):
-    """Busca la primera fila (desde fila_inicio) con entrada no nula en la columna."""
+    """Busca, desde fila_inicio hacia abajo, la primera fila con entrada no nula en la columna.
+
+    Entrada: matriz, fila_inicio y columna. Salida: índice de esa fila o None si toda la columna es cero.
+    """
     for fila in range(fila_inicio, len(matriz)):
         if matriz[fila][columna] != 0:
             return fila
@@ -115,17 +157,17 @@ def buscar_fila_pivote(matriz, fila_inicio, columna):
 
 
 class PasoEliminacion(dict):
-    """
-    Representa un paso en el procedimiento de eliminacion por filas.
-    Compatible como diccionario (paso['operacion']), como objeto con atributos
-    (paso.operacion) y como secuencia (paso[0]=operacion, paso[1]=matriz, paso[2]=explicacion).
+    """Paso de una eliminación por filas: operación, explicación, matriz resultante, filas y pivotes resaltados.
 
-    Tambien guarda que filas cambiaron, donde estan los pivotes y que fila se uso
-    como referencia, para poder resaltarlos en la interfaz.
+    Se usa como diccionario, con atributos o como tupla histórica (operación, matriz, explicación).
     """
 
     def __init__(self, operacion, explicacion, matriz, tipo="operacion",
                  filas=(), pivotes=(), fila_origen=None):
+        """Guarda los datos del paso para mostrarlo y resaltarlo en la interfaz.
+
+        Entrada: operación, explicación, matriz, tipo, filas, pivotes y fila_origen. Salida: None.
+        """
         super().__init__(
             operacion=operacion,
             explicacion=explicacion,
@@ -137,12 +179,20 @@ class PasoEliminacion(dict):
         )
 
     def __getattr__(self, nombre):
+        """Permite leer las claves como atributos (paso.operacion).
+
+        Entrada: nombre de la clave. Salida: su valor; lanza AttributeError si no existe.
+        """
         try:
             return super().__getitem__(nombre)
         except KeyError:
             raise AttributeError(nombre) from None
 
     def __getitem__(self, key):
+        """Acceso por clave o por índice histórico: 0 = operación, 1 = matriz, 2 = explicación.
+
+        Entrada: clave (str) o índice (int). Salida: el valor guardado.
+        """
         if isinstance(key, int):
             if key == 0:
                 return self["operacion"]
@@ -155,7 +205,10 @@ class PasoEliminacion(dict):
 
 
 def texto_resta_de_filas(destino, origen, factor):
-    """Texto de la operacion Fdestino -> Fdestino - factor*Forigen, por ejemplo 'F2 → F2 - 2F1'."""
+    """Escribe la operación Fdestino → Fdestino − factor·Forigen, por ejemplo 'F2 → F2 - 2F1'.
+
+    Entrada: índices destino y origen (desde 0) y factor. Salida: cadena.
+    """
     factor_abs = abs(factor)
     k_str = "" if factor_abs == 1 else (
         str(factor_abs.numerator) if factor_abs.denominator == 1 else f"({formatear_numero(factor_abs)})"
@@ -165,6 +218,10 @@ def texto_resta_de_filas(destino, origen, factor):
 
 
 def _texto_intercambio(fila_pivote, fila_encontrada, variable):
+    """Explica por qué se intercambian dos filas cuando la posición pivote vale 0.
+
+    Entrada: fila pivote, fila encontrada y nombre de la variable. Salida: cadena.
+    """
     return (
         f"En la posición pivote de la {variable} hay un 0, así que se "
         f"intercambia F{fila_pivote + 1} con F{fila_encontrada + 1}, la primera "
@@ -173,7 +230,10 @@ def _texto_intercambio(fila_pivote, fila_encontrada, variable):
 
 
 def _detallar_eliminacion(pasos):
-    """Expone la aritmética de cada fila desde dos estados consecutivos."""
+    """Agrega a cada paso el cálculo entrada por entrada de la fila modificada, comparando dos estados seguidos.
+
+    Entrada: lista de PasoEliminacion. Salida: None; completa la clave «calculos» de cada paso.
+    """
     for anterior, paso in zip(pasos, pasos[1:]):
         antes, despues = anterior["matriz"], paso["matriz"]
         calculos = []
@@ -193,13 +253,10 @@ def _detallar_eliminacion(pasos):
 
 
 def gauss_jordan(matriz_aumentada, num_variables, nombres_variables=None):
-    """
-    Reduce [A | b] a forma escalonada reducida por filas.
+    """Reduce [A | b] a la forma escalonada reducida con Fraction y registra cada operación elemental.
 
-    Todas las operaciones se hacen con Fraction para evitar errores de redondeo.
-    En cada columna se usa como pivote la fila actual; solo si su entrada es 0
-    se intercambia con la primera fila de abajo que tenga un valor distinto de
-    cero, igual que al resolver a mano. Cada operacion queda registrada.
+    Entrada: matriz aumentada, número de variables y nombres opcionales.
+    Salida: (matriz reducida, columnas pivote, lista de pasos).
     """
     nombres = nombres_variables or obtener_nombres_variables(num_variables)
     matriz = validar_matriz(matriz_aumentada, "Matriz aumentada")
@@ -226,7 +283,7 @@ def gauss_jordan(matriz_aumentada, num_variables, nombres_variables=None):
 
         fila_encontrada = buscar_fila_pivote(matriz, fila_pivote, columna)
         if fila_encontrada is None:
-            # Toda la columna es cero desde la fila pivote: la variable sera libre.
+            # Toda la columna es cero desde la fila pivote: la variable será libre.
             continue
 
         variable = f"columna {columna + 1} (variable {nombres[columna]})"
@@ -247,7 +304,7 @@ def gauss_jordan(matriz_aumentada, num_variables, nombres_variables=None):
 
         valor_pivote = matriz[fila_pivote][columna]
 
-        # Convertir el pivote en 1.
+        # El pivote se normaliza a 1 para llegar a la forma escalonada reducida.
         if valor_pivote != 1:
             inverso = Fraction(1, 1) / valor_pivote
             multiplicar_fila(matriz, fila_pivote, inverso)
@@ -272,7 +329,7 @@ def gauss_jordan(matriz_aumentada, num_variables, nombres_variables=None):
                 )
             )
 
-        # Hacer cero la columna del pivote en TODAS las demas filas.
+        # Gauss-Jordan anula la columna del pivote arriba y abajo, no solo debajo.
         for fila in range(num_filas):
             if fila == fila_pivote:
                 continue
@@ -325,11 +382,10 @@ def gauss_jordan(matriz_aumentada, num_variables, nombres_variables=None):
 
 
 def forma_escalonada(matriz_aumentada, num_variables, nombres_variables=None, explicacion_inicial=None):
-    """
-    Reduce [A | b] a una forma escalonada por filas (eliminacion gaussiana).
+    """Reduce [A | b] a una forma escalonada: solo anula debajo de cada pivote y no lo convierte en 1.
 
-    A diferencia de Gauss-Jordan, solo se hacen ceros DEBAJO de cada pivote y
-    los pivotes no se convierten en 1. Devuelve (matriz, columnas_pivote, pasos).
+    Entrada: matriz aumentada, número de variables, nombres y explicación inicial opcionales.
+    Salida: (matriz escalonada, columnas pivote, lista de pasos).
     """
     nombres = nombres_variables or obtener_nombres_variables(num_variables)
     matriz = validar_matriz(matriz_aumentada, "Matriz aumentada")
@@ -421,30 +477,42 @@ def forma_escalonada(matriz_aumentada, num_variables, nombres_variables=None, ex
 
 
 def fila_inconsistente(fila, num_variables):
-    """Detecta una contradiccion: 0x1 + 0x2 + ... + 0xn = k, con k distinto de 0."""
+    """Indica si una fila representa 0x1 + … + 0xn = k con k ≠ 0 (una contradicción).
+
+    Entrada: fila de la matriz aumentada y número de variables. Salida: True o False.
+    """
     coeficientes_cero = all(fila[c] == 0 for c in range(num_variables))
     return coeficientes_cero and fila[-1] != 0
 
 
 def es_sistema_homogeneo(b):
-    """Un sistema es homogeneo cuando el vector b es todo ceros (Ax = 0)."""
+    """Indica si el sistema es homogéneo (Ax = 0).
+
+    Entrada: vector b. Salida: True si todas sus componentes son cero.
+    """
     return all(valor == 0 for valor in b)
 
 
 def clasificar_sistema(matriz_rref, columnas_pivote, num_variables):
-    """Clasifica el sistema segun la forma escalonada reducida."""
+    """Clasifica el sistema a partir de su forma escalonada reducida.
+
+    Entrada: RREF, columnas pivote y número de variables. Salida: (clasificación, descripción).
+    """
     for fila in matriz_rref:
         if fila_inconsistente(fila, num_variables):
-            return "Sistema inconsistente", "No tiene solucion."
+            return "Sistema inconsistente", "No tiene solución."
 
     if len(columnas_pivote) == num_variables:
-        return "Sistema consistente determinado", "Tiene una unica solucion."
+        return "Sistema consistente determinado", "Tiene una única solución."
 
     return "Sistema consistente indeterminado", "Tiene infinitas soluciones."
 
 
 def obtener_solucion_unica(matriz_rref, columnas_pivote, num_variables):
-    """Lee la solucion cuando cada variable tiene columna pivote."""
+    """Lee la solución única cuando cada variable tiene columna pivote.
+
+    Entrada: RREF, columnas pivote y número de variables. Salida: lista con el valor de cada variable.
+    """
     solucion = [Fraction(0) for _ in range(num_variables)]
     for fila, columna in enumerate(columnas_pivote):
         solucion[columna] = matriz_rref[fila][-1]
@@ -452,12 +520,9 @@ def obtener_solucion_unica(matriz_rref, columnas_pivote, num_variables):
 
 
 def nombres_parametros(cantidad):
-    """
-    Genera nombres estandar para variables libres.
-    - Para 1 variable libre: ['t']
-    - Para 2 variables libres: ['s', 't']
-    - Para 3 variables libres: ['r', 's', 't']
-    - Para mas variables libres: ['r', 's', 't', 'u', ...] o ['t1', 't2', ...]
+    """Genera los nombres de los parámetros de las variables libres: t; s, t; r, s, t; … o t1, t2, ….
+
+    Entrada: cantidad de variables libres. Salida: lista de nombres.
     """
     if cantidad == 1:
         return ["t"]
@@ -472,10 +537,10 @@ def nombres_parametros(cantidad):
 
 
 def obtener_solucion_parametrica(matriz_rref, columnas_pivote, num_variables):
-    """
-    Expresa variables basicas en funcion de variables libres.
+    """Expresa cada variable básica en función de los parámetros de las variables libres.
 
-    Si una columna no es pivote, su variable queda libre y recibe un parametro.
+    Entrada: RREF, columnas pivote y número de variables.
+    Salida: (expresiones por variable, variables libres, parámetro de cada libre).
     """
     variables_libres = [c for c in range(num_variables) if c not in columnas_pivote]
     parametros = dict(zip(variables_libres, nombres_parametros(len(variables_libres))))
@@ -512,11 +577,9 @@ def obtener_solucion_parametrica(matriz_rref, columnas_pivote, num_variables):
 
 
 def obtener_forma_vectorial(matriz_rref, columnas_pivote, num_variables):
-    """
-    Forma vectorial parametrica x = p + t1*v1 + t2*v2 + ...
+    """Construye la forma vectorial x = p + t1·v1 + t2·v2 + … de la solución general.
 
-    p es la solucion particular (todos los parametros en 0) y cada v es el
-    vector direccion asociado a una variable libre.
+    Entrada: RREF, columnas pivote y número de variables. Salida: (particular p, lista de (parámetro, dirección v)).
     """
     libres = [c for c in range(num_variables) if c not in columnas_pivote]
     particular = [Fraction(0) for _ in range(num_variables)]
@@ -537,19 +600,25 @@ SUPERINDICES = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
 
 
 def espacio_real(n):
-    """Nombre del espacio R^n con superindice: espacio_real(3) -> 'R³'."""
+    """Escribe el nombre del espacio Rⁿ con superíndice, por ejemplo 'R³'.
+
+    Entrada: dimensión n. Salida: cadena.
+    """
     return "R" + str(n).translate(SUPERINDICES)
 
 
 def obtener_nombres_variables(num_variables, prefijo="x"):
-    """Genera nombres de variables consistentes: x1, x2, x3, ..."""
+    """Genera nombres de variables consecutivos: x1, x2, x3, ….
+
+    Entrada: cantidad y prefijo (por defecto 'x'). Salida: lista de nombres.
+    """
     return [f"{prefijo}{i + 1}" for i in range(num_variables)]
 
 
 def unir_terminos(terminos, union=""):
-    """
-    Une pares (coeficiente, texto) en una expresion como '2x1 - x2 + (1/2)x3'.
-    Omite coeficientes 0, muestra 1x como x y -1x como -x.
+    """Une pares (coeficiente, texto) en una expresión como '2x1 - x2 + (1/2)x3', omitiendo ceros.
+
+    Entrada: pares (coeficiente, texto) y separador entre ambos. Salida: cadena ('0' si no quedan términos).
     """
     partes = []
     for coeficiente, texto in terminos:
@@ -564,18 +633,18 @@ def unir_terminos(terminos, union=""):
 
 
 def formatear_ecuacion_original(fila_coefs, termino_indep, nombres_vars):
-    """
-    Formatea la ecuacion algebraica original a partir de los coeficientes y terminos independientes.
-    Omite coeficientes 0, muestra 1x como x, -1x como -x, y maneja signos + / - correctamente.
+    """Escribe una ecuación del sistema, por ejemplo '2x1 - x2 = 3'.
+
+    Entrada: coeficientes de la fila, término independiente y nombres de variables. Salida: cadena.
     """
     lado_izq = unir_terminos(zip(fila_coefs, nombres_vars))
     return f"{lado_izq} = {formatear_numero(termino_indep)}"
 
 
 def formatear_sustitucion(fila_coefs, termino_indep, solucion):
-    """
-    Genera la expresion de sustitucion explicita con parentesis para cada variable:
-    ejemplo: 2(1) - (2) + (3) = 3 o 2(1) - 3(2) + (4) = 7.
+    """Escribe la ecuación con cada variable sustituida entre paréntesis, por ejemplo '2(1) - (2) = 0'.
+
+    Entrada: coeficientes, término independiente y solución. Salida: cadena.
     """
     valores = [f"({formatear_numero(valor)})" for valor in solucion]
     lado_izq = unir_terminos(zip(fila_coefs, valores))
@@ -583,10 +652,9 @@ def formatear_sustitucion(fila_coefs, termino_indep, solucion):
 
 
 def formatear_simplificacion(fila_coefs, termino_indep, solucion):
-    """
-    Evalua paso a paso la simplificacion de los terminos sustituidos:
-    1. Productos individuales evaluados: 2 - 2 + 3 = 3
-    2. Suma total evaluada: 3 = 3
+    """Simplifica la sustitución en dos pasos: productos individuales y suma total.
+
+    Entrada: coeficientes, término independiente y solución. Salida: (líneas de simplificación, coincide, suma total).
     """
     pasos_simpl = []
     productos = [c * solucion[j] for j, c in enumerate(fila_coefs) if c != 0]
@@ -610,13 +678,16 @@ def formatear_simplificacion(fila_coefs, termino_indep, solucion):
 
 
 class DetalleVerificacion(dict):
-    """
-    Representa la verificacion explicativa de una ecuacion individual del sistema.
-    Soporta acceso como dict (d['ecuacion_original']), atributos (d.ecuacion_original)
-    e indexacion por tupla [0]=suma_obtenida, [1]=esperado, [2]=coincide para maxima compatibilidad.
+    """Verificación explicada de una ecuación: original, sustitución, simplificación y si se cumple.
+
+    Se usa como diccionario, con atributos o como tupla histórica (suma obtenida, esperado, coincide).
     """
 
     def __init__(self, indice, ecuacion_original, sustitucion, simplificacion, suma_obtenida, esperado, coincide):
+        """Guarda los datos de la verificación de una ecuación.
+
+        Entrada: índice, ecuación, sustitución, simplificación, suma obtenida, esperado y coincide. Salida: None.
+        """
         super().__init__(
             indice=indice,
             ecuacion_original=ecuacion_original,
@@ -628,21 +699,29 @@ class DetalleVerificacion(dict):
         )
 
     def __getattr__(self, nombre):
+        """Permite leer las claves como atributos (detalle.coincide).
+
+        Entrada: nombre de la clave. Salida: su valor; lanza AttributeError si no existe.
+        """
         try:
             return super().__getitem__(nombre)
         except KeyError:
             raise AttributeError(nombre) from None
 
     def __getitem__(self, key):
+        """Acceso por clave o por índice histórico: 0 = suma obtenida, 1 = esperado, 2 = coincide.
+
+        Entrada: clave (str) o índice (int). Salida: el valor guardado.
+        """
         if isinstance(key, int):
             return [self["suma_obtenida"], self["esperado"], self["coincide"]][key]
         return super().__getitem__(key)
 
 
 def verificar_solucion(A_original, b_original, solucion, nombres_vars=None):
-    """
-    Verifica Ax = b usando el sistema original de forma explicativa y pedagogica.
-    Genera la ecuacion original, la sustitucion explicita y la simplificacion paso a paso.
+    """Sustituye la solución en cada ecuación del sistema original y explica la simplificación.
+
+    Entrada: A y b originales, solución y nombres opcionales. Salida: (todas se cumplen, lista de DetalleVerificacion).
     """
     if not A_original or not b_original:
         return False, []
@@ -665,8 +744,7 @@ def verificar_solucion(A_original, b_original, solucion, nombres_vars=None):
     for i, fila in enumerate(A_original):
         esperado = b_original[i]
 
-        # La comprobacion real se hace con el sistema ORIGINAL,
-        # no con la matriz reducida.
+        # La comprobación se hace con el sistema original, no con la matriz reducida.
         suma_directa = sum(fila[j] * solucion[j] for j in range(num_vars))
         coincide = suma_directa == esperado
         correcta = correcta and coincide
@@ -688,7 +766,11 @@ def verificar_solucion(A_original, b_original, solucion, nombres_vars=None):
 
 
 def resolver_sistema(A, b, nombres_variables=None):
-    """Funcion principal de la parte matematica."""
+    """Resuelve Ax = b por Gauss-Jordan: clasifica, obtiene la solución única o paramétrica y la verifica.
+
+    Entrada: A (m × n), b (m) y nombres opcionales.
+    Salida: diccionario con RREF, pasos, rangos, clasificación, solución y verificación.
+    """
     A = validar_matriz(A, "A")
     b = [Fraction(valor) for valor in b]
     if len(b) != len(A):
@@ -748,7 +830,10 @@ def resolver_sistema(A, b, nombres_variables=None):
 
 
 def multiplicar_matriz_vector(A, x):
-    """Calcula el producto matriz-vector A*x usando fracciones exactas."""
+    """Calcula el producto matriz-vector A·x con aritmética exacta.
+
+    Entrada: A (m × n) y x (n componentes). Salida: lista de m componentes; lanza ValueError si n no coincide.
+    """
     A = validar_matriz(A, "A")
     x = [Fraction(valor) for valor in x]
     if len(A[0]) != len(x):
@@ -756,12 +841,12 @@ def multiplicar_matriz_vector(A, x):
     return [sum(A[i][j] * x[j] for j in range(len(x))) for i in range(len(A))]
 
 
-# -----------------------------------------------------------------------------
-# Operaciones con matrices y propiedades teóricas
-# -----------------------------------------------------------------------------
 
 def validar_matriz(matriz, nombre="Matriz"):
-    """Valida una matriz rectangular no vacía y convierte sus entradas a Fraction."""
+    """Comprueba que la matriz sea rectangular y no vacía y convierte sus entradas a Fraction.
+
+    Entrada: matriz y nombre para los mensajes. Salida: nueva lista anidada; lanza ValueError si no es válida.
+    """
     if not isinstance(matriz, list) or not matriz:
         raise ValueError(f"{nombre} debe ser una matriz no vacía.")
     if not all(isinstance(fila, list) and fila for fila in matriz):
@@ -776,12 +861,19 @@ def validar_matriz(matriz, nombre="Matriz"):
 
 
 def dimensiones_matriz(matriz):
+    """Obtiene las dimensiones de una matriz válida.
+
+    Entrada: matriz. Salida: tupla (filas, columnas).
+    """
     matriz = validar_matriz(matriz)
     return len(matriz), len(matriz[0])
 
 
 def verificar_solucion_general(A, b, particular, direcciones):
-    """Verifica Ap=b y Av=0 para cada dirección de la familia paramétrica."""
+    """Comprueba una familia paramétrica: A·p = b para la particular y A·v = 0 para cada dirección.
+
+    Entrada: A, b, particular p y lista de (parámetro, v). Salida: diccionario con cada producto y «correcto».
+    """
     A = validar_matriz(A, "A")
     b = [Fraction(v) for v in b]
     if len(b) != len(A):
@@ -799,7 +891,10 @@ def verificar_solucion_general(A, b, particular, direcciones):
 
 
 def validar_cuadrada(A):
-    """Normaliza A y exige que sea cuadrada y no vacía."""
+    """Valida A y exige que sea cuadrada y no vacía.
+
+    Entrada: matriz A. Salida: A con entradas Fraction; lanza ValueError si no es cuadrada.
+    """
     A = validar_matriz(A, "A")
     if len(A) != len(A[0]):
         raise ValueError("A debe ser cuadrada.")
@@ -807,7 +902,10 @@ def validar_cuadrada(A):
 
 
 def submatriz(A, i, j):
-    """Elimina fila i y columna j; los índices comienzan en cero."""
+    """Elimina la fila i y la columna j de A.
+
+    Entrada: matriz A e índices i, j desde 0. Salida: submatriz; lanza ValueError si los índices no son válidos.
+    """
     A = validar_matriz(A, "A")
     if not isinstance(i, int) or not isinstance(j, int) or not (0 <= i < len(A) and 0 <= j < len(A[0])):
         raise ValueError("Índice de fila o columna fuera de rango.")
@@ -815,40 +913,82 @@ def submatriz(A, i, j):
 
 
 def menor(A, i, j):
-    """Calcula Mij; para orden 1 el menor vacío tiene determinante 1."""
+    """Calcula el menor Mij = det(A sin la fila i ni la columna j); en orden 1 vale 1 (determinante vacío).
+
+    Entrada: A cuadrada e índices i, j. Salida: Fraction.
+    """
     A = validar_cuadrada(A)
     reducida = submatriz(A, i, j)
     return Fraction(1) if len(A) == 1 else determinante(reducida)
 
 
 def cofactor(A, i, j):
-    """Calcula (-1)^(i+j) Mij, independiente de la base de los índices."""
+    """Calcula el cofactor Cij = (-1)^(i+j)·Mij.
+
+    Entrada: A cuadrada e índices i, j. Salida: Fraction.
+    """
     return (-1) ** (i + j) * menor(A, i, j)
 
 
 def matriz_menores(A):
+    """Calcula la matriz de todos los menores Mij.
+
+    Entrada: A cuadrada. Salida: matriz n × n de menores.
+    """
     A = validar_cuadrada(A)
     return [[menor(A, i, j) for j in range(len(A))] for i in range(len(A))]
 
 
 def matriz_cofactores(A):
+    """Calcula la matriz de cofactores Cij = (-1)^(i+j)·Mij.
+
+    Entrada: A cuadrada. Salida: matriz n × n de cofactores.
+    """
     A = validar_cuadrada(A)
     return _cofactores_desde_menores(matriz_menores(A))
 
 
 def _cofactores_desde_menores(menores):
-    """Aplica los signos alternados reutilizando los menores ya calculados."""
+    """Aplica los signos alternados (-1)^(i+j) a una matriz de menores ya calculada.
+
+    Entrada: matriz de menores. Salida: matriz de cofactores.
+    """
     n = len(menores)
     return [[(-1) ** (i + j) * menores[i][j] for j in range(n)] for i in range(n)]
 
 
 def adjunta(A):
-    """La adjunta es la transpuesta de la matriz de cofactores."""
+    """Calcula la adjunta adj(A), la transpuesta de la matriz de cofactores.
+
+    Entrada: A cuadrada. Salida: adj(A).
+    """
     return transponer_matriz(matriz_cofactores(A))
 
 
+def _determinante_menor(S):
+    """Calcula el determinante de un menor: con ad − bc si es 2 × 2 (como a mano) y por reducción si es mayor.
+
+    Entrada: submatriz cuadrada. Salida: diccionario de calcular_determinante.
+    """
+    return calcular_determinante(S, "2x2" if len(S) == 2 else "triangular")
+
+
+def _desarrollo_menor(S):
+    """Escribe el desarrollo 'ad − bc = ' de un menor 2 × 2.
+
+    Entrada: submatriz. Salida: cadena (vacía si no es 2 × 2).
+    """
+    if len(S) != 2:
+        return ""
+    return f"({S[0][0]})·({S[1][1]}) − ({S[0][1]})·({S[1][0]}) = "
+
+
 def calcular_determinante(A, metodo="triangular", fila=0):
-    """Devuelve valor exacto, método y pasos; no modifica la matriz recibida."""
+    """Calcula det(A) con la fórmula 2 × 2, Sarrus, cofactores o reducción triangular, sin modificar A.
+
+    Entrada: A cuadrada, método y fila de expansión (cofactores).
+    Salida: diccionario con determinante, método, pasos, etapas, triangular e intercambios.
+    """
     A = validar_cuadrada(A)
     n = len(A)
     metodos = {"2x2", "sarrus", "cofactores", "triangular"}
@@ -872,6 +1012,7 @@ def calcular_determinante(A, metodo="triangular", fila=0):
             f"bc = ({A[0][1]})·({A[1][0]}) = {A[0][1] * A[1][0]}",
             f"ad − bc = {A[0][0] * A[1][1]} − ({A[0][1] * A[1][0]}) = {valor}"]))
     elif metodo == "sarrus":
+        # Con índices módulo 3 se recorren las diagonales sin copiar las dos primeras columnas a la derecha.
         positivos = [A[0][j] * A[1][(j + 1) % 3] * A[2][(j + 2) % 3] for j in range(3)]
         negativos = [A[0][j] * A[1][(j - 1) % 3] * A[2][(j - 2) % 3] for j in range(3)]
         valor = sum(positivos, Fraction(0)) - sum(negativos, Fraction(0))
@@ -894,13 +1035,13 @@ def calcular_determinante(A, metodo="triangular", fila=0):
         terminos = []
         for j in range(n):
             reducida = submatriz(A, fila, j)
-            calculo_menor = calcular_determinante(reducida) if n > 1 else None
+            calculo_menor = _determinante_menor(reducida) if n > 1 else None
             m = calculo_menor["determinante"] if calculo_menor else Fraction(1)
             c = (-1) ** (fila + j) * m
             valor += A[fila][j] * c
             terminos.append(A[fila][j] * c)
             etapas.append(etapa(f"Menor y cofactor ({fila + 1},{j + 1})", valores=[valor_visual("Submatriz", reducida)] if n > 1 else [],
-                calculos=[f"a{fila+1},{j+1} = {A[fila][j]}", f"M{fila+1},{j+1} = {m}" + (" (determinante vacío = 1)" if n == 1 else ""),
+                calculos=[f"a{fila+1},{j+1} = {A[fila][j]}", f"M{fila+1},{j+1} = {_desarrollo_menor(reducida)}{m}" + (" (determinante vacío = 1)" if n == 1 else ""),
                           f"Signo (-1)^({fila+1}+{j+1}) = {(-1)**(fila+j)}", f"C{fila+1},{j+1} = {c}",
                           f"a·C = ({A[fila][j]})·({c}) = {A[fila][j]*c}"],
                 subpasos=calculo_menor["etapas"] if calculo_menor else []))
@@ -910,6 +1051,7 @@ def calcular_determinante(A, metodo="triangular", fila=0):
         etapas.append(etapa("Sumar los términos de la expansión", calculos=[" + ".join(f"({t})" for t in terminos) + f" = {valor}"]))
     else:
         triangular = copiar_matriz(A)
+        # No se escalan filas: multiplicar una fila por k multiplicaría det(A) por k y habría que compensarlo.
         pasos.append("Solo intercambios y sumas de múltiplos de filas; no se escalan filas.")
         for j in range(n):
             pivote = buscar_fila_pivote(triangular, j, j)
@@ -937,6 +1079,7 @@ def calcular_determinante(A, metodo="triangular", fila=0):
         producto = Fraction(1)
         for i in range(n):
             producto *= triangular[i][i]
+        # det de una triangular = producto de su diagonal; cada intercambio cambió el signo una vez.
         valor = (-1) ** intercambios * producto
         pasos.append(f"det(A) = (-1)^{intercambios} · producto diagonal = {valor}")
         etapas.append(etapa("Producto diagonal y signo", formula="det(A) = (-1)^intercambios · ∏ tii",
@@ -952,12 +1095,18 @@ def calcular_determinante(A, metodo="triangular", fila=0):
 
 
 def determinante(A, metodo="triangular"):
-    """Calcula det(A) con Fraction; triangular es el método general predeterminado."""
+    """Calcula det(A) de forma exacta; la reducción triangular es el método predeterminado.
+
+    Entrada: A cuadrada y método. Salida: Fraction.
+    """
     return calcular_determinante(A, metodo)["determinante"]
 
 
 def verificar_inversa(A, inversa):
-    """Comprueba ambos productos exactamente con el producto matricial existente."""
+    """Comprueba A·A⁻¹ = I y A⁻¹·A = I con el producto matricial de la Calculadora.
+
+    Entrada: A y su supuesta inversa. Salida: diccionario con ambos productos, identidad, «correcto» y procedimientos.
+    """
     A, inversa = validar_cuadrada(A), validar_cuadrada(inversa)
     identidad = matriz_identidad(len(A))
     izquierdo = multiplicar_matrices(A, inversa)
@@ -970,7 +1119,11 @@ def verificar_inversa(A, inversa):
 
 
 def calcular_inversa(A, metodo="gauss_jordan"):
-    """Calcula la inversa y su procedimiento o rechaza singularidad con ValueError."""
+    """Calcula A⁻¹ por Gauss-Jordan sobre [A | I] o por adj(A)/det(A), con todo el procedimiento.
+
+    Entrada: A cuadrada y método. Salida: diccionario con inversa, pasos, etapas y verificación;
+    lanza ValueError si A es singular.
+    """
     A = validar_cuadrada(A)
     if metodo not in ("gauss_jordan", "adjunta"):
         raise ValueError("Método de inversa desconocido.")
@@ -985,13 +1138,13 @@ def calcular_inversa(A, metodo="gauss_jordan"):
         etapas.append(etapa("Construir [A | I]", formula="[A | I] → [I | A⁻¹]", valores=[
             valor_visual("A", A), valor_visual("I", identidad), valor_visual("[A | I]", aumentada, separador=n)]))
         reducida, pivotes, operaciones = gauss_jordan(aumentada, n)
+        # Con menos de n pivotes A no es equivalente por filas a I, así que no es invertible.
         if len(pivotes) != n:
             raise ValueError("A no es invertible: es singular (det(A)=0); faltan pivotes en [A|I].")
         inversa = [fila[n:] for fila in reducida]
         pasos.append("[A | I] → [I | A⁻¹]. La barra separa los dos bloques de n columnas.")
         for paso in operaciones:
-            # Las explicaciones originales pertenecen a Ax=b; aquí se conserva
-            # la operación y se representa la separación de bloques correcta.
+            # En [A | I] la barra separa dos bloques de n columnas; no hay una columna b como en Ax = b.
             filas = [[formatear_numero(v) for v in fila] for fila in paso.matriz]
             texto = "\n".join("[ " + "  ".join(f[:n]) + " | " + "  ".join(f[n:]) + " ]" for f in filas)
             pasos += [paso.operacion, texto]
@@ -1003,27 +1156,33 @@ def calcular_inversa(A, metodo="gauss_jordan"):
         detalles.update({"matriz_aumentada": aumentada, "matriz_reducida": reducida,
                          "operaciones": operaciones, "pivotes": pivotes})
     else:
-        calculo_det = calcular_determinante(A)
-        d = calculo_det["determinante"]
-        if d == 0:
-            raise ValueError("A no es invertible: det(A)=0; la matriz es singular.")
-        etapas.extend(calculo_det["etapas"])
+        # det(A) se obtiene con los mismos cofactores (expansión por la fila 1): así el
+        # determinante, la matriz de cofactores, la adjunta y la inversa quedan encadenados.
         menores = matriz_cero(n, n)
         for i in range(n):
             for j in range(n):
                 reducida = submatriz(A, i, j)
-                md = calcular_determinante(reducida) if n > 1 else None
+                md = _determinante_menor(reducida) if n > 1 else None
                 menores[i][j] = md["determinante"] if md else Fraction(1)
                 c = (-1) ** (i+j) * menores[i][j]
                 etapas.append(etapa(f"Menor y cofactor ({i+1},{j+1})",
                     valores=[valor_visual("Submatriz", reducida)] if md else [],
-                    calculos=[f"M{i+1},{j+1} = {menores[i][j]}", f"C{i+1},{j+1} = (-1)^({i+1}+{j+1})·({menores[i][j]}) = {c}"],
+                    calculos=[f"M{i+1},{j+1} = {_desarrollo_menor(reducida)}{menores[i][j]}", f"C{i+1},{j+1} = (-1)^({i+1}+{j+1})·({menores[i][j]}) = {c}"],
                     subpasos=md["etapas"] if md else []))
         cofactores = _cofactores_desde_menores(menores)
+        terminos = [A[0][j] * cofactores[0][j] for j in range(n)]
+        d = sum(terminos, Fraction(0))
+        etapas += [etapa("Matrices de menores y cofactores", valores=[valor_visual("Menores", menores), valor_visual("Cofactores", cofactores)]),
+                   etapa("det(A) por cofactores de la fila 1", "Se usan las entradas de la fila 1 de A y sus cofactores ya calculados.",
+                         formula="det(A) = " + " + ".join(f"a1,{j+1}·C1,{j+1}" for j in range(n)),
+                         calculos=[" + ".join(f"({A[0][j]})·({cofactores[0][j]})" for j in range(n)) + f" = {d}"],
+                         valores=[valor_visual("det(A)", d)],
+                         condiciones=[condicion(f"det(A) = {d} ≠ 0: A es invertible." if d else "det(A) = 0: A es singular.", d != 0)])]
+        if d == 0:
+            raise ValueError("A no es invertible: det(A)=0; la matriz es singular.")
         adj = transponer_matriz(cofactores)
         inversa = multiplicar_matriz_escalar(Fraction(1) / d, adj)
-        etapas += [etapa("Matrices de menores y cofactores", valores=[valor_visual("Menores", menores), valor_visual("Cofactores", cofactores)]),
-                   etapa("Transponer los cofactores", formula="adj(A) = Cᵀ", valores=[valor_visual("C", cofactores), valor_visual("adj(A)", adj)],
+        etapas += [etapa("Transponer los cofactores", formula="adj(A) = Cᵀ", valores=[valor_visual("C", cofactores), valor_visual("adj(A)", adj)],
                          calculos=[f"adj(A){i+1},{j+1} = C{j+1},{i+1} = {adj[i][j]}" for i in range(n) for j in range(n)]),
                    etapa("Escalar la adjunta", formula=f"A⁻¹ = (1/det(A))adj(A) = ({Fraction(1)/d})adj(A)",
                          valores=[valor_visual("A⁻¹", inversa)], calculos=[
@@ -1042,17 +1201,26 @@ def calcular_inversa(A, metodo="gauss_jordan"):
 
 
 def inversa_gauss_jordan(A):
-    """Devuelve A⁻¹ mediante operaciones de fila exactas sobre [A|I]."""
+    """Calcula A⁻¹ reduciendo [A | I] a [I | A⁻¹].
+
+    Entrada: A cuadrada. Salida: A⁻¹; lanza ValueError si A es singular.
+    """
     return calcular_inversa(A, "gauss_jordan")["inversa"]
 
 
 def inversa_adjunta(A):
-    """Devuelve A⁻¹ como adj(A)/det(A); rechaza matrices singulares."""
+    """Calcula A⁻¹ = adj(A) / det(A).
+
+    Entrada: A cuadrada. Salida: A⁻¹; lanza ValueError si A es singular.
+    """
     return calcular_inversa(A, "adjunta")["inversa"]
 
 
 def comparar_metodos_inversa(A):
-    """Calcula ambas inversas independientemente y las compara exactamente."""
+    """Calcula la inversa por Gauss-Jordan y por adjunta y comprueba que coincidan.
+
+    Entrada: A cuadrada e invertible. Salida: diccionario con ambas inversas, «cumple», conclusión y lados.
+    """
     gj, adj = calcular_inversa(A), calcular_inversa(A, "adjunta")
     izquierda, derecha = gj["inversa"], adj["inversa"]
     return {"gauss_jordan": izquierda, "adjunta": derecha, "cumple": izquierda == derecha,
@@ -1073,13 +1241,18 @@ PROPIEDADES_AVANZADAS = {
     "det_suma_fila": "Sumar un múltiplo de otra fila conserva det",
     "det_triangular": "Determinante triangular = producto diagonal",
     "det_producto": "det(AB) = det(A)det(B)",
+    "det_escalar_matriz": "det(kA) = kⁿ·det(A)",
     "det_transpuesta": "det(Aᵀ) = det(A)",
     "det_identidad": "det(I) = 1",
 }
 
 
 def verificar_propiedad_avanzada(clave, matrices, escalares=None, metodo_inversa="gauss_jordan", metodo_determinante="triangular"):
-    """Calcula ambos lados de cada propiedad; exige las hipótesis aplicables."""
+    """Calcula por separado ambos lados de una propiedad de inversas o determinantes y los compara.
+
+    Entrada: clave, matrices, escalares (k) y métodos de inversa y determinante.
+    Salida: diccionario con lados, «cumple», condiciones y conclusión; lanza ValueError si falla una hipótesis.
+    """
     if clave not in PROPIEDADES_AVANZADAS:
         raise ValueError("Propiedad desconocida.")
     A = validar_cuadrada(matrices["A"])
@@ -1092,6 +1265,10 @@ def verificar_propiedad_avanzada(clave, matrices, escalares=None, metodo_inversa
         condiciones.append(condicion(f"det(A) = {determinante(A)}; se requiere det(A)≠0.", determinante(A) != 0))
 
     def invertir(M, nombre, etapas):
+        """Calcula M⁻¹ con el método elegido y registra det(M) y el procedimiento.
+
+        Entrada: matriz M, nombre a mostrar y lista de etapas. Salida: M⁻¹.
+        """
         detallar_det(M, f"det({nombre[:-2]})", etapas)
         calculo = calcular_inversa(M, metodo_inversa)
         etapas.append(etapa(f"Calcular {nombre}", formula="[M|I] → [I|M⁻¹]" if metodo_inversa == "gauss_jordan" else "M⁻¹ = adj(M)/det(M)",
@@ -1099,16 +1276,28 @@ def verificar_propiedad_avanzada(clave, matrices, escalares=None, metodo_inversa
         return calculo["inversa"]
 
     def detallar_det(M, nombre, etapas):
+        """Calcula det(M) con el método elegido y registra sus pasos.
+
+        Entrada: matriz M, nombre a mostrar y lista de etapas. Salida: det(M).
+        """
         calculo = calcular_determinante(M, metodo_determinante)
         etapas.append(etapa(f"Calcular {nombre}", valores=[valor_visual("M", M), valor_visual(nombre, calculo["determinante"])], subpasos=calculo["etapas"]))
         return calculo["determinante"]
 
     def detallar_producto(M, N, nombre, etapas):
+        """Calcula M·N fila por columna y registra el procedimiento.
+
+        Entrada: matrices M y N, nombre a mostrar y lista de etapas. Salida: M·N.
+        """
         calculo = procedimiento_operacion_matrices(M, "producto", N)
         etapas.append(etapa(f"Calcular {nombre}", valores=[valor_visual("Primer factor", M), valor_visual("Segundo factor", N), valor_visual(nombre, calculo["resultado"])], calculos=calculo["pasos"]))
         return calculo["resultado"]
 
     def transponer(M, nombre, etapas):
+        """Calcula Mᵀ y registra cada entrada.
+
+        Entrada: matriz M, nombre a mostrar y lista de etapas. Salida: Mᵀ.
+        """
         resultado = transponer_matriz(M)
         etapas.append(etapa(f"Calcular {nombre}", formula="(Mᵀ)ij = Mji", valores=[valor_visual("M", M), valor_visual(nombre, resultado)],
             calculos=[f"({i+1},{j+1}): {resultado[i][j]} ← M{j+1},{i+1}" for i in range(len(resultado)) for j in range(len(resultado[0]))]))
@@ -1150,6 +1339,16 @@ def verificar_propiedad_avanzada(clave, matrices, escalares=None, metodo_inversa
         da, db = detallar_det(A, "det(A)", der), detallar_det(B, "det(B)", der)
         derecha = da * db
         der.append(etapa("Multiplicar determinantes", formula=f"({da})·({db}) = {derecha}", valores=[valor_visual("det(A)det(B)", derecha)]))
+    elif clave == "det_escalar_matriz":
+        matriz_kA = multiplicar_matriz_escalar(k, A)
+        izq.append(etapa("Calcular kA", f"Cada entrada de A se multiplica por k = {k}.", valores=[valor_visual("A", A), valor_visual("kA", matriz_kA)],
+                         calculos=[f"({i+1},{j+1}): ({k})·({A[i][j]}) = {matriz_kA[i][j]}" for i in range(n) for j in range(n)]))
+        izquierda = detallar_det(matriz_kA, "det(kA)", izq)
+        det_A = detallar_det(A, "det(A)", der)
+        derecha = k ** n * det_A
+        der.append(etapa("Multiplicar det(A) por kⁿ", formula=f"({k})^{n}·({det_A}) = {derecha}", valores=[valor_visual("kⁿ·det(A)", derecha)]))
+        condiciones.append(condicion(f"k = {k} y n = {n}: kA multiplica las {n} filas de A por k."))
+        pasos.append(f"k = {k}, n = {n}")
     elif clave == "det_transpuesta":
         izquierda = detallar_det(transponer(A, "Aᵀ", izq), "det(Aᵀ)", izq)
         derecha = detallar_det(A, "det(A)", der)
@@ -1204,22 +1403,374 @@ def verificar_propiedad_avanzada(clave, matrices, escalares=None, metodo_inversa
                                                     {"etiqueta": "Lado derecho", "resultado": derecha, "etapas": der}]}
 
 
+CATEGORIAS_PROPIEDADES_CLAVE = ("Operaciones y transposición", "Matriz inversa", "Determinantes",
+                                "Efecto de operaciones de fila")
+
+
+def verificar_propiedades_clave(matriz_A, matriz_B=None, matriz_C=None, escalar_k=2):
+    """Evalúa ambos miembros de cada propiedad clave (transposición, inversa, determinantes y operaciones de fila).
+
+    Entrada: A, B y C opcionales (listas anidadas) y el escalar k.
+    Salida: diccionario con «resultados» (diagnóstico «Se cumple»/«No se cumple»/«No aplica»), intermedios y totales.
+    """
+    A = validar_matriz(matriz_A, "A")
+    B = validar_matriz(matriz_B, "B") if matriz_B is not None else None
+    C = validar_matriz(matriz_C, "C") if matriz_C is not None else None
+    k = Fraction(escalar_k)
+    calculados = {}
+
+    def obtener(nombre, calcular):
+        """Calcula un resultado intermedio una sola vez y lo reutiliza en las demás propiedades.
+
+        Entrada: nombre del resultado y función que lo calcula. Salida: el resultado guardado.
+        """
+        if nombre not in calculados:
+            calculados[nombre] = calcular()
+        return calculados[nombre]
+
+    def exigir(cumple, motivo):
+        """Detiene la propiedad con «No aplica» cuando falla una hipótesis del teorema.
+
+        Entrada: condición (bool) y motivo. Salida: None; lanza ValueError con el motivo si no se cumple.
+        """
+        if not cumple:
+            raise ValueError(motivo)
+
+    def matriz_B():
+        """Obtiene B o detiene la propiedad si no se ingresó.
+
+        Salida: matriz B.
+        """
+        exigir(B is not None, "falta la matriz B.")
+        return B
+
+    def matriz_C():
+        """Obtiene C o detiene la propiedad si no se ingresó.
+
+        Salida: matriz C.
+        """
+        exigir(C is not None, "falta la matriz C.")
+        return C
+
+    def dimension(nombre, M):
+        """Escribe 'X es m×n' para los motivos de «No aplica».
+
+        Entrada: nombre y matriz. Salida: cadena.
+        """
+        return f"{nombre} es {len(M)}×{len(M[0])}"
+
+    def exigir_suma(nombre_X, X, nombre_Y, Y):
+        """Exige que X e Y tengan las mismas dimensiones para poder sumarlas.
+
+        Entrada: nombre y matriz de cada sumando. Salida: None; detiene la propiedad si no se cumple.
+        """
+        exigir((len(X), len(X[0])) == (len(Y), len(Y[0])),
+               f"{dimension(nombre_X, X)} y {dimension(nombre_Y, Y)}: la suma exige dimensiones iguales.")
+
+    def exigir_producto(nombre_X, X, nombre_Y, Y):
+        """Exige columnas(X) = filas(Y) para poder calcular XY.
+
+        Entrada: nombre y matriz de cada factor. Salida: None; detiene la propiedad si no se cumple.
+        """
+        exigir(len(X[0]) == len(Y), f"{dimension(nombre_X, X)} y {dimension(nombre_Y, Y)}: el producto exige "
+                                    f"columnas({nombre_X}) = filas({nombre_Y}).")
+
+    def orden_A():
+        """Exige que A sea cuadrada.
+
+        Salida: el orden n de A.
+        """
+        exigir(len(A) == len(A[0]), "A debe ser cuadrada.")
+        return len(A)
+
+    def transpuesta_A():
+        """Obtiene Aᵀ, calculada una sola vez.
+
+        Salida: Aᵀ.
+        """
+        return obtener("Aᵀ", lambda: transponer_matriz(A))
+
+    def transpuesta_B():
+        """Obtiene Bᵀ, calculada una sola vez.
+
+        Salida: Bᵀ.
+        """
+        return obtener("Bᵀ", lambda: transponer_matriz(matriz_B()))
+
+    def producto_AB():
+        """Obtiene AB, calculado una sola vez tras comprobar columnas(A) = filas(B).
+
+        Salida: AB.
+        """
+        exigir_producto("A", A, "B", matriz_B())
+        return obtener("AB", lambda: multiplicar_matrices(A, B))
+
+    def escalar_kA():
+        """Obtiene kA, calculada una sola vez.
+
+        Salida: kA.
+        """
+        return obtener("kA", lambda: multiplicar_matriz_escalar(k, A))
+
+    def inversa_A():
+        """Obtiene A⁻¹ por Gauss-Jordan, calculada una sola vez (exige A cuadrada e invertible).
+
+        Salida: A⁻¹.
+        """
+        orden_A()
+        return obtener("A⁻¹", lambda: inversa_gauss_jordan(A))
+
+    def inversa_B():
+        """Obtiene B⁻¹ por Gauss-Jordan, calculada una sola vez (exige B cuadrada del orden de A).
+
+        Salida: B⁻¹.
+        """
+        exigir(len(matriz_B()) == len(B[0]) == len(A), "B debe ser cuadrada y del mismo orden que A.")
+        return obtener("B⁻¹", lambda: inversa_gauss_jordan(B))
+
+    def det_A():
+        """Obtiene det(A), calculado una sola vez (exige A cuadrada).
+
+        Salida: det(A).
+        """
+        orden_A()
+        return obtener("det(A)", lambda: determinante(A))
+
+    def con_fila(operacion):
+        """Aplica una operación de fila a una copia de A (exige al menos dos filas).
+
+        Entrada: función que modifica la matriz. Salida: la copia modificada.
+        """
+        exigir(orden_A() >= 2, "se necesitan al menos dos filas distintas.")
+        modificada = copiar_matriz(A)
+        operacion(modificada)
+        return modificada
+
+    def p_doble_transpuesta():
+        """Calcula los miembros de (Aᵀ)ᵀ = A.
+
+        Salida: (izquierda, derecha, pasos encadenados).
+        """
+        return transponer_matriz(transpuesta_A()), A, ["AT = transpuesta(A)", "izquierda = transpuesta(AT)", "derecha = A"]
+
+    def p_transpuesta_suma():
+        """Calcula los miembros de (A + B)ᵀ = Aᵀ + Bᵀ.
+
+        Salida: (izquierda, derecha, pasos encadenados).
+        """
+        exigir_suma("A", A, "B", matriz_B())
+        return (transponer_matriz(sumar_matrices(A, matriz_B())), sumar_matrices(transpuesta_A(), transpuesta_B()),
+                ["izquierda = transpuesta(suma(A, B))", "derecha = suma(AT, BT)  (AT y BT se reutilizan)"])
+
+    def p_transpuesta_escalar():
+        """Calcula los miembros de (kA)ᵀ = kAᵀ.
+
+        Salida: (izquierda, derecha, pasos encadenados).
+        """
+        return (transponer_matriz(escalar_kA()), multiplicar_matriz_escalar(k, transpuesta_A()),
+                [f"kA = escalar({k}, A)", "izquierda = transpuesta(kA)", f"derecha = escalar({k}, AT)"])
+
+    def p_transpuesta_producto():
+        """Calcula los miembros de (AB)ᵀ = BᵀAᵀ.
+
+        Salida: (izquierda, derecha, pasos encadenados).
+        """
+        return (transponer_matriz(producto_AB()), multiplicar_matrices(transpuesta_B(), transpuesta_A()),
+                ["AB = producto(A, B)  (se calcula una vez y se reutiliza)", "izquierda = transpuesta(AB)",
+                 "derecha = producto(transpuesta(B), transpuesta(A))"])
+
+    def p_distributiva():
+        """Calcula los miembros de A(B + C) = AB + AC.
+
+        Salida: (izquierda, derecha, pasos encadenados).
+        """
+        exigir_suma("B", matriz_B(), "C", matriz_C())
+        exigir_producto("A", A, "B", B)
+        producto_AC = obtener("AC", lambda: multiplicar_matrices(A, matriz_C()))
+        return (multiplicar_matrices(A, sumar_matrices(matriz_B(), matriz_C())), sumar_matrices(producto_AB(), producto_AC),
+                ["izquierda = producto(A, suma(B, C))", "AC = producto(A, C)", "derecha = suma(AB, AC)  (AB se reutiliza)"])
+
+    def p_asociativa():
+        """Calcula los miembros de (AB)C = A(BC).
+
+        Salida: (izquierda, derecha, pasos encadenados).
+        """
+        exigir_producto("A", A, "B", matriz_B())
+        exigir_producto("B", B, "C", matriz_C())
+        producto_BC = obtener("BC", lambda: multiplicar_matrices(matriz_B(), matriz_C()))
+        return (multiplicar_matrices(producto_AB(), matriz_C()), multiplicar_matrices(A, producto_BC),
+                ["izquierda = producto(AB, C)  (AB se reutiliza)", "BC = producto(B, C)", "derecha = producto(A, BC)"])
+
+    def p_doble_inversa():
+        """Calcula los miembros de (A⁻¹)⁻¹ = A.
+
+        Salida: (izquierda, derecha, pasos encadenados).
+        """
+        return inversa_gauss_jordan(inversa_A()), A, ["Ainv = inversa(A)", "izquierda = inversa(Ainv)", "derecha = A"]
+
+    def p_inversa_producto():
+        """Calcula los miembros de (AB)⁻¹ = B⁻¹A⁻¹.
+
+        Salida: (izquierda, derecha, pasos encadenados).
+        """
+        inversa_de_B, inversa_de_A = inversa_B(), inversa_A()
+        return (inversa_gauss_jordan(producto_AB()), multiplicar_matrices(inversa_de_B, inversa_de_A),
+                ["izquierda = inversa(AB)  (AB se reutiliza)", "derecha = producto(Binv, Ainv)"])
+
+    def p_inversa_transpuesta():
+        """Calcula los miembros de (Aᵀ)⁻¹ = (A⁻¹)ᵀ.
+
+        Salida: (izquierda, derecha, pasos encadenados).
+        """
+        return (inversa_gauss_jordan(transpuesta_A()), transponer_matriz(inversa_A()),
+                ["izquierda = inversa(AT)", "derecha = transpuesta(Ainv)  (Ainv se reutiliza)"])
+
+    def p_producto_por_inversa():
+        """Calcula los miembros de A·A⁻¹ = I.
+
+        Salida: (izquierda, derecha, pasos encadenados).
+        """
+        return (multiplicar_matrices(A, inversa_A()), matriz_identidad(orden_A()),
+                ["izquierda = producto(A, Ainv)", f"derecha = identidad({len(A)})"])
+
+    def p_det_transpuesta():
+        """Calcula los miembros de det(Aᵀ) = det(A).
+
+        Salida: (izquierda, derecha, pasos encadenados).
+        """
+        return determinante(transpuesta_A()), det_A(), ["izquierda = det(AT)", "derecha = det(A)"]
+
+    def p_det_producto():
+        """Calcula los miembros de det(AB) = det(A)·det(B).
+
+        Salida: (izquierda, derecha, pasos encadenados).
+        """
+        exigir(len(matriz_B()) == len(B[0]) == orden_A(), "B debe ser cuadrada y del mismo orden que A.")
+        det_B = obtener("det(B)", lambda: determinante(B))
+        return determinante(producto_AB()), det_A() * det_B, ["izquierda = det(AB)", "derecha = det(A) · det(B)"]
+
+    def p_det_inversa():
+        """Calcula los miembros de det(A⁻¹) = 1/det(A).
+
+        Salida: (izquierda, derecha, pasos encadenados).
+        """
+        return determinante(inversa_A()), Fraction(1) / det_A(), ["izquierda = det(Ainv)", "derecha = 1 / det(A)"]
+
+    def p_det_escalar():
+        """Calcula los miembros de det(kA) = kⁿ·det(A).
+
+        Salida: (izquierda, derecha, pasos encadenados).
+        """
+        n = orden_A()
+        return (determinante(escalar_kA()), k ** n * det_A(),
+                ["izquierda = det(kA)  (kA se reutiliza)", f"derecha = ({k})^{n} · det(A)"])
+
+    def p_permutacion():
+        """Calcula los miembros de det(A con F1 ↔ F2) = −det(A).
+
+        Salida: (izquierda, derecha, pasos encadenados).
+        """
+        permutada = con_fila(lambda M: intercambiar_filas(M, 0, 1))
+        return determinante(permutada), -det_A(), ["A' = A con F1 ↔ F2", "izquierda = det(A')", "derecha = −det(A)"]
+
+    def p_reemplazo():
+        """Calcula los miembros de det(A con F1 ← F1 + kF2) = det(A).
+
+        Salida: (izquierda, derecha, pasos encadenados).
+        """
+        reemplazada = con_fila(lambda M: sumar_multiplo_fila(M, 0, 1, k))
+        return determinante(reemplazada), det_A(), [f"A' = A con F1 ← F1 + ({k})F2", "izquierda = det(A')", "derecha = det(A)"]
+
+    def p_escalamiento():
+        """Calcula los miembros de det(A con F1 ← kF1) = k·det(A).
+
+        Salida: (izquierda, derecha, pasos encadenados).
+        """
+        escalada = con_fila(lambda M: multiplicar_fila(M, 0, k))
+        return determinante(escalada), k * det_A(), [f"A' = A con F1 ← ({k})F1", "izquierda = det(A')", f"derecha = ({k}) · det(A)"]
+
+    def p_triangular():
+        """Calcula los miembros de det(T) = producto de la diagonal, con T la parte triangular superior de A.
+
+        Salida: (izquierda, derecha, pasos encadenados).
+        """
+        n = orden_A()
+        triangular = [[A[i][j] if j >= i else Fraction(0) for j in range(n)] for i in range(n)]
+        diagonal = Fraction(1)
+        for i in range(n):
+            diagonal *= triangular[i][i]
+        # La expansión por cofactores no usa la diagonal, así que el miembro izquierdo es independiente del derecho.
+        return (calcular_determinante(triangular, "cofactores")["determinante"], diagonal,
+                ["T = parte triangular superior de A", "izquierda = det(T) por cofactores", "derecha = producto de la diagonal de T"])
+
+    catalogo = [
+        ("Operaciones y transposición", "(Aᵀ)ᵀ = A", p_doble_transpuesta),
+        ("Operaciones y transposición", "(A + B)ᵀ = Aᵀ + Bᵀ", p_transpuesta_suma),
+        ("Operaciones y transposición", "(kA)ᵀ = kAᵀ", p_transpuesta_escalar),
+        ("Operaciones y transposición", "(AB)ᵀ = BᵀAᵀ", p_transpuesta_producto),
+        ("Operaciones y transposición", "A(B + C) = AB + AC", p_distributiva),
+        ("Operaciones y transposición", "(AB)C = A(BC)", p_asociativa),
+        ("Matriz inversa", "(A⁻¹)⁻¹ = A", p_doble_inversa),
+        ("Matriz inversa", "(AB)⁻¹ = B⁻¹A⁻¹", p_inversa_producto),
+        ("Matriz inversa", "(Aᵀ)⁻¹ = (A⁻¹)ᵀ", p_inversa_transpuesta),
+        ("Matriz inversa", "A·A⁻¹ = I", p_producto_por_inversa),
+        ("Determinantes", "det(Aᵀ) = det(A)", p_det_transpuesta),
+        ("Determinantes", "det(AB) = det(A)·det(B)", p_det_producto),
+        ("Determinantes", "det(A⁻¹) = 1/det(A)", p_det_inversa),
+        ("Determinantes", "det(kA) = kⁿ·det(A)", p_det_escalar),
+        ("Efecto de operaciones de fila", "Permutación de filas: det cambia de signo", p_permutacion),
+        ("Efecto de operaciones de fila", "Reemplazo Fi ← Fi + kFj: det se conserva", p_reemplazo),
+        ("Efecto de operaciones de fila", "Multiplicar una fila por k: det se multiplica por k", p_escalamiento),
+        ("Efecto de operaciones de fila", "det(triangular) = producto de la diagonal", p_triangular),
+    ]
+    resultados = []
+    for categoria, propiedad, calcular in catalogo:
+        try:
+            izquierda, derecha, pasos = calcular()
+            cumple = son_iguales(izquierda, derecha)
+            diagnostico = "Se cumple" if cumple else "No se cumple"
+        except (ValueError, ZeroDivisionError) as error:
+            izquierda = derecha = cumple = None
+            pasos, diagnostico = [], f"No aplica: {error}"
+        resultados.append({"categoria": categoria, "propiedad": propiedad, "izquierda": izquierda, "derecha": derecha,
+                           "pasos": pasos, "cumple": cumple, "diagnostico": diagnostico})
+    evaluadas = [r for r in resultados if r["cumple"] is not None]
+    return {"resultados": resultados, "intermedios": calculados, "k": k,
+            "evaluadas": len(evaluadas), "cumplidas": sum(1 for r in evaluadas if r["cumple"])}
+
+
 def matriz_cero(filas, columnas):
+    """Construye la matriz nula.
+
+    Entrada: filas y columnas. Salida: matriz de ceros (Fraction).
+    """
     return [[Fraction(0) for _ in range(columnas)] for _ in range(filas)]
 
 
 def matriz_identidad(orden):
+    """Construye la identidad de orden n.
+
+    Entrada: orden (entero positivo). Salida: matriz identidad; lanza ValueError si el orden no es válido.
+    """
     if not isinstance(orden, int) or orden < 1:
         raise ValueError("El orden de la identidad debe ser un entero positivo.")
     return [[Fraction(int(i == j)) for j in range(orden)] for i in range(orden)]
 
 
 def transponer_matriz(A):
+    """Calcula la transpuesta: la fila i de A pasa a ser la columna i.
+
+    Entrada: matriz A (m × n). Salida: Aᵀ (n × m).
+    """
     A = validar_matriz(A, "A")
     return [[A[i][j] for i in range(len(A))] for j in range(len(A[0]))]
 
 
 def sumar_matrices(A, B):
+    """Suma A + B entrada por entrada.
+
+    Entrada: A y B de las mismas dimensiones. Salida: A + B; lanza ValueError si las dimensiones difieren.
+    """
     A, B = validar_matriz(A, "A"), validar_matriz(B, "B")
     da, db = (len(A), len(A[0])), (len(B), len(B[0]))
     if da != db:
@@ -1228,6 +1779,10 @@ def sumar_matrices(A, B):
 
 
 def restar_matrices(A, B):
+    """Resta A − B entrada por entrada.
+
+    Entrada: A y B de las mismas dimensiones. Salida: A − B; lanza ValueError si las dimensiones difieren.
+    """
     A, B = validar_matriz(A, "A"), validar_matriz(B, "B")
     da, db = (len(A), len(A[0])), (len(B), len(B[0]))
     if da != db:
@@ -1236,6 +1791,10 @@ def restar_matrices(A, B):
 
 
 def multiplicar_matriz_escalar(escalar, A):
+    """Multiplica cada entrada de A por el escalar.
+
+    Entrada: escalar y matriz A. Salida: nueva matriz; lanza ValueError si el escalar no es numérico.
+    """
     A = validar_matriz(A, "A")
     try:
         escalar = escalar if isinstance(escalar, Fraction) else Fraction(escalar)
@@ -1245,6 +1804,10 @@ def multiplicar_matriz_escalar(escalar, A):
 
 
 def multiplicar_matrices(A, B):
+    """Calcula el producto matricial AB fila por columna.
+
+    Entrada: A (m × n) y B (n × q). Salida: AB (m × q); lanza ValueError si columnas(A) ≠ filas(B).
+    """
     A, B = validar_matriz(A, "A"), validar_matriz(B, "B")
     m, n, p, q = len(A), len(A[0]), len(B), len(B[0])
     if n != p:
@@ -1253,11 +1816,19 @@ def multiplicar_matrices(A, B):
 
 
 def _terminos(izquierda, derecha, operador="·"):
+    """Escribe la suma de productos de una fila por una columna, por ejemplo '1·2 + 3·4'.
+
+    Entrada: entradas de la fila, de la columna y el operador. Salida: cadena.
+    """
     return " + ".join(f"{formatear_numero(a)}{operador}{formatear_numero(b)}" for a, b in zip(izquierda, derecha)) or "0"
 
 
 def procedimiento_operacion_matrices(A, operacion, B=None, escalar=None):
-    """Calcula una operación y devuelve resultado, pasos reales y conclusión académica."""
+    """Calcula una operación básica (suma, resta, producto, escalar o transpuesta) con sus pasos y verificación.
+
+    Entrada: A, operación, B y escalar según corresponda.
+    Salida: diccionario con resultado, pasos, conclusión, resolución y verificación.
+    """
     A = validar_matriz(A, "A")
     m, n = dimensiones_matriz(A)
     pasos = [f"Datos: A es una matriz {m}×{n}.", "A:", matriz_a_texto(A, False)]
@@ -1267,6 +1838,10 @@ def procedimiento_operacion_matrices(A, operacion, B=None, escalar=None):
         pasos.append(f"B es una matriz {p}×{q}.")
         pasos += ["B:", matriz_a_texto(B, False)]
     def informe(resultado, conclusion):
+        """Empaqueta el resultado de la operación con sus pasos, la resolución por expresión y su verificación.
+
+        Entrada: resultado y conclusión. Salida: diccionario del informe.
+        """
         textos = {"suma": "A+B", "resta": "A-B", "producto": "AB", "escalar": "rA", "transpuesta": "Aᵀ"}
         resolucion = resolver_expresion_matricial(textos[operacion], {"A": A, **({"B": B} if B is not None else {})}, {"r": escalar} if escalar is not None else {})
         resolucion["resultado"] = resultado
@@ -1310,6 +1885,10 @@ def procedimiento_operacion_matrices(A, operacion, B=None, escalar=None):
 
 
 def comparar_matrices(izquierda, derecha, nombre_izquierdo="Lado izquierdo", nombre_derecho="Lado derecho"):
+    """Compara dos matrices en dimensiones y entrada por entrada.
+
+    Entrada: ambas matrices y sus nombres. Salida: diccionario con dimensiones, diferencias, «coinciden» y conclusión.
+    """
     izquierda, derecha = validar_matriz(izquierda, nombre_izquierdo), validar_matriz(derecha, nombre_derecho)
     di, dd = dimensiones_matriz(izquierda), dimensiones_matriz(derecha)
     diferencias = []
@@ -1326,8 +1905,31 @@ def comparar_matrices(izquierda, derecha, nombre_izquierdo="Lado izquierdo", nom
                            else "La igualdad no se verifica: revise las diferencias indicadas.")}
 
 
+def son_iguales(izquierda, derecha):
+    """Comprobación de igualdad exacta entre dos matrices, dos vectores o dos escalares.
+
+    Entrada: listas anidadas, listas simples o números. Salida: True o False.
+    """
+    def como_matriz(dato):
+        """Convierte un vector en matriz columna y deja intactas las matrices.
+
+        Entrada: lista. Salida: lista anidada.
+        """
+        return dato if dato and isinstance(dato[0], list) else [[valor] for valor in dato]
+    if isinstance(izquierda, list) != isinstance(derecha, list):
+        return False
+    if not isinstance(izquierda, list):
+        return Fraction(izquierda) == Fraction(derecha)
+    if not izquierda or not derecha:
+        return izquierda == derecha
+    return comparar_matrices(como_matriz(izquierda), como_matriz(derecha))["coinciden"]
+
+
 def verificar_propiedades_transpuesta(A, B=None, escalar=Fraction(1)):
-    """Verifica casos particulares; no los presenta como demostración general."""
+    """Comprueba con A (y B) las propiedades de la transpuesta como casos particulares.
+
+    Entrada: A, B opcional y escalar. Salida: diccionario propiedad → comparación de ambos lados.
+    """
     A = validar_matriz(A, "A")
     r = escalar if isinstance(escalar, Fraction) else Fraction(escalar)
     propiedades = {}
@@ -1357,10 +1959,18 @@ def verificar_propiedades_transpuesta(A, B=None, escalar=Fraction(1)):
 
 
 def verificar_propiedades_algebraicas(A, B, C, r=Fraction(1), s=Fraction(1)):
+    """Comprueba con A, B, C, r y s las propiedades de suma, escalares y producto.
+
+    Entrada: matrices A, B, C y escalares r, s. Salida: diccionario propiedad → comparación (o motivo si no está definida).
+    """
     A, B, C = validar_matriz(A, "A"), validar_matriz(B, "B"), validar_matriz(C, "C")
     r, s = Fraction(r), Fraction(s)
     resultados = {}
     def prueba(nombre, izquierda, derecha):
+        """Compara ambos lados de una propiedad y guarda el resultado.
+
+        Entrada: nombre, lado izquierdo y lado derecho. Salida: None.
+        """
         resultados[nombre] = comparar_matrices(izquierda, derecha, "Lado izquierdo", "Lado derecho")
     if dimensiones_matriz(A) == dimensiones_matriz(B) == dimensiones_matriz(C):
         prueba("asociatividad_suma", sumar_matrices(sumar_matrices(A, B), C), sumar_matrices(A, sumar_matrices(B, C)))
@@ -1399,7 +2009,10 @@ def verificar_propiedades_algebraicas(A, B, C, r=Fraction(1), s=Fraction(1)):
 
 
 def contraejemplos_matriciales():
-    """Contraejemplos exactos, listos para ser explicados y comprobados."""
+    """Construye los contraejemplos clásicos del producto: no conmutatividad, orden, cancelación y divisores de cero.
+
+    Salida: diccionario con las matrices, sus productos y la conclusión de cada contraejemplo.
+    """
     A, B = [[1, 2], [0, 1]], [[1, 0], [3, 1]]
     C, D = [[1, 0], [0, 0]], [[0, 0], [1, 0]]
     E, F, G = [[1, 0], [0, 0]], [[1, 0], [0, 0]], [[1, 0], [2, 0]]
@@ -1417,10 +2030,9 @@ def contraejemplos_matriciales():
 
 
 def ejercicios_matrices():
-    """
-    Banco breve y variado de ejercicios; cada uno explicita qué debe justificarse.
-    Las claves opcionales 'expresion', 'propiedad' y 'contraejemplo' indican cómo
-    resolverlo en la calculadora.
+    """Construye el banco de ejercicios tipo examen con la expresión, propiedad o contraejemplo que los resuelve.
+
+    Salida: lista de diccionarios (tema, matrices, consigna y forma de resolverlo).
     """
     return [
         {"tema": "Suma con fracciones", "A": [["1/2", "-1"], ["3", "0"]], "B": [["1/3", "2"], ["-3", "5/2"]],
@@ -1450,38 +2062,48 @@ def ejercicios_matrices():
     ]
 
 
-# -----------------------------------------------------------------------------
-# Expresiones con matrices: analizador, procedimiento y verificacion
-# -----------------------------------------------------------------------------
-# Una expresion como 2A − 3B + C o A(B + C)ᵀ se convierte en un arbol que respeta
-# los parentesis y la precedencia (transpuesta > producto > suma/resta). Luego se
-# evalua de abajo hacia arriba registrando cada operacion intermedia, y por ultimo
-# se verifica con calculos independientes.
 
 _TABLA_SUBINDICES = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
 
 
 def subindice(i, j):
-    """Subindice de una entrada: subindice(1, 2) -> '₁₂'; con dos cifras usa coma: '₁,₁₀'."""
+    """Escribe el subíndice de una entrada: '₁₂', o '₁,₁₀' si algún índice tiene dos cifras.
+
+    Entrada: índices i y j (desde 1). Salida: cadena.
+    """
     texto = f"{i}{j}" if i < 10 and j < 10 else f"{i},{j}"
     return texto.translate(_TABLA_SUBINDICES)
 
 
 def formatear_dimension(dimension):
+    """Escribe una dimensión como 'm×n'.
+
+    Entrada: tupla (filas, columnas). Salida: cadena.
+    """
     return f"{dimension[0]}×{dimension[1]}"
 
 
 def matriz_en_linea(matriz):
-    """[[1, 2], [3, 4]] -> '[1 2; 3 4]'."""
+    """Escribe una matriz en una línea, por ejemplo '[1 2; 3 4]'.
+
+    Entrada: matriz. Salida: cadena.
+    """
     return "[" + "; ".join(" ".join(formatear_numero(v) for v in fila) for fila in matriz) + "]"
 
 
 def _entre_parentesis(valor):
+    """Escribe un número entre paréntesis para las sustituciones, por ejemplo (-1/2).
+
+    Entrada: número. Salida: cadena.
+    """
     return f"({formatear_numero(valor)})"
 
 
 def _suma_en_texto(valores):
-    """[2, -2, 3] -> '2 - 2 + 3'."""
+    """Escribe una suma con sus signos, por ejemplo [2, -2, 3] → '2 - 2 + 3'.
+
+    Entrada: lista de números. Salida: cadena ('0' si está vacía).
+    """
     partes = []
     for valor in valores:
         if not partes:
@@ -1492,18 +2114,21 @@ def _suma_en_texto(valores):
 
 
 class ErrorExpresion(ValueError):
-    """Error de escritura o de dimensiones en una expresion matricial (posicion = indice del caracter)."""
+    """Error de escritura o de dimensiones en una expresión matricial; guarda la posición del carácter."""
 
     def __init__(self, mensaje, posicion=None):
+        """Guarda el mensaje y la posición del error.
+
+        Entrada: mensaje y posición (índice del carácter o None). Salida: None.
+        """
         super().__init__(mensaje)
         self.posicion = posicion
 
 
 def tokenizar_expresion(texto):
-    """
-    Divide la expresion en simbolos: numeros (2, 0.5, 3/2), matrices (A, B, C, ...),
-    identidades (I2, I3, ...), escalares (r, s), operadores (+ - *), parentesis y
-    transpuesta (ᵀ, ^T o ').
+    """Divide la expresión en símbolos: números, matrices, identidades, escalares, operadores, paréntesis, ᵀ y ⁻¹.
+
+    Entrada: texto de la expresión. Salida: lista de (tipo, valor, posición, lexema); lanza ErrorExpresion.
     """
     texto = texto.replace("−", "-").replace("×", "*").replace("·", "*")
     tokens = []
@@ -1572,29 +2197,43 @@ def tokenizar_expresion(texto):
 
 
 class NodoExpresion:
-    """Nodo del arbol de una expresion matricial."""
+    """Nodo del árbol de una expresión matricial (operación o dato) con su posición en el texto."""
 
     PRECEDENCIA = {"suma": 1, "resta": 1, "producto": 2, "negativo": 3, "transpuesta": 4, "inversa": 4,
                    "matriz": 5, "identidad": 5, "numero": 5, "escalar": 5}
 
     def __init__(self, tipo, hijos=(), valor=None, posicion=None, parentesis=False):
+        """Crea un nodo del árbol.
+
+        Entrada: tipo, hijos, valor, posición y si el usuario lo agrupó entre paréntesis. Salida: None.
+        """
         self.tipo = tipo
         self.hijos = list(hijos)
         self.valor = valor
         self.posicion = posicion
-        # True si el usuario agrupo esta subexpresion con parentesis: se conservan al mostrarla
-        # aunque no hagan falta por precedencia, como en (A + B) + C o (AB)C.
         self.parentesis = parentesis
 
     @property
     def precedencia(self):
+        """Prioridad del nodo para decidir dónde hacen falta paréntesis.
+
+        Salida: entero (mayor = se evalúa antes).
+        """
         return self.PRECEDENCIA[self.tipo]
 
     @property
     def es_hoja(self):
+        """Indica si el nodo es un dato (matriz, número, escalar o identidad) sin hijos.
+
+        Salida: True o False.
+        """
         return not self.hijos
 
     def _operando(self, hijo, minimo, derecha=False, en_producto=False):
+        """Escribe un hijo con paréntesis solo si la precedencia o la agrupación del usuario lo exigen.
+
+        Entrada: hijo, precedencia mínima y su posición. Salida: cadena.
+        """
         texto = hijo.texto()
         if (hijo.precedencia < minimo or (derecha and hijo.tipo == "negativo")
                 or (hijo.parentesis and not hijo.es_hoja)):
@@ -1604,7 +2243,10 @@ class NodoExpresion:
         return texto
 
     def texto(self):
-        """Notacion habitual con los parentesis minimos: 2A − 3B + C, A(B + C), (AB)ᵀ."""
+        """Escribe la expresión en notación habitual con los paréntesis mínimos, por ejemplo A(B + C).
+
+        Salida: cadena.
+        """
         tipo = self.tipo
         if tipo in ("matriz", "escalar"):
             return self.valor
@@ -1627,7 +2269,10 @@ class NodoExpresion:
         return izquierda + separador + derecha
 
     def texto_completo(self, externo=True):
-        """Cada operacion entre parentesis y con · explicito: muestra el orden real de calculo."""
+        """Escribe la expresión con cada operación entre paréntesis para mostrar el orden real de cálculo.
+
+        Entrada: externo (sin paréntesis exteriores). Salida: cadena.
+        """
         tipo = self.tipo
         if self.es_hoja:
             if tipo == "numero" and not externo and (self.valor.denominator != 1 or self.valor < 0):
@@ -1644,6 +2289,10 @@ class NodoExpresion:
         return texto if externo else f"({texto})"
 
     def nombres_matrices(self):
+        """Reúne las letras de matriz que aparecen en la subexpresión.
+
+        Salida: conjunto de nombres.
+        """
         if self.tipo == "matriz":
             return {self.valor}
         nombres = set()
@@ -1652,6 +2301,10 @@ class NodoExpresion:
         return nombres
 
     def nombres_escalares(self):
+        """Reúne los escalares (r, s) que aparecen en la subexpresión.
+
+        Salida: conjunto de nombres.
+        """
         if self.tipo == "escalar":
             return {self.valor}
         nombres = set()
@@ -1660,7 +2313,10 @@ class NodoExpresion:
         return nombres
 
     def es_matricial(self):
-        """True si el valor de la expresion es una matriz (y no un numero)."""
+        """Indica si el valor de la subexpresión es una matriz (y no un número).
+
+        Salida: True o False.
+        """
         if self.tipo in ("matriz", "identidad"):
             return True
         if self.tipo in ("numero", "escalar"):
@@ -1669,35 +2325,51 @@ class NodoExpresion:
 
 
 class _AnalizadorExpresion:
-    """
-    Gramatica (de menor a mayor precedencia):
-        expresion := termino (('+' | '-') termino)*
-        termino   := factor (['*'] factor)*        # AB, 2A, A(B+C): producto por yuxtaposicion
-        factor    := '-' factor | postfijo
-        postfijo  := primario ('ᵀ' | '⁻¹')*
-        primario  := numero | matriz | identidad | escalar | '(' expresion ')'
+    """Analizador descendente de expresiones matriciales; la precedencia va de la suma a ᵀ y ⁻¹.
+
+    Gramática: expresion → termino → factor → postfijo → primario (ver cada método).
     """
 
     INICIO_DE_FACTOR = ("numero", "matriz", "identidad", "escalar", "(", "-")
 
     def __init__(self, tokens, longitud):
+        """Prepara la lectura de los símbolos.
+
+        Entrada: lista de símbolos y longitud del texto. Salida: None.
+        """
         self.tokens = tokens
         self.longitud = longitud
         self.indice = 0
 
     def actual(self):
+        """Obtiene el símbolo en la posición de lectura.
+
+        Salida: el símbolo, o None al final.
+        """
         return self.tokens[self.indice] if self.indice < len(self.tokens) else None
 
     def ver(self):
+        """Obtiene el tipo del símbolo actual sin avanzar.
+
+        Salida: tipo, o None al final.
+        """
         token = self.actual()
         return token[0] if token else None
 
     def tomar(self):
+        """Obtiene el símbolo actual y avanza una posición.
+
+        Salida: el símbolo leído.
+        """
         token = self.actual()
         self.indice += 1
         return token
 
     def expresion(self):
+        """Regla expresion := termino (('+' | '-') termino)*.
+
+        Salida: nodo de la suma o resta.
+        """
         nodo = self.termino()
         while self.ver() in ("+", "-"):
             token = self.tomar()
@@ -1705,6 +2377,10 @@ class _AnalizadorExpresion:
         return nodo
 
     def termino(self):
+        """Regla termino := factor (['*'] factor)*; el producto también se reconoce por yuxtaposición (AB, 2A).
+
+        Salida: nodo del producto.
+        """
         nodo = self.factor()
         while True:
             tipo = self.ver()
@@ -1717,12 +2393,20 @@ class _AnalizadorExpresion:
             nodo = NodoExpresion("producto", [nodo, self.factor()])
 
     def factor(self):
+        """Regla factor := '-' factor | postfijo.
+
+        Salida: nodo del factor.
+        """
         if self.ver() == "-":
             token = self.tomar()
             return NodoExpresion("negativo", [self.factor()], posicion=token[2])
         return self.postfijo()
 
     def postfijo(self):
+        """Regla postfijo := primario ('ᵀ' | '⁻¹')*.
+
+        Salida: nodo con sus transpuestas e inversas.
+        """
         nodo = self.primario()
         while self.ver() in ("T", "INV"):
             token = self.tomar()
@@ -1730,6 +2414,10 @@ class _AnalizadorExpresion:
         return nodo
 
     def primario(self):
+        """Regla primario := número | matriz | identidad | escalar | '(' expresion ')'.
+
+        Salida: nodo; lanza ErrorExpresion si falta un operando o un paréntesis.
+        """
         token = self.actual()
         if token is None:
             raise ErrorExpresion("La expresión está incompleta: falta un operando al final.", self.longitud)
@@ -1755,7 +2443,10 @@ class _AnalizadorExpresion:
 
 
 def analizar_expresion_matricial(texto):
-    """Convierte el texto en un arbol NodoExpresion o lanza ErrorExpresion con la posicion del problema."""
+    """Convierte el texto de una expresión en su árbol de nodos.
+
+    Entrada: texto. Salida: NodoExpresion raíz; lanza ErrorExpresion con la posición del problema.
+    """
     if not texto or not texto.strip():
         raise ErrorExpresion("Escribe una expresión, por ejemplo A(B + C).", 0)
     tokens = tokenizar_expresion(texto)
@@ -1770,7 +2461,10 @@ def analizar_expresion_matricial(texto):
 
 
 def _letra(nodo, defecto):
-    """Letra para las entradas de un operando: a para A, b para B; x o y si es una subexpresion."""
+    """Elige la letra de las entradas de un operando: a para A, b para B; la de defecto si es una subexpresión.
+
+    Entrada: nodo y letra por defecto. Salida: cadena.
+    """
     if nodo.tipo == "matriz":
         return nodo.valor.lower()
     if nodo.tipo == "identidad":
@@ -1779,15 +2473,26 @@ def _letra(nodo, defecto):
 
 
 def _nombre_operando(nodo):
+    """Escribe el nombre de un operando: la hoja tal cual y las subexpresiones entre paréntesis.
+
+    Entrada: nodo. Salida: cadena.
+    """
     return nodo.texto() if nodo.es_hoja or nodo.tipo == "transpuesta" else f"({nodo.texto()})"
 
 
 def _argumento(nodo):
-    """Texto para usar como argumento: dim(A), columnas(B + C)."""
+    """Escribe un nodo entre paréntesis para usarlo como argumento, por ejemplo dim(A) o columnas(B + C).
+
+    Entrada: nodo. Salida: cadena.
+    """
     return f"({nodo.texto()})"
 
 
 def _buscar_posicion(nodo, tipo, valor):
+    """Busca la posición en el texto del primer nodo con ese tipo y valor.
+
+    Entrada: nodo raíz, tipo y valor. Salida: índice del carácter o None.
+    """
     if nodo.tipo == tipo and nodo.valor == valor:
         return nodo.posicion
     for hijo in nodo.hijos:
@@ -1798,14 +2503,18 @@ def _buscar_posicion(nodo, tipo, valor):
 
 
 def revisar_dimensiones(nodo, dimensiones, escalares=("r", "s")):
-    """
-    Recorre la expresion con solo las dimensiones (sin calcular) y devuelve
-    (condiciones, dimension_final). Cada condicion indica la operacion, el requisito
-    y si se cumple; el recorrido se detiene en la primera operacion no definida.
+    """Recorre la expresión solo con dimensiones (sin calcular) y anota la condición de cada operación.
+
+    Entrada: árbol, dimensiones por matriz y escalares disponibles.
+    Salida: (condiciones, dimensión final o None si alguna operación no está definida).
     """
     condiciones = []
 
     def recorrer(n):
+        """Calcula la dimensión de una subexpresión y anota su condición.
+
+        Entrada: nodo. Salida: (filas, columnas) o None si es un número.
+        """
         if n.tipo == "matriz":
             if n.valor not in dimensiones:
                 raise ErrorExpresion(f"La matriz {n.valor} no está definida." + (
@@ -1861,7 +2570,6 @@ def revisar_dimensiones(nodo, dimensiones, escalares=("r", "s")):
             if not cumple:
                 raise _DimensionNoDefinida()
             return izquierda
-        # producto
         if izquierda is None or derecha is None:
             matriz = izquierda or derecha
             if matriz is not None:
@@ -1886,11 +2594,16 @@ def revisar_dimensiones(nodo, dimensiones, escalares=("r", "s")):
 
 
 class _DimensionNoDefinida(Exception):
-    pass
+    """Señal interna: una operación no está definida con las dimensiones dadas."""
 
 
 class _OperacionNoDefinida(Exception):
+    """Señal interna con el mensaje de la operación que no se pudo calcular."""
     def __init__(self, mensaje):
+        """Guarda el motivo por el que la operación no está definida.
+
+        Entrada: mensaje. Salida: None.
+        """
         super().__init__(mensaje)
 
 
@@ -1913,14 +2626,22 @@ REGLAS_OPERACION = {
 
 
 class _ResolutorMatricial:
-    """Evalua el arbol de abajo hacia arriba y registra cada operacion intermedia."""
+    """Evalúa el árbol de abajo hacia arriba y registra cada operación intermedia con su procedimiento."""
 
     def __init__(self, matrices, escalares):
+        """Prepara la evaluación.
+
+        Entrada: matrices y escalares ya validados. Salida: None.
+        """
         self.matrices = matrices
         self.escalares = escalares
         self.pasos = []
 
     def valor(self, nodo):
+        """Evalúa un nodo y sus hijos, registrando cada operación.
+
+        Entrada: nodo. Salida: (tipo, valor) con tipo 'matriz' o 'numero'.
+        """
         tipo = nodo.tipo
         if tipo == "matriz":
             return ("matriz", self.matrices[nodo.valor])
@@ -1935,6 +2656,10 @@ class _ResolutorMatricial:
 
     def _registrar(self, nodo, tipo, operandos, condicion, cumple, regla, descripcion, entradas=(),
                    resultado=None, advertencias=(), extra=()):
+        """Agrega un paso con operandos, condición, regla, cálculo por entrada y resultado.
+
+        Entrada: nodo, tipo y datos del paso. Salida: el diccionario del paso.
+        """
         paso = {
             "tipo": tipo,
             "titulo": f"Calcular {nodo.texto()}",
@@ -1953,10 +2678,18 @@ class _ResolutorMatricial:
         return paso
 
     def _fallar(self, nodo, tipo, operandos, condicion, mensaje):
+        """Registra la operación no definida y detiene la evaluación.
+
+        Entrada: nodo, tipo, operandos, condición y mensaje. Salida: no retorna; lanza _OperacionNoDefinida.
+        """
         self._registrar(nodo, tipo, operandos, condicion, False, REGLAS_OPERACION.get(tipo, ""), mensaje)
         raise _OperacionNoDefinida(mensaje)
 
     def _aritmetica(self, nodo, operandos, valor, simbolo):
+        """Opera dos números (o niega uno) y registra el paso.
+
+        Entrada: nodo, operandos, valor y símbolo. Salida: ('numero', valor).
+        """
         a, b = (operandos + [None])[:2]
         texto = (f"{_entre_parentesis(a[1])} {simbolo} {_entre_parentesis(b[1])} = {formatear_numero(valor)}"
                  if b is not None else f"−{_entre_parentesis(a[1])} = {formatear_numero(valor)}")
@@ -1967,6 +2700,10 @@ class _ResolutorMatricial:
         return ("numero", valor)
 
     def _suma(self, nodo, a, b, resta=False):
+        """Suma o resta matrices entrada por entrada (o números) y registra cada entrada.
+
+        Entrada: nodo, operandos a y b, y resta (bool). Salida: ('matriz', resultado) o ('numero', valor).
+        """
         signo = "−" if resta else "+"
         tipo = "resta" if resta else "suma"
         izquierda, derecha = nodo.hijos
@@ -2005,9 +2742,17 @@ class _ResolutorMatricial:
         return ("matriz", R)
 
     def _resta(self, nodo, a, b):
+        """Resta dos operandos reutilizando la rutina de la suma.
+
+        Entrada: nodo y operandos a y b. Salida: ('matriz', A − B) o ('numero', a − b).
+        """
         return self._suma(nodo, a, b, resta=True)
 
     def _escalar_por_matriz(self, nodo, escalar, matriz, operandos, nombre_matriz, letra, titulo=None):
+        """Multiplica una matriz por un escalar y registra cada entrada.
+
+        Entrada: nodo, escalar, matriz, operandos, nombre, letra y título opcional. Salida: ('matriz', resultado).
+        """
         r = escalar
         R = [[r * v for v in fila] for fila in matriz]
         entradas = []
@@ -2029,6 +2774,10 @@ class _ResolutorMatricial:
         return ("matriz", R)
 
     def _producto(self, nodo, a, b):
+        """Calcula el producto fila por columna (o escalar por matriz) con su condición de dimensiones.
+
+        Entrada: nodo y operandos a y b. Salida: ('matriz', producto) o ('numero', valor).
+        """
         izquierda, derecha = nodo.hijos
         if a[0] == "numero" and b[0] == "numero":
             return self._aritmetica(nodo, [a, b], a[1] * b[1], "·")
@@ -2094,6 +2843,10 @@ class _ResolutorMatricial:
         return ("matriz", R)
 
     def _transpuesta(self, nodo, a):
+        """Calcula la transpuesta, registra cada entrada y advierte sobre (XY)ᵀ = YᵀXᵀ.
+
+        Entrada: nodo y operando. Salida: ('matriz', transpuesta).
+        """
         hijo = nodo.hijos[0]
         operandos = [(hijo, a[1])]
         if a[0] == "numero":
@@ -2137,6 +2890,10 @@ class _ResolutorMatricial:
         return ("matriz", R)
 
     def _negativo(self, nodo, a):
+        """Calcula el negativo de un número o de una matriz (multiplicar por −1).
+
+        Entrada: nodo y operando. Salida: ('matriz', −X) o ('numero', −a).
+        """
         hijo = nodo.hijos[0]
         if a[0] == "numero":
             return self._aritmetica(nodo, [a], -a[1], "−")
@@ -2144,6 +2901,10 @@ class _ResolutorMatricial:
                                         _letra(hijo, "x"), titulo=f"Calcular {nodo.texto()} (multiplicar por −1)")
 
     def _inversa(self, nodo, a):
+        """Calcula la inversa por Gauss-Jordan si la matriz es cuadrada y det ≠ 0.
+
+        Entrada: nodo y operando. Salida: ('matriz', inversa); si es singular registra el diagnóstico y se detiene.
+        """
         operandos = [(nodo.hijos[0], a[1])]
         if a[0] != "matriz" or len(a[1]) != len(a[1][0]):
             self._fallar(nodo, "inversa", operandos, "Se requiere una matriz cuadrada.", "La inversa no está definida: el operando no es una matriz cuadrada.")
@@ -2161,10 +2922,9 @@ class _ResolutorMatricial:
 
 
 def evaluar_independiente(nodo, matrices, escalares=None):
-    """
-    Recalcula la expresion desde los datos originales con algoritmos distintos a los
-    del procedimiento (el producto se acumula como suma de productos columna·fila y
-    la transpuesta se arma por columnas). Sirve para verificar el resultado final.
+    """Recalcula la expresión desde los datos originales con algoritmos distintos a los del procedimiento.
+
+    Entrada: árbol, matrices y escalares. Salida: matriz o número resultante; lanza ErrorExpresion.
     """
     escalares = escalares or {}
     tipo = nodo.tipo
@@ -2213,22 +2973,34 @@ def evaluar_independiente(nodo, matrices, escalares=None):
 
 
 def _nodo(tipo, *hijos, parentesis=False):
+    """Crea un NodoExpresion a partir del tipo y sus hijos.
+
+    Entrada: tipo, hijos y parentesis (bool). Salida: el nodo.
+    """
     return NodoExpresion(tipo, hijos, parentesis=parentesis)
 
 
 def identidad_para_verificar(nodo):
-    """
-    Si la expresion tiene la forma de una propiedad conocida, devuelve
-    (nombre, enunciado, expresion_equivalente) para comprobarla por otra ruta.
+    """Reconoce si la expresión tiene la forma de una propiedad conocida para comprobarla por otra ruta.
+
+    Entrada: árbol de la expresión. Salida: (nombre, enunciado, expresión equivalente) o None.
     """
     tipo = nodo.tipo
     hijos = nodo.hijos
     def transpuesta_desarrollada(n):
+        """Aplica (XY)ᵀ = YᵀXᵀ de forma recursiva a un producto.
+
+        Entrada: nodo. Salida: nodo desarrollado.
+        """
         if n.tipo == "producto" and all(h.es_matricial() for h in n.hijos):
             x, y = n.hijos
             return _nodo("producto", transpuesta_desarrollada(y), transpuesta_desarrollada(x))
         return _nodo("transpuesta", n)
     def inversa_desarrollada(n):
+        """Aplica (XY)⁻¹ = Y⁻¹X⁻¹ de forma recursiva a un producto.
+
+        Entrada: nodo. Salida: nodo desarrollado.
+        """
         if n.tipo == "producto" and all(h.es_matricial() for h in n.hijos):
             x, y = n.hijos
             return _nodo("producto", inversa_desarrollada(y), inversa_desarrollada(x))
@@ -2245,6 +3017,10 @@ def identidad_para_verificar(nodo):
             return ("Inversa de la transpuesta", "(Aᵀ)⁻¹ = (A⁻¹)ᵀ", _nodo("transpuesta", _nodo("inversa", hijo.hijos[0])))
     if tipo == "producto":
         izquierda, derecha = hijos
+        for inversa, otro, enunciado in ((izquierda, derecha, "A⁻¹A = I"), (derecha, izquierda, "AA⁻¹ = I")):
+            if inversa.tipo == "inversa" and otro.es_matricial() and inversa.hijos[0].texto() == otro.texto():
+                # I debe tener el orden de A, que solo se conoce al evaluar la expresión.
+                return ("Producto por la inversa", enunciado, NodoExpresion("identidad", valor=None))
         for compuesto, otro, primero in ((izquierda, derecha, True), (derecha, izquierda, False)):
             if compuesto.tipo == "producto" and otro.es_matricial():
                 a, b = compuesto.hijos
@@ -2272,10 +3048,6 @@ def identidad_para_verificar(nodo):
                 and izquierda.es_matricial() and derecha.es_matricial()):
             return ("Transpuesta de un producto", "BᵀAᵀ = (AB)ᵀ",
                     _nodo("transpuesta", _nodo("producto", derecha.hijos[0], izquierda.hijos[0])))
-        for inversa, otro, enunciado in ((izquierda, derecha, "A⁻¹A = I"), (derecha, izquierda, "AA⁻¹ = I")):
-            if inversa.tipo == "inversa" and otro.es_matricial() and inversa.hijos[0].texto() == otro.texto():
-                # El orden de I se conoce al calcular; resolver_expresion_matricial lo completa.
-                return ("Producto por la inversa", enunciado, NodoExpresion("identidad", valor=None))
         if izquierda.tipo == "inversa" and derecha.tipo == "inversa":
             return ("Inversa de un producto", "B⁻¹A⁻¹ = (AB)⁻¹", _nodo("inversa", _nodo("producto", derecha.hijos[0], izquierda.hijos[0])))
         if izquierda.tipo == "producto" and all(h.es_matricial() for h in (*izquierda.hijos, derecha)):
@@ -2332,6 +3104,10 @@ def identidad_para_verificar(nodo):
 
 
 def _preparar_datos(nodo, matrices, escalares):
+    """Valida las matrices y escalares que usa la expresión.
+
+    Entrada: árbol, matrices y escalares. Salida: (matrices válidas, escalares válidos); lanza ErrorExpresion si falta alguno.
+    """
     matrices_validas = {}
     for nombre in sorted(nodo.nombres_matrices()):
         if nombre not in matrices:
@@ -2349,11 +3125,10 @@ def _preparar_datos(nodo, matrices, escalares):
 
 
 def resolver_expresion_matricial(expresion, matrices, escalares=None):
-    """
-    Resuelve una expresion como 'A(B + C)' paso a paso. Devuelve un diccionario con
-    el arbol, las condiciones de dimension, los pasos (datos, cada operacion
-    intermedia y respuesta), el resultado o el error de dimensiones (indicando en
-    que operacion ocurrio). Lanza ErrorExpresion si la expresion esta mal escrita.
+    """Resuelve una expresión como 'A(B + C)' paso a paso respetando paréntesis y precedencia.
+
+    Entrada: texto o árbol, matrices y escalares.
+    Salida: diccionario con árbol, condiciones, pasos, resultado o error y la identidad para verificar.
     """
     nodo = expresion if isinstance(expresion, NodoExpresion) else analizar_expresion_matricial(expresion)
     matrices_validas, escalares_validos = _preparar_datos(nodo, matrices, escalares)
@@ -2441,7 +3216,10 @@ def resolver_expresion_matricial(expresion, matrices, escalares=None):
 
 
 def _comparar_valores(obtenido, esperado):
-    """Compara dos matrices (o dos numeros) entrada por entrada."""
+    """Compara dos matrices (o dos números) entrada por entrada.
+
+    Entrada: valor obtenido y valor esperado. Salida: diccionario de comparación con «coinciden».
+    """
     if isinstance(obtenido, list) and isinstance(esperado, list):
         return comparar_matrices(obtenido, esperado, "Obtenido", "Esperado")
     if not isinstance(obtenido, list) and not isinstance(esperado, list):
@@ -2456,7 +3234,10 @@ def _comparar_valores(obtenido, esperado):
 
 
 def _verificar_operacion(paso):
-    """Recalcula una operacion intermedia a partir de sus operandos con un metodo independiente."""
+    """Recalcula una operación intermedia desde sus operandos con un método independiente.
+
+    Entrada: paso del procedimiento. Salida: diccionario con método, dimensiones, entradas que coinciden y «ok».
+    """
     tipo = paso["tipo"]
     valores = [v for _, v in paso["operandos"]]
     obtenido = paso["resultado"]
@@ -2524,12 +3305,9 @@ ALCANCE_VERIFICACION = ("Esta es una comprobación numérica de este ejercicio c
 
 
 def verificar_resolucion(resolucion, usar_identidades=True):
-    """
-    Informe de verificacion de una resolucion:
-    1. cada operacion intermedia recalculada desde sus propios operandos;
-    2. la expresion completa recalculada desde los datos originales con otro algoritmo;
-    3. si la expresion coincide con una propiedad conocida, la ruta equivalente
-       (por ejemplo AB + AC para A(B + C)) calculada tambien desde los datos originales.
+    """Verifica una resolución: cada operación, el recálculo completo y, si existe, la ruta por propiedad.
+
+    Entrada: resolución y usar_identidades (bool). Salida: diccionario con las tres comprobaciones y «correcto».
     """
     if resolucion["error"]:
         return {"aplicable": False, "motivo": resolucion["error"], "pasos": [], "global": None,
@@ -2571,7 +3349,10 @@ def verificar_resolucion(resolucion, usar_identidades=True):
 
 
 def describir_diferencias(diferencias):
-    """Texto legible para las diferencias que devuelve comparar_matrices."""
+    """Convierte las diferencias de comparar_matrices en frases legibles.
+
+    Entrada: lista de diferencias. Salida: lista de cadenas.
+    """
     lineas = []
     for diferencia in diferencias:
         if diferencia[0] == "dimensiones":
@@ -2585,7 +3366,6 @@ def describir_diferencias(diferencias):
     return lineas
 
 
-# --- Propiedades teoricas -------------------------------------------------------
 
 PROPIEDADES_MATRICIALES = [
     {"clave": "conmutatividad_suma", "grupo": "Suma", "nombre": "Conmutatividad de la suma",
@@ -2689,6 +3469,10 @@ PROPIEDADES_POR_CLAVE = {p["clave"]: p for p in PROPIEDADES_MATRICIALES}
 
 
 def _matrices_extra(propiedad, A):
+    """Construye las matrices auxiliares de una propiedad (O o I) con el tamaño compatible con A.
+
+    Entrada: propiedad y matriz A. Salida: diccionario nombre → matriz (vacío si no hacen falta).
+    """
     m, n = len(A), len(A[0])
     extra = propiedad.get("extra")
     if extra == "cero":
@@ -2701,14 +3485,18 @@ def _matrices_extra(propiedad, A):
 
 
 def _es_cero(matriz):
+    """Indica si todas las entradas de la matriz son cero.
+
+    Entrada: matriz. Salida: True o False.
+    """
     return all(v == 0 for fila in matriz for v in fila)
 
 
 def verificar_propiedad_matricial(clave, matrices, escalares=None):
-    """
-    Comprueba una propiedad con las matrices dadas calculando cada lado por
-    separado (con su propio procedimiento) y comparando entrada por entrada.
-    La conclusion distingue la comprobacion de este caso de la demostracion general.
+    """Comprueba una propiedad calculando cada lado por separado y comparándolos entrada por entrada.
+
+    Entrada: clave, matrices y escalares.
+    Salida: informe con lados, comparaciones, «cumple» y conclusión (caso particular, no demostración).
     """
     if clave in PROPIEDADES_AVANZADAS:
         return verificar_propiedad_avanzada(clave, matrices, escalares)
@@ -2722,6 +3510,10 @@ def verificar_propiedad_matricial(clave, matrices, escalares=None):
                "cumple": None, "matrices_extra": {k: v for k, v in datos.items() if k in ("O", "I")}}
 
     def lado(etiqueta, expresion):
+        """Resuelve un miembro de la propiedad desde los datos originales y lo agrega al informe.
+
+        Entrada: etiqueta y expresión. Salida: la resolución.
+        """
         resolucion = resolver_expresion_matricial(expresion, datos, escalares)
         informe["lados"].append({"etiqueta": etiqueta, "resolucion": resolucion})
         return resolucion
@@ -2804,7 +3596,10 @@ def verificar_propiedad_matricial(clave, matrices, escalares=None):
 
 
 def detalle_producto_matriz_vector(A, x):
-    """Explica el producto Ax fila por fila: 'Fila 1: 1(2) + 3(-1) = -1'."""
+    """Explica el producto Ax fila por fila, por ejemplo 'Fila 1: (1)(2) + (3)(-1) = -1'.
+
+    Entrada: A y x. Salida: lista de líneas.
+    """
     lineas = []
     for i, fila in enumerate(A):
         valores = [f"({formatear_numero(v)})" for v in x]
@@ -2816,10 +3611,9 @@ def detalle_producto_matriz_vector(A, x):
 
 
 def analizar_producto_av(A, v, c, u=None):
-    """
-    Producto matriz-vector por columnas: si A = [a1 a2 ... an], entonces
-    Av = v1*a1 + v2*a2 + ... + vn*an. Tambien comprueba la propiedad A(cv) = c(Av)
-    y, si se da un segundo vector u, la propiedad A(u + v) = Au + Av.
+    """Calcula Av = v1·a1 + … + vn·an por columnas y comprueba A(cv) = c(Av) y, si hay u, A(u + v) = Au + Av.
+
+    Entrada: A, v, c y u opcional. Salida: diccionario con productos, combinaciones y propiedades.
     """
     A = validar_matriz(A, "A")
     v = [Fraction(valor) for valor in v]
@@ -2861,34 +3655,37 @@ def analizar_producto_av(A, v, c, u=None):
 
 
 def combinacion_no_trivial(direcciones):
-    """
-    Construye coeficientes no todos nulos que resuelven Ac = 0, sumando los
-    vectores direccion (todos los parametros = 1) y quitando denominadores.
+    """Construye coeficientes no todos nulos con Ac = 0 sumando las direcciones y quitando denominadores.
+
+    Entrada: lista de (parámetro, dirección). Salida: lista de coeficientes enteros.
     """
     n = len(direcciones[0][1])
     coeficientes = [sum(vector[i] for _, vector in direcciones) for i in range(n)]
-    factor = lcm(*(c.denominator for c in coeficientes))
+    factor = minimo_comun_multiplo(c.denominator for c in coeficientes)
     return [c * factor for c in coeficientes]
 
 
 def formatear_combinacion_lineal(coeficientes, simbolos):
-    """Ejemplo: [2, -1, 0, 1/2] y [v1..v4] -> '2·v1 - v2 + (1/2)·v4'."""
+    """Escribe una combinación lineal, por ejemplo [2, -1, 0, 1/2] → '2·v1 - v2 + (1/2)·v4'.
+
+    Entrada: coeficientes y símbolos. Salida: cadena.
+    """
     return unir_terminos(zip(coeficientes, simbolos), union="·")
 
 
 def _plural(cantidad, singular, plural):
+    """Escribe una cantidad con la palabra en singular o plural.
+
+    Entrada: cantidad, singular y plural. Salida: cadena, por ejemplo '3 pivotes'.
+    """
     return f"{cantidad} {singular if cantidad == 1 else plural}"
 
 
 def analizar_independencia(A):
-    """
-    Estudia si las columnas de A (los vectores v1, ..., vp de Rn) son linealmente
-    independientes:
-    1. Construye el sistema homogeneo [A | 0].
-    2. Lo reduce a forma escalonada por filas y cuenta pivotes y variables libres.
-    3. Veredicto: L.I. si hay un pivote en cada columna (sin variables libres),
-       L.D. en caso contrario.
-    Ademas resuelve A·c = 0 por Gauss-Jordan para dar una relacion de dependencia.
+    """Decide si las columnas de A son linealmente independientes reduciendo [A | 0] y contando pivotes.
+
+    Entrada: A (columnas = vectores). Salida: diccionario con escalonada, pivotes, libres, veredicto,
+    justificación y una relación de dependencia si existe.
     """
     A = validar_matriz(A, "A")
     num_componentes = len(A)
@@ -2960,7 +3757,10 @@ def analizar_independencia(A):
 
 
 def informe_independencia(resultado):
-    """Lineas de texto con la salida pedida: matriz reducida, pivotes y veredicto."""
+    """Escribe el informe de independencia: [A | 0], forma escalonada, pivotes, libres y veredicto.
+
+    Entrada: resultado de analizar_independencia. Salida: lista de líneas.
+    """
     num_vectores = len(resultado["nombres_variables"])
     columnas = ", ".join(str(c + 1) for c in resultado["columnas_pivote"]) or "ninguna"
     lineas = [
@@ -2984,7 +3784,10 @@ def informe_independencia(resultado):
 
 
 def sistema_aleatorio(m, n, generador=None):
-    """Genera un sistema m x n con coeficientes enteros pequenos y una solucion entera."""
+    """Genera un sistema m × n con coeficientes enteros pequeños y solución entera.
+
+    Entrada: m, n y generador aleatorio opcional. Salida: (A, b).
+    """
     generador = generador or random
     x = [generador.randint(-4, 4) for _ in range(n)]
     A = []
@@ -2998,7 +3801,10 @@ def sistema_aleatorio(m, n, generador=None):
 
 
 def resumen_texto(resultado):
-    """Texto plano con el resultado, pensado para copiarlo al portapapeles."""
+    """Escribe el resultado de un sistema en texto plano para copiarlo al portapapeles.
+
+    Entrada: resultado de resolver_sistema. Salida: cadena.
+    """
     nombres = resultado["nombres_variables"]
     lineas = [f"{resultado['clasificacion']}: {resultado['descripcion']}"]
     if resultado["solucion"] is not None:
