@@ -1,6 +1,6 @@
-# Programa 1 - Calculadora de Algebra Lineal
+# Calculadora de Álgebra Lineal (Programas 1 a 6)
 
-Proyecto universitario del Grupo 3 (Universidad Americana) para resolver problemas de álgebra lineal por eliminación por filas (Gauss-Jordan).
+Proyecto universitario del Grupo 3 (Universidad Americana, Álgebra Lineal MTM0120) para resolver problemas de álgebra lineal con aritmética exacta. El Programa 6 agrega la **factorización LU y la solución de Ax = b** (`modulos/modulo_lu.py`) y las mejoras obligatorias de las Tareas 4 y 5.
 
 ## Secciones
 
@@ -10,7 +10,7 @@ Proyecto universitario del Grupo 3 (Universidad Americana) para resolver problem
 - **Propiedades de Ax**: se cargan las columnas a1, a2, … de A y un vector v; calcula Av = v1·a1 + … + vn·an (y fila por fila) y comprueba A(cv) = c(Av).
 - **Operaciones con matrices**: se escribe o se construye con botones una expresión con A, B y C (por ejemplo `2A − 3B + C`, `A(B + C)`, `(AB)ᵀ` o `AᵀBC`). El analizador respeta paréntesis, precedencia, orden de los factores, transpuestas (`Aᵀ`, `A^T`, `A'`), escalares (números, `r`, `s`) e identidades (`I2`, `I3`, …). El procedimiento muestra los datos con sus dimensiones, la condición de dimensiones de cada operación intermedia, la regla aplicada, el cálculo de cada entrada (desplegable) y la respuesta. La verificación recalcula cada paso con un método independiente, recalcula toda la expresión desde los datos originales y, cuando existe, la compara con una ruta equivalente por propiedad (por ejemplo `A(B + C)` frente a `AB + AC`). También incluye propiedades teóricas con su demostración general, contraejemplos y ejercicios tipo examen; una comprobación numérica se identifica como caso particular, no como demostración.
 - **Independencia lineal**: pide la cantidad de vectores p y su dimensión n, construye el sistema homogéneo [A | 0], lo reduce a forma escalonada por filas, cuenta pivotes y variables libres y da el veredicto (L.I. o L.D.). Si son dependientes, también muestra una relación de dependencia.
-- **Factorización LU**: se escriben A (m × n) y b. A se lleva a una forma escalonada U solo con reemplazos `Fi → Fi − m·Fk` (i > k) y cada multiplicador m queda en L (m × m, triangular inferior con unos en la diagonal) en la posición (i, k). Se verifica LU = A y se resuelve Ax = b en dos etapas: sustitución hacia adelante (Ly = b, vector intermedio y) y sustitución hacia atrás (Ux = y, solución x). Admite matrices rectangulares, columnas sin pivote (soluciones paramétricas) y sistemas inconsistentes; si hace falta un intercambio de filas lo diagnostica (A = LU no existe; se necesitaría PA = LU) sin inventar una factorización.
+- **Factorización LU y solución Ax = b**: se escriben A (m × n) y b. A se lleva a una forma escalonada U solo con reemplazos `Fi ← Fi − l·Fj` (i > j) y cada multiplicador l = elemento a eliminar / pivote queda en L (m × m, triangular inferior con unos en la diagonal) en la posición (i, j). Se verifica «La factorización es correcta (L · U == A)» y se resuelve Ax = b en dos etapas: reducción de [L | b] (sustitución hacia adelante, vector intermedio y) y reducción de [U | y] (sustitución hacia atrás, solución x), con la comprobación final «Comprobación exitosa: A · x == b». La página muestra el logotipo ASCII del módulo y la opción «0. Ver Teoremas Clave del Módulo». Admite matrices rectangulares, columnas sin pivote (soluciones paramétricas) y sistemas inconsistentes; si hace falta un intercambio de filas informa «La matriz no admite Factorización LU sin permutación (requiere pivoteo parcial PA = LU)» sin inventar una factorización.
 - **Método** y **Ayuda**: explicación del algoritmo con un ejemplo resuelto, atajos y conceptos clave.
 
 Cada sección permite cargar ejemplos, generar datos aleatorios y ver el procedimiento completo o paso a paso (con reproducción automática). La fila que cambia se resalta y el pivote aparece encerrado en cada matriz.
@@ -22,8 +22,9 @@ No se usa:
 - PySide6
 - NumPy
 - SciPy
+- el módulo `math` (el mcd y el mcm se calculan con el algoritmo de Euclides)
 
-El algoritmo de eliminación por filas está implementado manualmente con fracciones exactas (`fractions.Fraction`). La interfaz usa CustomTkinter, una capa visual moderna basada en Tkinter.
+El algoritmo de eliminación por filas está implementado manualmente con fracciones exactas (`fractions.Fraction`). Los módulos de `modulos/` y `teoremas/` son funciones puras: reciben listas anidadas, retornan resultados y no usan `input()` ni `print()`; la entrada y salida de consola vive en `main.py`. La interfaz usa CustomTkinter, una capa visual moderna basada en Tkinter.
 
 ## Instalar dependencias
 
@@ -43,27 +44,19 @@ Pillow se usa para mostrar el logo de la UAM (el archivo está en formato WebP).
 
 ## Cómo ejecutar
 
-Windows:
-
-```powershell
-py "Programa 1_Grupo3.py"
-```
-
-macOS / Linux:
+Interfaz gráfica (Windows: `py main.py`):
 
 ```bash
-python3 "Programa 1_Grupo3.py"
+python3 main.py
 ```
 
-### Modo consola (sin librerías externas)
-
-El análisis de independencia lineal también funciona en la terminal, usando solo Python estándar:
+### Menú principal de consola (sin librerías externas)
 
 ```bash
-python3 "Programa 1_Grupo3.py" --consola
+python3 main.py --consola
 ```
 
-Pide p, n y los vectores, y muestra el sistema [A | 0], las operaciones elementales, la forma escalonada por filas, el número de pivotes y el veredicto. Si CustomTkinter no está instalado, el programa abre este modo automáticamente.
+Opciones: 1. Abrir la interfaz gráfica · 2. **Factorización LU y solución Ax = b** · 3. Verificador de propiedades de matrices · 4. Independencia lineal · S. Salir. La opción 2 muestra el logotipo ASCII del módulo y «0. Ver Teoremas Clave del Módulo»; pide m × n, las filas de A y el vector b, valida cada dato (si es inválido lo notifica y lo vuelve a pedir sin cerrarse) y despliega L, U, el mensaje de verificación, y, x y la comprobación final. Si CustomTkinter no está instalado, `main.py` abre este menú automáticamente. El archivo histórico `python3 "Programa 1_Grupo3.py" --consola` conserva el análisis de independencia lineal.
 
 ## Cómo usar
 
@@ -74,8 +67,10 @@ Pide p, n y los vectores, y muestra el sistema [A | 0], las operaciones elementa
 ## Cómo probar
 
 ```bash
-python3 -m unittest test_algoritmo.py
+python3 -m unittest discover -v
 ```
+
+`test_tarea6.py` comprueba los requisitos del Programa 6 (reglas técnicas, mensajes exactos, reutilización, cobertura de propiedades, encadenamiento y consola) y `test_modulo_lu.py` la factorización con oráculos y datos alterados.
 
 En Windows usa `py` en lugar de `python3`.
 
@@ -115,14 +110,16 @@ también permite desplazarse cuando el tamaño o escalado de pantalla lo requier
 ## Organización y pruebas completas
 
 ```text
-main.py                    Entrada limpia (sin abrir ventanas al importar)
+main.py                    Menú principal (GUI o consola con --consola)
 Programa 1_Grupo3.py        GUI y compatibilidad con imports históricos
 modulos/modulo_matrices.py  Núcleo exacto, sin dependencias gráficas ni E/S
 modulos/modulo_lu.py        Factorización LU, Ly = b, Ux = y y su verificación
-teoremas/teoremas_matrices.py  Contenido académico y logo ASCII de consola
+teoremas/teoremas_matrices.py  Teoremas y demostraciones de matrices e inversas
+teoremas/teoremas_lu.py    Logotipo ASCII y teoremas clave del módulo LU
 test_algoritmo.py           Suite histórica, conservada
 test_matrices_avanzadas.py  Determinantes, inversas, propiedades y regresión
 test_modulo_lu.py           LU con oráculos, datos alterados y GUI
+test_tarea6.py              Requisitos del Programa 6
 ```
 
 Ejecuta `py -m unittest discover -v` para incluir todos los tests. Las pruebas
@@ -171,18 +168,41 @@ condiciones, ambas rutas y detección de resultados deliberadamente incorrectos.
 from modulos import modulo_lu as lu
 
 r = lu.resolver_lu([[3, -7, -2, 2], [-3, 5, 1, 0], [6, -4, 0, -5], [-9, 5, -5, 12]], [-9, 5, 7, 11])
-r["L"], r["U"], r["y"], r["solucion"]   # y = (-9, -4, 5, 1), x = (3, 4, -6, -1)
-lu.verificar_lu(r)["correcto"]          # True
+r["matriz_L"], r["matriz_U"], r["vector_y"], r["solucion"]   # y = (-9, -4, 5, 1), x = (3, 4, -6, -1)
+r["verificacion_factorizacion"]["mensaje"]   # La factorización es correcta (L · U == A)
+r["comprobacion"]["mensaje"]                 # Comprobación exitosa: A · x == b
+lu.verificar_lu(r)["correcto"]                # True
 ```
 
-- `factorizar_lu(A)`: L, U, pivotes, cada reemplazo con su multiplicador y los pasos.
-- `sustitucion_adelante(L, b)` y `sustitucion_atras(U, y)`: cada una guarda la entrada que
-  recibió, de modo que el encadenamiento A → (L, U) → y → x se puede comprobar.
-- `verificar_lu(resultado)`: comprueba el encadenamiento (la y que usa la etapa 3 es la salida
-  de la etapa 2, etc.), la estructura de L y U, LU = A entrada por entrada, Ly = b, Ux = y y
-  Ax = b con la A original. Además recalcula U con la eliminación del módulo de sistemas,
-  compara la solución con Gauss-Jordan y, si A es cuadrada, contrasta det(A) = ∏ uᵢᵢ con
-  Sarrus (3 × 3) o cofactores. Si se altera L, U, y o x, la verificación lo detecta.
+- `calcular_multiplicador(matriz_U, fila, fila_pivote, columna)`: l = elemento a eliminar / pivote.
+- `factorizar_lu(matriz_A)`: L, U, pivotes y cada reemplazo con su multiplicador; reutiliza
+  `buscar_fila_pivote` y `sumar_multiplo_fila` de `modulo_matrices`.
+- `verificar_factorizacion(A, L, U)`: L · U con `multiplicar_matrices` y `son_iguales`.
+- `sustitucion_adelante(L, b)` y `sustitucion_atras(U, y)`: reducción de [L | b] y de [U | y]
+  con las operaciones elementales de la Calculadora; cada una guarda la entrada que recibió,
+  de modo que el encadenamiento A → (L, U) → y → x se puede comprobar.
+- `comprobar_solucion(A, x, b)`: A · x con `multiplicar_matriz_vector` (y A·v = 0 en familias).
+- `verificar_lu(resultado)`: verificación independiente: encadenamiento, estructura de L y U,
+  L·U = A, L·y = b, U·x = y, A·x = b con la A original, U recalculada por eliminación
+  gaussiana, comparación con Gauss-Jordan y det(A) = ∏ uᵢᵢ frente a Sarrus o cofactores.
+- `formatear_resultado_lu(resultado)`: líneas de texto (L, U, mensajes, y, x) para la consola.
+
+## Verificador de propiedades (cobertura completa)
+
+`verificar_propiedades_clave(A, B, C, k)` en `modulo_matrices.py` calcula ambos miembros de
+cada propiedad con las funciones internas y devuelve «Se cumple», «No se cumple» o «No aplica»
+con la hipótesis que falta:
+
+- Transposición: (Aᵀ)ᵀ = A, (A + B)ᵀ = Aᵀ + Bᵀ, (kA)ᵀ = kAᵀ, (AB)ᵀ = BᵀAᵀ, A(B + C) = AB + AC, (AB)C = A(BC).
+- Inversa: (A⁻¹)⁻¹ = A, (AB)⁻¹ = B⁻¹A⁻¹, (Aᵀ)⁻¹ = (A⁻¹)ᵀ, A·A⁻¹ = I.
+- Determinantes: det(Aᵀ) = det(A), det(AB) = det(A)·det(B), det(A⁻¹) = 1/det(A), det(kA) = kⁿ·det(A).
+- Operaciones de fila: la permutación cambia el signo, el reemplazo conserva det, multiplicar
+  una fila por k multiplica det por k y det(triangular) = producto de la diagonal.
+
+Los resultados intermedios (AB, Aᵀ, A⁻¹, det(A), …) se calculan una sola vez y se pasan como
+argumentos a las demás propiedades. Está disponible en la GUI (Operaciones matriciales →
+«Cobertura completa», con k = r) y en la consola (opción 3). La propiedad det(kA) = kⁿ·det(A)
+también se puede elegir en «Determinantes e inversas».
 
 ## Inversa: A⁻¹A = I
 

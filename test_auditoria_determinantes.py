@@ -1,4 +1,9 @@
-"""Auditoría reproducible: oráculos independientes y contratos de la GUI."""
+"""Auditoría reproducible de determinantes e inversas con oráculos independientes y contratos de la GUI.
+
+Unidad: Álgebra Lineal (MTM0120), verificación automática de la Calculadora.
+Autores (Grupo 3, UAM): Andrés Eduardo Mejía Castro, José Andrés Zepeda Grijalba,
+Eddy Alfonso Almendárez Ruiz y Brandon Javier Rocha Varela.
+"""
 import itertools
 import random
 import time
@@ -12,6 +17,7 @@ from modulos import informes as d
 
 
 def leibniz(A):
+    """Determinante por la definición de Leibniz (oráculo independiente de la eliminación)."""
     n = len(A)
     total = F(0)
     for p in itertools.permutations(range(n)):
@@ -23,15 +29,18 @@ def leibniz(A):
 
 
 def product(A, B):
+    """Producto matricial de referencia, independiente de la Calculadora."""
     return [[sum((F(a) * F(b) for a, b in zip(row, col)), F(0))
              for col in zip(*B)] for row in A]
 
 
 def identity(n):
+    """Identidad de orden n con entradas Fraction."""
     return [[F(i == j) for j in range(n)] for i in range(n)]
 
 
 def families(n):
+    """Familias de matrices de orden n: diagonal, triangulares y con filas o columnas nulas o repetidas."""
     I = identity(n)
     diagonal = [[F((-1)**i * (i+2), i+1) if i == j else F(0)
                  for j in range(n)] for i in range(n)]
@@ -56,7 +65,9 @@ def families(n):
 
 
 class AuditoriaExacta(unittest.TestCase):
+    """Determinantes e inversas exactos frente a oráculos independientes."""
     def check_matrix(self, A, expected):
+        """Comprueba el determinante y las inversas de A frente al valor esperado."""
         original = deepcopy(A)
         methods = ['triangular', 'cofactores']
         methods += ['2x2'] if len(A) == 2 else ['sarrus'] if len(A) == 3 else []
@@ -87,6 +98,7 @@ class AuditoriaExacta(unittest.TestCase):
         self.assertEqual(A, original)
 
     def test_ejercicios_A_a_E(self):
+        """Comprueba det(A) y A⁻¹ de los ejercicios A a E con valores calculados a mano."""
         cases = [([[1, 2], [3, 4]], -2, [[-2, 1], [F(3, 2), F(-1, 2)]]),
                  ([[1, 2], [2, 4]], 0, None), (identity(3), 1, identity(3)),
                  ([[2, 0, 0], [0, 3, 0], [0, 0, 4]], 24,
@@ -99,6 +111,7 @@ class AuditoriaExacta(unittest.TestCase):
                     self.assertEqual(m.inversa_adjunta(A), inv)
 
     def test_familias_ordenes_uno_a_diez(self):
+        """Comprueba familias de matrices de orden 1 a 10 (triangulares, permutaciones y singulares)."""
         for n in range(1, 11):
             for index, A in enumerate(families(n)):
                 # Familias triangulares: producto diagonal; permutación: signo.
@@ -116,6 +129,7 @@ class AuditoriaExacta(unittest.TestCase):
                     self.check_matrix(A, expected)
 
     def test_aleatorios_semilla_fija_oraculo_hasta_seis(self):
+        """Compara det(A) con la fórmula de Leibniz en matrices aleatorias de orden 1 a 6."""
         rng = random.Random(20261008)
         for n in range(1, 7):
             for case in range(5):
@@ -126,12 +140,14 @@ class AuditoriaExacta(unittest.TestCase):
                         self.assertEqual(m.calcular_determinante(A, 'cofactores', row)['determinante'], leibniz(A))
 
     def test_decimales_y_numeros_grandes(self):
+        """Comprueba det(A) exacto con decimales y enteros muy grandes."""
         for A in ([['0.1', '-0.2'], ['0.3', '0.4']],
                   [[10**30, -3], [7, 10**25]], [[F(-7, 11)]]):
             with self.subTest(A=A):
                 self.check_matrix(A, leibniz(A))
 
     def test_no_finitos_y_metodo_invalido_singular(self):
+        """Comprueba que se rechazan infinitos, NaN, 1/0, métodos inválidos y matrices singulares."""
         for value in (float('inf'), float('-inf'), float('nan'), '1/0', None):
             for operation in (m.determinante, m.inversa_gauss_jordan, m.inversa_adjunta):
                 with self.subTest(value=value, operation=operation), self.assertRaises(ValueError):
@@ -141,6 +157,7 @@ class AuditoriaExacta(unittest.TestCase):
                 d.informe_inversa(A, 'inexistente')
 
     def test_propiedades_lados_independientes(self):
+        """Comprueba propiedades de inversas y determinantes con lados calculados por separado."""
         rng = random.Random(17)
         for n in range(1, 7):
             A = [[F(1) if i == j else F(rng.randint(-3, 3)) if j > i else F(0)
@@ -174,11 +191,14 @@ class AuditoriaExacta(unittest.TestCase):
 
 
 class AuditoriaEntradaYPresentacion(unittest.TestCase):
+    """Lectura de datos y presentación en la página de determinantes."""
     @classmethod
     def setUpClass(cls):
+        """Carga la GUI una vez para todas las pruebas de la clase."""
         cls.gui = main.cargar_aplicacion()
 
     def page(self, text, operation='Inversa Gauss-Jordan'):
+        """Crea una página de determinantes con widgets simulados y la operación indicada."""
         page = object.__new__(self.gui.PaginaDeterminantes)
         page.entradas = {'A': Mock(), 'B': Mock()}
         page.entradas['A'].get.return_value = text
@@ -192,6 +212,7 @@ class AuditoriaEntradaYPresentacion(unittest.TestCase):
         return page
 
     def test_entradas_invalidas_tres_vistas_sin_excepcion(self):
+        """Comprueba que las entradas inválidas se explican en las tres vistas sin excepciones."""
         for text in ('', '1 2\n3', '1 2 3\n4 5 6', 'abc', '1/', '1/0', ';',
                      '1 ' * 11, '\n'.join(['1'] * 11)):
             with self.subTest(text=text):
@@ -205,10 +226,12 @@ class AuditoriaEntradaYPresentacion(unittest.TestCase):
                 page.area_verificacion.llenar.assert_called_once()
 
     def test_entrada_decimal_coma_fraccion_y_negativos(self):
+        """Comprueba la lectura de decimales con coma, fracciones y negativos."""
         page = self.page('0,1; -1/2\n3; 0.4')
         self.assertEqual(page._leer('A'), [[F(1, 10), F(-1, 2)], [F(3), F(2, 5)]])
 
     def test_todas_las_operaciones_gui(self):
+        """Comprueba que todas las operaciones de la página de determinantes producen informe y verificación."""
         for operation in self.gui.PaginaDeterminantes.OPERACIONES:
             text = '1 2 3\n0 1 4\n0 0 1' if 'Sarrus' in operation else '1 2\n0 1'
             page = self.page(text, operation)
@@ -221,6 +244,7 @@ class AuditoriaEntradaYPresentacion(unittest.TestCase):
                 self.assertEqual(data['valores'][0]['valor'], page._leer('A'))
 
     def test_resultado_renderiza_original_y_operacion(self):
+        """Comprueba que el resultado muestra la matriz original y la operación realizada."""
         page = self.page('1 2\n3 4')
         page.resolver()
         with patch.object(self.gui, 'tarjeta_estado'), patch.object(self.gui, 'tarjeta_seccion'), patch.object(self.gui, 'cuerpo_etapa') as render:
@@ -229,6 +253,7 @@ class AuditoriaEntradaYPresentacion(unittest.TestCase):
             self.assertTrue(any(call.args[1] == page.informe['datos_resultado'] for call in render.call_args_list))
 
     def test_widgets_reales_pestanas_pasos_y_scroll(self):
+        """Comprueba con widgets reales las pestañas, los pasos y el desplazamiento."""
         if self.gui.ctk is None:
             self.skipTest('CustomTkinter no disponible')
         try:
@@ -242,6 +267,7 @@ class AuditoriaEntradaYPresentacion(unittest.TestCase):
             app.cambiar_pagina('determinantes')
             page = app.paginas['determinantes']
             def pump():
+                """Procesa los eventos de Tk durante un instante."""
                 end = time.monotonic() + 0.25
                 while time.monotonic() < end:
                     app.update()

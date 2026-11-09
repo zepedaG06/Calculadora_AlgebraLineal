@@ -1,8 +1,10 @@
-"""Teoremas clave de operaciones, determinantes e inversas.
+"""Teoremas clave y demostraciones de operaciones con matrices, determinantes e inversas.
 
-Las condiciones acompañan cada igualdad para evitar generalizaciones falsas.
-El contenido se comparte entre la GUI y la consulta por consola.
-Las comprobaciones numéricas son casos particulares, no demostraciones.
+Propósito: contenido académico compartido por la GUI y la consola; cada igualdad lleva sus condiciones
+para evitar generalizaciones falsas. Una comprobación numérica es un caso particular, no una demostración.
+Unidad: Álgebra Lineal (MTM0120), matrices, determinantes e inversas.
+Autores (Grupo 3, UAM): Andrés Eduardo Mejía Castro, José Andrés Zepeda Grijalba,
+Eddy Alfonso Almendárez Ruiz y Brandon Javier Rocha Varela.
 """
 
 TEOREMAS_MATRICES = (
@@ -39,6 +41,7 @@ DEMOSTRACIONES_PROPIEDADES = {
     "inversa_transpuesta": "Transponer AA⁻¹=A⁻¹A=I da (A⁻¹)ᵀAᵀ=Aᵀ(A⁻¹)ᵀ=I. Por unicidad, (Aᵀ)⁻¹=(A⁻¹)ᵀ.",
     "det_inversa": "Por multiplicatividad, det(A)det(A⁻¹)=det(AA⁻¹)=det(I)=1. Como det(A)≠0, det(A⁻¹)=1/det(A).",
     "det_producto": "Las columnas de AB son combinaciones de las columnas de A con coeficientes de B. Al expandir por multilinealidad del determinante, los términos con columnas repetidas son cero; los restantes son det(A) multiplicado por la suma con signos de permutaciones que define det(B). Así det(AB)=det(A)det(B).",
+    "det_escalar_matriz": "kA multiplica cada una de las n filas de A por k. Por multilinealidad, cada fila aporta un factor k, así que det(kA)=k·k·…·k·det(A)=kⁿ·det(A).",
     "det_transpuesta": "En la fórmula de Leibniz, cambiar cada permutación por su inversa conserva su signo e intercambia los índices de fila y columna. Las sumas para det(A) y det(Aᵀ) son iguales.",
     "det_identidad": "En la fórmula de Leibniz para I, solo la permutación identidad aporta un término distinto de cero: su signo y su producto son 1.",
     "det_intercambio": "El determinante es alternante en sus filas: intercambiar dos filas cambia el signo de cada término de la suma de Leibniz.",
@@ -49,5 +52,8 @@ DEMOSTRACIONES_PROPIEDADES = {
 
 
 def texto_teoremas():
-    """Devuelve el contenido académico listo para consulta sin realizar E/S."""
+    """Une los teoremas de matrices en un texto numerado, sin realizar entrada ni salida.
+
+    Salida: cadena con un teorema por bloque.
+    """
     return "\n\n".join(f"{i}. {titulo}\n{texto}" for i, (titulo, texto) in enumerate(TEOREMAS_MATRICES, 1))
