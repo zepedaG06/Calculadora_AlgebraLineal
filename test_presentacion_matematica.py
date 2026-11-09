@@ -1,4 +1,9 @@
-"""Regresión de datos didácticos y comprobaciones independientes."""
+"""Regresión de los datos didácticos (procedimiento y verificación) y comprobaciones independientes.
+
+Unidad: Álgebra Lineal (MTM0120), verificación automática de la Calculadora.
+Autores (Grupo 3, UAM): Andrés Eduardo Mejía Castro, José Andrés Zepeda Grijalba,
+Eddy Alfonso Almendárez Ruiz y Brandon Javier Rocha Varela.
+"""
 from copy import deepcopy
 from fractions import Fraction as F
 import unittest
@@ -7,7 +12,9 @@ from modulos import informes as d
 
 
 class DeterminantesDidacticos(unittest.TestCase):
+    """Etapas didácticas de los determinantes."""
     def test_metodos_con_formulas_datos_y_verificacion(self):
+        """Comprueba que cada método de determinante muestra fórmula, datos y verificación."""
         for metodo, A, esperado in (("2x2", [[1, 2], [3, 4]], -2),
                                    ("sarrus", [[6, 1, 1], [4, -2, 5], [2, 8, 7]], -306),
                                    ("cofactores", [[1, 2], [3, 4]], -2),
@@ -21,6 +28,7 @@ class DeterminantesDidacticos(unittest.TestCase):
                 self.assertTrue(any(e["formula"] for e in r["procedimiento"]))
 
     def test_sarrus_expone_seis_productos_y_sumas(self):
+        """Comprueba que Sarrus muestra los seis productos diagonales y ambas sumas."""
         etapas = m.calcular_determinante([[1, 2, 3], [4, 5, 6], [7, 8, 10]], "sarrus")["etapas"]
         positivos = next(e for e in etapas if e["titulo"] == "Diagonales positivas")
         negativos = next(e for e in etapas if e["titulo"] == "Diagonales negativas")
@@ -29,6 +37,7 @@ class DeterminantesDidacticos(unittest.TestCase):
         self.assertIn("Suma =", positivos["calculos"][-1])
 
     def test_cofactores_guardan_submatriz_signo_termino_y_desarrollo(self):
+        """Comprueba que cada cofactor guarda submatriz, signo, término y desarrollo."""
         etapas = m.calcular_determinante([[1, 2], [3, 4]], "cofactores")["etapas"]
         terminos = [e for e in etapas if e["titulo"].startswith("Menor y cofactor")]
         self.assertEqual(len(terminos), 2)
@@ -38,6 +47,7 @@ class DeterminantesDidacticos(unittest.TestCase):
         self.assertIn("a·C", terminos[1]["calculos"][-1])
 
     def test_triangular_estados_separados_y_pivotes(self):
+        """Comprueba que la reducción triangular guarda cada estado y sus pivotes."""
         etapas = m.calcular_determinante([[2, 1], [4, 3]])["etapas"]
         inicial = etapas[0]["valores"][0]["valor"]
         self.assertEqual(inicial, [[2, 1], [4, 3]])
@@ -47,11 +57,14 @@ class DeterminantesDidacticos(unittest.TestCase):
         self.assertIn("conserva", operacion["explicacion"])
 
     def test_verificacion_detecta_determinante_falso(self):
+        """Comprueba que se detecta un determinante falso."""
         self.assertFalse(d.verificar_determinante([[1, 2], [3, 4]], F(99), "triangular")["correcto"])
 
 
 class InversasDidacticas(unittest.TestCase):
+    """Etapas didácticas de las inversas y del ejercicio Tipo C."""
     def test_gauss_jordan_separacion_bloques_y_operaciones(self):
+        """Comprueba que [A | I] separa los bloques y muestra cada operación."""
         r = d.informe_inversa([[0, 2], [1, 3]])
         self.assertTrue(r["verificacion"]["correcto"])
         aumentadas = [v for e in r["procedimiento"] for v in e["valores"] if v["separador"] is not None]
@@ -63,13 +76,62 @@ class InversasDidacticas(unittest.TestCase):
         self.assertTrue(any("(AB)1,1" in linea for e in r["verificacion"]["etapas"] for linea in e["calculos"]))
 
     def test_adjunta_detalla_todos_los_menores(self):
+        """Comprueba que el método de la adjunta detalla todos los menores."""
         r = d.informe_inversa([[1, 2], [3, 4]], "adjunta")
         menores = [e for e in r["procedimiento"] if e["titulo"].startswith("Menor y cofactor")]
         self.assertEqual(len(menores), 4)
         self.assertTrue(all(e["subpasos"] for e in menores))
         self.assertTrue(r["verificacion"]["correcto"])
 
+    TIPO_C = [[F(1, 2), F(1, 2), 0], [0, F(1, 2), F(1, 2)], [F(1, 2), 0, 1]]
+
+    def test_sistematico_tipo_c_por_adjunta_y_cofactores(self):
+        """Comprueba el ejercicio del Sistemático Tipo C por adjunta y cofactores."""
+        A = self.TIPO_C
+        r = d.informe_inversa(A, "adjunta")
+        valores = {v["nombre"]: v["valor"] for v in r["intermedios"][0]["valores"]}
+        self.assertEqual(valores["det(A)"], F(3, 8))
+        self.assertEqual(valores["Matriz de menores M"],
+                         [[F(1, 2), F(-1, 4), F(-1, 4)], [F(1, 2), F(1, 2), F(-1, 4)], [F(1, 4), F(1, 4), F(1, 4)]])
+        self.assertEqual(valores["Matriz de cofactores C"],
+                         [[F(1, 2), F(1, 4), F(-1, 4)], [F(-1, 2), F(1, 2), F(1, 4)], [F(1, 4), F(-1, 4), F(1, 4)]])
+        self.assertEqual(valores["Adjunta adj(A) = Cᵀ"],
+                         [[F(1, 2), F(-1, 2), F(1, 4)], [F(1, 4), F(1, 2), F(-1, 4)], [F(-1, 4), F(1, 4), F(1, 4)]])
+        self.assertEqual(r["resultado"], [[F(4, 3), F(-4, 3), F(2, 3)], [F(2, 3), F(4, 3), F(-2, 3)],
+                                          [F(-2, 3), F(2, 3), F(2, 3)]])
+        self.assertIn("(8/3)·adj(A)", r["conclusion"])
+        self.assertTrue(r["verificacion"]["correcto"])
+        titulos = [e["titulo"] for e in r["procedimiento"]]
+        # El determinante sale de los cofactores ya calculados, no de una reducción aparte.
+        self.assertIn("det(A) por cofactores de la fila 1", titulos)
+        self.assertNotIn("Producto diagonal y signo", titulos)
+        menor = next(e for e in r["procedimiento"] if e["titulo"] == "Menor y cofactor (1,2)")
+        self.assertEqual(menor["calculos"][0], "M1,2 = (0)·(1) − (1/2)·(1/2) = -1/4")
+        verificacion = [e["titulo"] for e in r["verificacion"]["etapas"]]
+        for titulo in ("det(A) por la regla de Sarrus", "adj(A) frente a Cᵀ", "A·adj(A) frente a det(A)·I",
+                       "A⁻¹ por adjunta frente a A⁻¹ por Gauss-Jordan", "A⁻¹·A frente a I"):
+            self.assertIn(titulo, verificacion)
+        for metodo, titulo in (("sarrus", "Regla de Sarrus"), ("cofactores", "Expansión por cofactores de la fila 1")):
+            det = d.informe_determinante(A, metodo)
+            self.assertEqual(det["resultado"], F(3, 8))
+            self.assertEqual(det["intermedios"][0]["titulo"], titulo)
+            self.assertLessEqual(len(det["intermedios"][0]["calculos"]), 8)
+
+    def test_coherencia_adjunta_detecta_datos_alterados(self):
+        """Comprueba que la coherencia de la adjunta detecta cofactores, adjunta o inversa alterados."""
+        calculo = m.calcular_inversa(self.TIPO_C, "adjunta")
+        self.assertTrue(d.coherencia_adjunta(self.TIPO_C, calculo)["correcto"])
+        for clave, i, j in (("cofactores", 0, 1), ("adjunta", 2, 0), ("inversa", 1, 1)):
+            with self.subTest(clave=clave):
+                malo = deepcopy(calculo)
+                malo[clave][i][j] += 1
+                self.assertFalse(d.coherencia_adjunta(self.TIPO_C, malo)["correcto"])
+        malo = deepcopy(calculo)
+        malo["determinante"] += 1
+        self.assertFalse(d.coherencia_adjunta(self.TIPO_C, malo)["correcto"])
+
     def test_singular_con_diagnostico_y_certificado(self):
+        """Comprueba que una matriz singular recibe diagnóstico y certificado en lugar de inversa."""
         for metodo in ("gauss_jordan", "adjunta"):
             r = d.informe_inversa([[1, 2], [2, 4]], metodo)
             self.assertFalse(r["definido"])
@@ -79,11 +141,14 @@ class InversasDidacticas(unittest.TestCase):
             self.assertTrue(any("Certificado" in e["titulo"] for e in r["verificacion"]["etapas"]))
 
     def test_falsa_inversa_no_pasa_verificacion(self):
+        """Comprueba que una inversa falsa no pasa la verificación."""
         self.assertFalse(d.verificacion_inversa([[1, 2], [3, 4]], [[1, 0], [0, 1]])["correcto"])
 
 
 class SistemasDidacticos(unittest.TestCase):
+    """Procedimiento y verificación de sistemas."""
     def test_unica_original_A_b_aumentada_y_pivotes(self):
+        """Comprueba que el procedimiento muestra A, b, [A | b] y los pivotes."""
         r = m.resolver_sistema([[2, 1], [1, -1]], [5, 1])
         pasos = d.procedimiento_sistema(r)
         self.assertEqual([v["nombre"] for v in pasos[0]["valores"]], ["A", "b", "[A | b]"])
@@ -95,6 +160,7 @@ class SistemasDidacticos(unittest.TestCase):
         self.assertFalse(d.verificacion_sistema(malo)["correcto"])
 
     def test_infinitas_todas_las_direcciones(self):
+        """Comprueba que se muestran y verifican todas las direcciones paramétricas."""
         r = m.resolver_sistema([[1, 2, 3]], [1])
         pasos = d.procedimiento_sistema(r)
         self.assertEqual(pasos[-1]["titulo"], "Parametrizar")
@@ -105,6 +171,7 @@ class SistemasDidacticos(unittest.TestCase):
         self.assertFalse(d.verificacion_sistema(malo)["correcto"])
 
     def test_inconsistencia_certificada_con_originales(self):
+        """Comprueba el certificado yᵀA = 0, yᵀb ≠ 0 con los datos originales."""
         A, b = [[1, 2], [2, 4]], [1, 3]
         r = d.verificacion_sistema(m.resolver_sistema(A, b))
         self.assertTrue(r["correcto"])
@@ -114,12 +181,14 @@ class SistemasDidacticos(unittest.TestCase):
         self.assertEqual(sum(yi * bi for yi, bi in zip(r["y"], b)), r["yb"])
 
     def test_combinacion_reconstruida_por_componentes(self):
+        """Comprueba que la combinación lineal se reconstruye componente por componente."""
         r = m.resolver_sistema([[1, 0, 1], [0, 1, 1]], [2, 3], ["c1", "c2", "c3"])
         informe = d.verificacion_sistema(r, combinacion=True)
         self.assertTrue(informe["correcto"])
         self.assertTrue(any("Componente 1:" in linea for e in informe["etapas"] for linea in e["calculos"]))
 
     def test_LD_relacion_y_LI_certificado_rectangular(self):
+        """Comprueba la relación de dependencia (L.D.) y el certificado de independencia (L.I.)."""
         for A, esperado in (([[1, 2], [2, 4]], False), ([[1, 0], [0, 1], [2, 3]], True)):
             with self.subTest(A=A):
                 r = m.analizar_independencia(A)
@@ -136,7 +205,9 @@ class SistemasDidacticos(unittest.TestCase):
 
 
 class PropiedadesDidacticas(unittest.TestCase):
+    """Ambos lados de las propiedades y sus comprobaciones."""
     def test_av_ambos_lados_y_comprobacion_independiente(self):
+        """Comprueba ambos lados de las propiedades de Av y su comprobación independiente."""
         datos = m.analizar_producto_av([[1, 2], [3, 4]], [1, -1], F(1, 2), [2, 3])
         informe = d.informe_propiedades_av(datos)
         self.assertTrue(informe["verificacion"]["correcto"])
@@ -151,6 +222,7 @@ class PropiedadesDidacticas(unittest.TestCase):
             self.assertFalse(d.informe_propiedades_av(malo)["verificacion"]["correcto"], clave)
 
     def test_avanzadas_lados_condiciones_y_rutas_alternas(self):
+        """Comprueba lados, condiciones y rutas alternas de las propiedades avanzadas."""
         for clave in m.PROPIEDADES_AVANZADAS:
             A = [[2, 1], [0, 3]] if clave == "det_triangular" else [[1, 2], [3, 4]]
             with self.subTest(clave=clave):
@@ -162,6 +234,7 @@ class PropiedadesDidacticas(unittest.TestCase):
                 self.assertTrue(any("recálculo" in e["titulo"] for e in r["verificacion"]["etapas"]))
 
     def test_distributivas_lados_originales_y_condiciones_reales(self):
+        """Comprueba que las distributivas usan los datos originales y las condiciones reales."""
         casos = [("distributiva_izquierda", {"A": [[1, 2, 3], [4, 5, 6]], "B": [[1, 0], [0, 1], [1, 1]], "C": [[2, 1], [1, 2], [0, 1]]}),
                  ("distributiva_derecha", {"A": [[1, 2, 3], [4, 5, 6]], "B": [[2, 1, 0], [0, 1, 2]], "C": [[1, 0], [0, 1], [1, 1]]})]
         for clave, matrices in casos:
@@ -182,12 +255,14 @@ class PropiedadesDidacticas(unittest.TestCase):
                 self.assertIsNone(verificacion["identidad"])
 
     def test_incompatibilidad_identificada_sin_falso_exito(self):
+        """Comprueba que una incompatibilidad de dimensiones no se reporta como éxito."""
         r = m.verificar_propiedad_matricial("distributiva_izquierda", {"A": [[1, 2]], "B": [[1]], "C": [[1, 2]]})
         self.assertIsNone(r["cumple"])
         self.assertTrue(any(not c["cumple"] for c in d.condiciones_propiedad(r)["condiciones"]))
         self.assertFalse(m.verificar_resolucion(r["lados"][0]["resolucion"])["aplicable"])
 
     def test_comparacion_incluye_todas_las_entradas(self):
+        """Comprueba que la comparación muestra todas las entradas, iguales o no."""
         r = d.comparar([[1, 2], [3, 4]], [[1, 2], [3, 5]])
         self.assertEqual(len(r["calculos"]), 4)
         self.assertIn("≠", r["calculos"][-1])

@@ -9,6 +9,23 @@
   <component name="ChangeListManager">
     <list default="true" id="b063673a-242a-44d1-834c-a3b57751a65a" name="Changes" comment="cambios v3">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Programa 1_Grupo3.py" beforeDir="false" afterPath="$PROJECT_DIR$/Programa 1_Grupo3.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/modulos/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/modulos/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/modulos/informes.py" beforeDir="false" afterPath="$PROJECT_DIR$/modulos/informes.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/modulos/modulo_lu.py" beforeDir="false" afterPath="$PROJECT_DIR$/modulos/modulo_lu.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/modulos/modulo_matrices.py" beforeDir="false" afterPath="$PROJECT_DIR$/modulos/modulo_matrices.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/modulos/pasos.py" beforeDir="false" afterPath="$PROJECT_DIR$/modulos/pasos.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/teoremas/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/teoremas/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/teoremas/teoremas_matrices.py" beforeDir="false" afterPath="$PROJECT_DIR$/teoremas/teoremas_matrices.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test_algoritmo.py" beforeDir="false" afterPath="$PROJECT_DIR$/test_algoritmo.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test_auditoria_determinantes.py" beforeDir="false" afterPath="$PROJECT_DIR$/test_auditoria_determinantes.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test_auditoria_procedimientos.py" beforeDir="false" afterPath="$PROJECT_DIR$/test_auditoria_procedimientos.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test_matrices_avanzadas.py" beforeDir="false" afterPath="$PROJECT_DIR$/test_matrices_avanzadas.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test_modulo_lu.py" beforeDir="false" afterPath="$PROJECT_DIR$/test_modulo_lu.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test_presentacion_matematica.py" beforeDir="false" afterPath="$PROJECT_DIR$/test_presentacion_matematica.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/universidad_americana.png" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -140,7 +157,19 @@
       <map>
         <entry key="MAIN">
           <value>
-            <State />
+            <State>
+              <option name="FILTERS">
+                <map>
+                  <entry key="branch">
+                    <value>
+                      <list>
+                        <option value="main" />
+                      </list>
+                    </value>
+                  </entry>
+                </map>
+              </option>
+            </State>
           </value>
         </entry>
       </map>

@@ -1,4 +1,9 @@
-"""Regresiones de desarrollos completos, condiciones y evaluación independiente."""
+"""Regresiones de desarrollos completos, condiciones y evaluación independiente de expresiones y propiedades.
+
+Unidad: Álgebra Lineal (MTM0120), verificación automática de la Calculadora.
+Autores (Grupo 3, UAM): Andrés Eduardo Mejía Castro, José Andrés Zepeda Grijalba,
+Eddy Alfonso Almendárez Ruiz y Brandon Javier Rocha Varela.
+"""
 from copy import deepcopy
 from fractions import Fraction as F
 from itertools import permutations
@@ -12,11 +17,13 @@ import main
 
 
 def producto_ref(A, B):
+    """Producto matricial de referencia, independiente de la Calculadora."""
     return [[sum((F(a)*F(b) for a, b in zip(fila, col)), F(0))
              for col in zip(*B)] for fila in A]
 
 
 def det_ref(A):
+    """Determinante de referencia por permutaciones (Leibniz)."""
     if not A:
         return F(1)
     total = F(0)
@@ -30,6 +37,7 @@ def det_ref(A):
 
 
 def inversa_ref(A):
+    """Inversa de referencia por adjunta, calculada con det_ref."""
     det = det_ref(A)
     return [[(-1)**(i+j)*det_ref([[x for k, x in enumerate(fila) if k != i]
                                 for l, fila in enumerate(A) if l != j])/det
@@ -37,17 +45,20 @@ def inversa_ref(A):
 
 
 def etapas_recursivas(etapas):
+    """Recorre en profundidad las etapas y sus subpasos."""
     for e in etapas:
         yield e
         yield from etapas_recursivas(e.get('subpasos', []))
 
 
 class AuditoriaExpresiones(unittest.TestCase):
+    """Expresiones matriciales: operaciones intermedias, rutas alternativas y dimensiones."""
     A = [[F(1, 2), -2], [3, 1]]
     B = [[1, 0], [-1, F(2, 3)]]
     C = [[0, -3], [2, 1]]
 
     def resolver(self, expresion, datos=None):
+        """Resuelve y verifica una expresión y comprueba que no se modifiquen los datos."""
         datos = datos or {'A': self.A, 'B': self.B, 'C': self.C}
         original = deepcopy(datos)
         r = m.resolver_expresion_matricial(expresion, datos, {'r': F(-2, 3), 's': F(3, 2)})
@@ -65,6 +76,7 @@ class AuditoriaExpresiones(unittest.TestCase):
         return r, v
 
     def test_transpuesta_producto_dos_rutas_completas(self):
+        """Comprueba que (AB)ᵀ se calcula por dos rutas completas: (AB)ᵀ y BᵀAᵀ."""
         r, v = self.resolver('(AB)^T')
         rhs = v['identidad']['resolucion']
         self.assertEqual([p['expresion'] for p in r['operaciones']], ['AB', '(AB)ᵀ'])
@@ -78,6 +90,7 @@ class AuditoriaExpresiones(unittest.TestCase):
         self.assertEqual({n for n, _ in rhs['pasos'][0]['matrices']}, {'A', 'B'})
 
     def test_distributividades_operaciones_intermedias(self):
+        """Comprueba las operaciones intermedias de ambos lados de las distributivas."""
         for texto, li, ld in [('A(B+C)', ['suma', 'producto'], ['producto', 'producto', 'suma']),
                               ('(A+B)C', ['suma', 'producto'], ['producto', 'producto', 'suma']),
                               ('A(B-C)', ['resta', 'producto'], ['producto', 'producto', 'resta'])]:
@@ -87,6 +100,7 @@ class AuditoriaExpresiones(unittest.TestCase):
                 self.assertEqual([p['tipo'] for p in v['identidad']['resolucion']['operaciones']], ld)
 
     def test_lista_completa_de_expresiones_y_anidamientos(self):
+        """Comprueba una lista completa de expresiones y anidamientos contra un cálculo de referencia."""
         for texto in ['AB', 'BA', 'A+B', 'A-B', '2A-3B+C', 'A^TB^T', 'B^TA^T',
                       '(A+B)^T', '(A-B)^T', '(ABC)^T', 'A^TBC',
                       '(A(B+C)-2B)^T', '(1/2)A-(3/4)B+C', 'r(A+B)',
@@ -95,12 +109,14 @@ class AuditoriaExpresiones(unittest.TestCase):
                 self.resolver(texto)
 
     def test_transpuesta_tres_factores_desarrolla_las_tres(self):
+        """Comprueba que (ABC)ᵀ se desarrolla como CᵀBᵀAᵀ."""
         _, v = self.resolver('(ABC)^T')
         pasos = v['identidad']['resolucion']['operaciones']
         self.assertEqual([p['expresion'] for p in pasos if p['tipo'] == 'transpuesta'], ['Cᵀ', 'Bᵀ', 'Aᵀ'])
         self.assertEqual(len([p for p in pasos if p['tipo'] == 'producto']), 2)
 
     def test_inversa_producto_det_y_reduccion_en_ambos_lados(self):
+        """Comprueba (AB)⁻¹ = B⁻¹A⁻¹ con determinante y reducción en ambos lados."""
         r, v = self.resolver('(AB)^-1')
         rhs = v['identidad']['resolucion']
         self.assertEqual([p['tipo'] for p in rhs['operaciones']], ['inversa', 'inversa', 'producto'])
@@ -113,6 +129,7 @@ class AuditoriaExpresiones(unittest.TestCase):
                 self.assertTrue(any(e['calculos'] for e in etapas))
 
     def test_inversas_sintaxis_y_precedencia(self):
+        """Comprueba las notaciones válidas de la inversa y rechaza las inválidas."""
         for texto in ['A^-1', 'A^(-1)', 'A⁻¹']:
             r, _ = self.resolver(texto)
             self.assertEqual(r['resultado'], inversa_ref(self.A))
@@ -123,11 +140,13 @@ class AuditoriaExpresiones(unittest.TestCase):
         self.assertEqual(r['resultado'], [[-x for x in fila] for fila in inversa_ref(self.A)])
 
     def test_inversa_tres_factores_desarrolla_cada_inversa(self):
+        """Comprueba que (ABC)⁻¹ se desarrolla como C⁻¹B⁻¹A⁻¹."""
         r, v = self.resolver('(ABC)^-1')
         self.assertEqual(r['resultado'], inversa_ref(producto_ref(producto_ref(self.A, self.B), self.C)))
         self.assertEqual([p['expresion'] for p in v['identidad']['resolucion']['operaciones'] if p['tipo'] == 'inversa'], ['C⁻¹', 'B⁻¹', 'A⁻¹'])
 
     def test_rectangulares_compatibles_y_dimensiones_incompatibles(self):
+        """Comprueba expresiones con matrices rectangulares compatibles e incompatibles."""
         A, B = [[1, -1, F(1, 2)], [0, 2, 3]], [[2], [0], [-1]]
         r, _ = self.resolver('(AB)^T', {'A': A, 'B': B})
         self.assertEqual(r['dimension'], (1, 2))
@@ -139,6 +158,7 @@ class AuditoriaExpresiones(unittest.TestCase):
                 self.assertFalse(m.verificar_resolucion(r)['aplicable'])
 
     def test_producto_rectangular_invertible_no_impone_inversa_factores(self):
+        """Comprueba que (AB)⁻¹ con A y B rectangulares no exige inversas de los factores."""
         r, v = self.resolver('(AB)^-1', {'A': [[1, 0]], 'B': [[2], [3]]})
         self.assertEqual(r['resultado'], [[F(1, 2)]])
         self.assertFalse(v['identidad']['definida'])
@@ -146,12 +166,14 @@ class AuditoriaExpresiones(unittest.TestCase):
         self.assertIn('no evaluable', d.pasos_expresion(r, v)[-1]['etapa']['titulo'])
 
     def test_singular_no_es_identidad_falsa(self):
+        """Comprueba que un producto singular da error en lugar de una identidad falsa."""
         r = m.resolver_expresion_matricial('(AB)^-1', {'A': [[1, 2], [2, 4]], 'B': self.B})
         self.assertIn('det(M)=0', r['error'])
         self.assertIsNone(r['identidad'])
         self.assertTrue(r['operaciones'][-1]['etapas'])
 
     def test_no_reutiliza_lado_izquierdo_y_detecta_corrupcion(self):
+        """Comprueba que el lado derecho no reutiliza el izquierdo y que se detecta un resultado alterado."""
         r, v = self.resolver('(AB)^T')
         rhs = deepcopy(v['identidad']['resolucion']['resultado'])
         r['resultado'][0][0] += 1
@@ -159,11 +181,13 @@ class AuditoriaExpresiones(unittest.TestCase):
         self.assertFalse(m.verificar_resolucion(r)['correcto'])
 
     def test_identidad_muestra_los_factores_reales_en_orden(self):
+        """Comprueba que la identidad muestra los factores reales en su orden: AᵀBᵀ = (BA)ᵀ."""
         _, v = self.resolver('A^TB^T')
         self.assertEqual(v['identidad']['enunciado'], 'AᵀBᵀ = (BA)ᵀ')
         self.assertNotEqual(producto_ref(self.A, self.B), producto_ref(self.B, self.A))
 
     def test_ordenes_y_productos_aleatorios_reproducibles(self):
+        """Comprueba expresiones con matrices aleatorias reproducibles de orden 1 a 10."""
         rng = random.Random(806)
         for n in (1, 2, 3, 5, 10):
             datos = {nombre: [[F(rng.randint(-3, 3), rng.randint(1, 4)) for _ in range(n)] for _ in range(n)] for nombre in 'ABC'}
@@ -175,7 +199,9 @@ class AuditoriaExpresiones(unittest.TestCase):
 
 
 class AuditoriaPropiedades(unittest.TestCase):
+    """Catálogo de propiedades con ambos procedimientos y comprobación independiente."""
     def test_todo_el_catalogo_general_con_ambos_procedimientos(self):
+        """Comprueba todo el catálogo de propiedades generales con ambos procedimientos."""
         for n in (1, 2, 3, 5):
             datos = {nombre: [[F((i+1)*(j+2)+k, 3) for j in range(n)] for i in range(n)] for k, nombre in enumerate('ABC')}
             for p in m.PROPIEDADES_MATRICIALES:
@@ -190,6 +216,7 @@ class AuditoriaPropiedades(unittest.TestCase):
                         self.assertTrue(m.verificar_resolucion(lado['resolucion'], False)['correcto'])
 
     def test_todas_las_propiedades_avanzadas_y_comprobacion_independiente(self):
+        """Comprueba todas las propiedades avanzadas y su comprobación independiente."""
         for n in (1, 2, 3, 5):
             A = [[F(i+2) if i == j else F(-1, 2) if j > i else F(0) for j in range(n)] for i in range(n)]
             B = [[F(j+1) if i == j else F(1, 3) if i > j else F(0) for j in range(n)] for i in range(n)]
@@ -209,6 +236,7 @@ class AuditoriaPropiedades(unittest.TestCase):
                         self.assertEqual(r['lados'][0]['resultado'], det_ref(A)*det_ref(B))
 
     def test_singular_con_procedimiento_y_diagnostico(self):
+        """Comprueba que con matrices singulares se muestra el procedimiento y el diagnóstico."""
         for clave in ('inversa_inversa', 'inversa_producto', 'inversa_transpuesta', 'det_inversa'):
             r = d.informe_propiedad_avanzada(clave, {'A': [[1, 0], [0, 1]], 'B': [[1, 2], [2, 4]]} if clave == 'inversa_producto' else {'A': [[0]]})
             self.assertFalse(r['definido'])
@@ -218,11 +246,13 @@ class AuditoriaPropiedades(unittest.TestCase):
             self.assertFalse(r['verificacion']['aplicable'])
 
     def test_det_producto_admite_singulares(self):
+        """Comprueba que det(AB) = det(A)·det(B) también se evalúa con matrices singulares."""
         r = d.informe_propiedad_avanzada('det_producto', {'A': [[0]], 'B': [[2]]})
         self.assertTrue(r['definido'])
         self.assertEqual(r['lados'][0]['resultado'], 0)
 
     def test_contraejemplos_y_condiciones(self):
+        """Comprueba los contraejemplos y las condiciones de dimensiones."""
         r = m.verificar_propiedad_matricial('no_conmutatividad', {'A': [[1, 2], [0, 1]], 'B': [[0, 1], [1, 0]]})
         self.assertFalse(r['cumple'])
         self.assertIn('contraejemplo', r['conclusion'])
@@ -231,6 +261,7 @@ class AuditoriaPropiedades(unittest.TestCase):
         self.assertNotIn('No se cumple', r['conclusion'])
 
     def test_eliminacion_con_aritmetica_real_y_certificados(self):
+        """Comprueba la aritmética de cada paso de eliminación y los certificados de inconsistencia."""
         r = m.resolver_sistema([[2, 1], [4, 3]], [1, -2])
         for p in r['pasos']:
             if p['tipo'] in ('escalado', 'eliminacion'):
@@ -242,6 +273,7 @@ class AuditoriaPropiedades(unittest.TestCase):
             self.assertTrue(v['etapas'][0]['subpasos'])
 
     def test_apis_compatibles_tambien_exponen_los_desarrollos(self):
+        """Comprueba que las funciones antiguas también devuelven lados y verificaciones."""
         A, B = [[1, 2], [3, 4]], [[2, 0], [0, 3]]
         for r in m.verificar_propiedades_transpuesta(A, B, F(-1, 2)).values():
             self.assertTrue(r['lados'])
@@ -260,11 +292,14 @@ class AuditoriaPropiedades(unittest.TestCase):
 
 
 class AuditoriaIntegracionGUI(unittest.TestCase):
+    """Integración de las verificaciones con la interfaz gráfica."""
     @classmethod
     def setUpClass(cls):
+        """Carga la GUI una vez para todas las pruebas de la clase."""
         cls.gui = main.cargar_aplicacion()
 
     def test_panel_recibe_ambos_lados_y_comparacion(self):
+        """Comprueba que el panel de pasos recibe ambos lados y la comparación."""
         pagina = object.__new__(self.gui.PaginaMatrices)
         for atributo in ('app', 'entrada_expresion', 'aviso', 'panel_pasos', 'area_resultado', 'area_verificacion', 'pestanas'):
             setattr(pagina, atributo, Mock())
@@ -278,6 +313,7 @@ class AuditoriaIntegracionGUI(unittest.TestCase):
         self.assertIn('Bᵀ', [p.get('expresion') for p in pasos])
 
     def test_error_frecuente_indefinido_no_invalida_la_propiedad(self):
+        """Comprueba que un error frecuente no definido no invalida la propiedad."""
         r = m.verificar_propiedad_matricial('transpuesta_producto', {'A': [[1, 2]], 'B': [[1, 2, 3], [4, 5, 6]]})
         self.assertTrue(r['cumple'])
         self.assertTrue(r['lados'][-1]['resolucion']['error'])
@@ -290,6 +326,7 @@ class AuditoriaIntegracionGUI(unittest.TestCase):
             self.assertIn('no evaluable', estado.call_args.args[1])
 
     def test_verificacion_renderiza_tarjetas_completas(self):
+        """Comprueba que la verificación dibuja todas sus tarjetas."""
         r = m.resolver_expresion_matricial('(AB)^T', {'A': [[1]], 'B': [[2]]})
         v = m.verificar_resolucion(r)
         with patch.object(self.gui, 'tarjeta_estado'), patch.object(self.gui, 'tarjeta_seccion'), \
@@ -304,6 +341,7 @@ class AuditoriaIntegracionGUI(unittest.TestCase):
             self.assertTrue(all(c.args[3] for c in tarjeta.call_args_list))
 
     def test_widgets_reales_muestran_transpuestas_inversas_y_comparaciones(self):
+        """Comprueba con widgets reales transpuestas, inversas y comparaciones."""
         if self.gui.ctk is None:
             self.skipTest('CustomTkinter no disponible')
         try:
@@ -314,6 +352,7 @@ class AuditoriaIntegracionGUI(unittest.TestCase):
         errores = []
         root.report_callback_exception = lambda *args: errores.append(args)
         def textos(widget):
+            """Retorna los textos de un widget y de todos sus descendientes."""
             resultado = []
             try:
                 resultado.append(str(widget.cget('text')))
