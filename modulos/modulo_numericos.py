@@ -706,14 +706,20 @@ def analizar_funcion(funcion, x_min, x_max, puntos=800):
     muestreo = muestrear_funcion(funcion, x_min, x_max, puntos)
     raices, maximos, minimos = [], [], []
     tolerancia_x = (x_max - x_min) / puntos * 1e-3
+    tramos_cero = []
     for tramo in muestreo["tramos"]:
+        ys = [y for _, y in tramo]
+        for k, (x, y) in enumerate(tramo):
+            # Un cero aislado es una raíz; varios ceros seguidos son f idénticamente 0 o un número tan pequeño
+            # que la computadora lo redondea a 0 (subdesbordamiento, como eˣ con x < −745): no se cuentan como raíces.
+            vecinos = [ys[j] for j in (k - 1, k + 1) if 0 <= j < len(ys)]
+            if y == 0 and all(v != 0 for v in vecinos):
+                raices.append(x)
+            elif y == 0 and (k == 0 or ys[k - 1] != 0):
+                tramos_cero.append(x)
         for (x1, y1), (x2, y2) in zip(tramo, tramo[1:]):
-            if y1 == 0:
-                raices.append(x1)
-            elif _signo(y1) * _signo(y2) < 0:
+            if y1 != 0 and y2 != 0 and _signo(y1) * _signo(y2) < 0:
                 raices.append(_raiz_en(funcion, x1, x2, y1, y2))
-        if tramo and tramo[-1][1] == 0:
-            raices.append(tramo[-1][0])
         for (x0, y0), (x1, y1), (x2, y2) in zip(tramo, tramo[1:], tramo[2:]):
             if y1 > y0 and y1 >= y2:
                 maximos.append(_extremo_en(funcion, x0, x2, True))
@@ -725,7 +731,7 @@ def analizar_funcion(funcion, x_min, x_max, puntos=800):
             raices.append(x)
     raices = sorted(raices)
     unicas = [r for i, r in enumerate(raices) if i == 0 or r - raices[i - 1] > tolerancia_x]
-    return {"funcion": funcion, "raices": unicas, "maximos": maximos, "minimos": minimos,
+    return {"funcion": funcion, "raices": unicas, "maximos": maximos, "minimos": minimos, "tramos_cero": tramos_cero,
             "saltos": muestreo["saltos"], "huecos": muestreo["huecos"],
             "corte_y": funcion.evaluar(0.0) if x_min <= 0 <= x_max else None}
 
@@ -736,7 +742,9 @@ def _buscar_cambio_de_signo(funcion, a, b, puntos=400):
     Entrada: función, intervalo y cantidad de subintervalos. Salida: (p, q) o None.
     """
     for tramo in muestrear_funcion(funcion, a, b, puntos)["tramos"]:
-        for (x1, y1), (x2, y2) in zip(tramo, tramo[1:]):
+        # Las muestras que caen justo en una raíz (f = 0) se saltan: el cambio de signo se busca entre sus vecinas.
+        no_nulos = [(x, y) for x, y in tramo if y != 0]
+        for (x1, y1), (x2, y2) in zip(no_nulos, no_nulos[1:]):
             if _signo(y1) * _signo(y2) < 0:
                 return x1, x2
     return None
@@ -1004,6 +1012,10 @@ def informe_graficador(textos, x_min, x_max):
                     f"Corte con el eje y: {formatear_real(datos['corte_y'], 8) if datos['corte_y'] is not None else 'fuera del intervalo o no definido'}"]
         if datos["saltos"]:
             calculos.append("Discontinuidades cerca de x = " + ", ".join(formatear_real(s, 5) for s in datos["saltos"]))
+        if datos["tramos_cero"]:
+            calculos.append("Desde x ≈ " + ", ".join(formatear_real(x, 5) for x in datos["tramos_cero"]) + " la computadora obtiene "
+                            "f(x) = 0 en varios puntos seguidos (f es 0 en un tramo o es tan pequeña que se redondea a 0); "
+                            "esos puntos no se cuentan como raíces.")
         etapas.append(etapa(f"Puntos notables de {nombres[i]}", calculos=calculos))
     total = sum(len(d["raices"]) for d in analisis)
     informe = {"definido": True, "funciones": funciones, "analisis": analisis, "cortes": cortes, "x_min": x_min, "x_max": x_max,

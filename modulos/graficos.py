@@ -544,7 +544,8 @@ def escena_convergencia(informe, t, ancho, alto):
                "puntos": [(it["n"], ancho_inicial / 2 ** it["n"]) for it in iteraciones]},
               {"texto": "|f(c)|", "color": TEMA["primario"],
                "puntos": [(it["n"], abs(it["fc"])) for it in iteraciones if it["fc"] != 0]}]
-    series[1]["puntos"] = series[1]["puntos"] or [(1, 1e-300)]
+    # Si f(c) = 0 en todas las iteraciones no hay nada que dibujar en escala logarítmica para |f(c)|.
+    series = [s for s in series if s["puntos"]]
     k = min(len(iteraciones), int(t) + 1)
     n = len(iteraciones)
     progreso = (k - 1) / (n - 1) if n > 1 else 1.0

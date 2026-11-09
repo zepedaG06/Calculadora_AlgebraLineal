@@ -1,6 +1,6 @@
-# Calculadora de Álgebra Lineal (Programas 1 a 6)
+# Calculadora de Álgebra Lineal (Programas 1 a 7)
 
-Proyecto universitario del Grupo 3 (Universidad Americana, Álgebra Lineal MTM0120) para resolver problemas de álgebra lineal con aritmética exacta. El Programa 6 agrega la **factorización LU y la solución de Ax = b** (`modulos/modulo_lu.py`) y las mejoras obligatorias de las Tareas 4 y 5.
+Proyecto universitario del Grupo 3 (Universidad Americana, Álgebra Lineal MTM0120) para resolver problemas de álgebra lineal con aritmética exacta. El Programa 6 agrega la **factorización LU y la solución de Ax = b** (`modulos/modulo_lu.py`) y las mejoras obligatorias de las Tareas 4 y 5. El Programa 7 agrega el módulo de **Métodos Numéricos** (`modulos/modulo_numericos.py`): bisección, graficador de funciones, notación posicional en base 10 y base 2 y errores numéricos, más una sección de **renders y animaciones** (`modulos/graficos.py`).
 
 ## Secciones
 
@@ -11,6 +11,12 @@ Proyecto universitario del Grupo 3 (Universidad Americana, Álgebra Lineal MTM01
 - **Operaciones con matrices**: se escribe o se construye con botones una expresión con A, B y C (por ejemplo `2A − 3B + C`, `A(B + C)`, `(AB)ᵀ` o `AᵀBC`). El analizador respeta paréntesis, precedencia, orden de los factores, transpuestas (`Aᵀ`, `A^T`, `A'`), escalares (números, `r`, `s`) e identidades (`I2`, `I3`, …). El procedimiento muestra los datos con sus dimensiones, la condición de dimensiones de cada operación intermedia, la regla aplicada, el cálculo de cada entrada (desplegable) y la respuesta. La verificación recalcula cada paso con un método independiente, recalcula toda la expresión desde los datos originales y, cuando existe, la compara con una ruta equivalente por propiedad (por ejemplo `A(B + C)` frente a `AB + AC`). También incluye propiedades teóricas con su demostración general, contraejemplos y ejercicios tipo examen; una comprobación numérica se identifica como caso particular, no como demostración.
 - **Independencia lineal**: pide la cantidad de vectores p y su dimensión n, construye el sistema homogéneo [A | 0], lo reduce a forma escalonada por filas, cuenta pivotes y variables libres y da el veredicto (L.I. o L.D.). Si son dependientes, también muestra una relación de dependencia.
 - **Factorización LU y solución Ax = b**: se escriben A (m × n) y b. A se lleva a una forma escalonada U solo con reemplazos `Fi ← Fi − l·Fj` (i > j) y cada multiplicador l = elemento a eliminar / pivote queda en L (m × m, triangular inferior con unos en la diagonal) en la posición (i, j). Se verifica «La factorización es correcta (L · U == A)» y se resuelve Ax = b en dos etapas: reducción de [L | b] (sustitución hacia adelante, vector intermedio y) y reducción de [U | y] (sustitución hacia atrás, solución x), con la comprobación final «Comprobación exitosa: A · x == b». La página muestra el logotipo ASCII del módulo y la opción «0. Ver Teoremas Clave del Módulo». Admite matrices rectangulares, columnas sin pivote (soluciones paramétricas) y sistemas inconsistentes; si hace falta un intercambio de filas informa «La matriz no admite Factorización LU sin permutación (requiere pivoteo parcial PA = LU)» sin inventar una factorización.
+- **Métodos numéricos** (Programa 7), con la opción «0. Ver Teoremas Clave del Módulo» y cuatro opciones que animan, explican y verifican su procedimiento:
+  1. **Bisección**: f(x) se escribe como texto (`x^3 - x - 2`, `cos(x) - x`, `e^x - 3x`). Comprueba el teorema de Bolzano, calcula de antemano las iteraciones necesarias n ≥ log₂((b − a)/tol), anima cómo el intervalo [a, b] se reduce a la mitad y grafica la convergencia del error. Si f(a) y f(b) tienen el mismo signo sugiere un intervalo con cambio de signo, y si el cambio de signo se debe a una discontinuidad (tan x, 1/x) avisa que no es una raíz.
+  2. **Graficador**: hasta tres funciones con trazado animado, ceros, extremos, intersecciones y asíntotas sin líneas falsas. La rueda acerca, arrastrar mueve, doble clic restablece y el cursor lee los valores.
+  3. **Notación posicional en base 10 y base 2**: descompone el número en dígitos, pesos y contribuciones, lo convierte con divisiones y multiplicaciones sucesivas (detecta los desarrollos periódicos, como 0.1 = 0.0(0011)₂) y muestra sus bits en IEEE 754 de 32 y 64 bits con el error de representación exacto.
+  4. **Errores numéricos**: errores absoluto, relativo y porcentual con fracciones exactas, cifras significativas garantizadas, redondeo frente a truncamiento, épsilon de la máquina (2⁻⁵²), acumulación del error, truncamiento de una serie y cancelación de cifras.
+- **Renders y animaciones**: cómo una matriz 2×2 o 3×3 deforma el plano o el espacio (con |det| como área o volumen), las rectas o planos de un sistema y dónde se cruzan, y las combinaciones lineales en R² y R³. En 3D la cámara gira sola o con el mouse. Cada render se exporta a PNG en alta resolución. Las secciones de sistemas, combinaciones, determinantes y LU tienen accesos directos a estos renders, y LU muestra el mapa de calor de L y U.
 - **Método** y **Ayuda**: explicación del algoritmo con un ejemplo resuelto, atajos y conceptos clave.
 
 Cada sección permite cargar ejemplos, generar datos aleatorios y ver el procedimiento completo o paso a paso (con reproducción automática). La fila que cambia se resalta y el pivote aparece encerrado en cada matriz.
@@ -22,7 +28,7 @@ No se usa:
 - PySide6
 - NumPy
 - SciPy
-- el módulo `math` (el mcd y el mcm se calculan con el algoritmo de Euclides)
+- el módulo `math` (el mcd y el mcm se calculan con el algoritmo de Euclides; seno, coseno, exponencial, logaritmo y arcotangente, con series de Taylor propias)
 
 El algoritmo de eliminación por filas está implementado manualmente con fracciones exactas (`fractions.Fraction`). Los módulos de `modulos/` y `teoremas/` son funciones puras: reciben listas anidadas, retornan resultados y no usan `input()` ni `print()`; la entrada y salida de consola vive en `main.py`. La interfaz usa CustomTkinter, una capa visual moderna basada en Tkinter.
 
@@ -40,7 +46,7 @@ macOS / Linux:
 python3 -m pip install -r requirements.txt
 ```
 
-Pillow se usa para mostrar el logo de la UAM (el archivo está en formato WebP). Si no está instalado, el programa funciona igual pero sin logo.
+Pillow se usa para mostrar el logo de la UAM y para exportar los renders a PNG. Si no está instalado, el programa funciona igual, pero sin logo y sin exportar imágenes.
 
 ## Cómo ejecutar
 
@@ -56,7 +62,7 @@ python3 main.py
 python3 main.py --consola
 ```
 
-Opciones: 1. Abrir la interfaz gráfica · 2. **Factorización LU y solución Ax = b** · 3. Verificador de propiedades de matrices · 4. Independencia lineal · S. Salir. La opción 2 muestra el logotipo ASCII del módulo y «0. Ver Teoremas Clave del Módulo»; pide m × n, las filas de A y el vector b, valida cada dato (si es inválido lo notifica y lo vuelve a pedir sin cerrarse) y despliega L, U, el mensaje de verificación, y, x y la comprobación final. Si CustomTkinter no está instalado, `main.py` abre este menú automáticamente. El archivo histórico `python3 "Programa 1_Grupo3.py" --consola` conserva el análisis de independencia lineal.
+Opciones: 1. Abrir la interfaz gráfica · 2. **Factorización LU y solución Ax = b** · 3. Verificador de propiedades de matrices · 4. Independencia lineal · 5. **Métodos numéricos** · S. Salir. La opción 2 muestra el logotipo ASCII del módulo y «0. Ver Teoremas Clave del Módulo»; pide m × n, las filas de A y el vector b, valida cada dato (si es inválido lo notifica y lo vuelve a pedir sin cerrarse) y despliega L, U, el mensaje de verificación, y, x y la comprobación final. Si CustomTkinter no está instalado, `main.py` abre este menú automáticamente. El archivo histórico `python3 "Programa 1_Grupo3.py" --consola` conserva el análisis de independencia lineal.
 
 ## Cómo usar
 
@@ -70,7 +76,7 @@ Opciones: 1. Abrir la interfaz gráfica · 2. **Factorización LU y solución Ax
 python3 -m unittest discover -v
 ```
 
-`test_tarea6.py` comprueba los requisitos del Programa 6 (reglas técnicas, mensajes exactos, reutilización, cobertura de propiedades, encadenamiento y consola) y `test_modulo_lu.py` la factorización con oráculos y datos alterados.
+`test_tarea7.py` comprueba los requisitos del Programa 7 (funciones elementales propias, intérprete de funciones, bisección, graficador, notación posicional, errores, motor de renders, consola y GUI) y `test_tarea6.py` los del Programa 6 (reglas técnicas, mensajes exactos, reutilización, cobertura de propiedades, encadenamiento y consola) y `test_modulo_lu.py` la factorización con oráculos y datos alterados.
 
 En Windows usa `py` en lugar de `python3`.
 
@@ -115,11 +121,15 @@ Programa 1_Grupo3.py        GUI y compatibilidad con imports históricos
 modulos/modulo_matrices.py  Núcleo exacto, sin dependencias gráficas ni E/S
 modulos/modulo_lu.py        Factorización LU, Ly = b, Ux = y y su verificación
 teoremas/teoremas_matrices.py  Teoremas y demostraciones de matrices e inversas
+modulos/modulo_numericos.py Bisección, graficador, base 10 y base 2, errores (sin math)
+modulos/graficos.py         Escenas vectoriales: gráficas, animaciones y renders 2D/3D
 teoremas/teoremas_lu.py    Logotipo ASCII y teoremas clave del módulo LU
+teoremas/teoremas_numericos.py  Logotipo ASCII y teoremas del módulo de Métodos Numéricos
 test_algoritmo.py           Suite histórica, conservada
 test_matrices_avanzadas.py  Determinantes, inversas, propiedades y regresión
 test_modulo_lu.py           LU con oráculos, datos alterados y GUI
 test_tarea6.py              Requisitos del Programa 6
+test_tarea7.py              Requisitos del Programa 7
 ```
 
 Ejecuta `py -m unittest discover -v` para incluir todos los tests. Las pruebas
