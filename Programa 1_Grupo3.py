@@ -118,7 +118,7 @@ def resolver_color(par):
 
     Entrada: tupla de colores o un color directo. Salida: cadena '#RRGGBB'.
     """
-    if isinstance(par, tuple):
+    if isinstance(par, (tuple, list)):
         return par[1]
     return par
 
@@ -145,6 +145,45 @@ def animar(widget, duracion_ms, al_avanzar, al_terminar=None):
             pass
 
     paso()
+
+
+_INTERACCION = {"hasta": 0.0}
+
+
+def marcar_interaccion(segundos=0.35):
+    """Registra que el usuario está desplazando: las animaciones se pausan mientras tanto para que el desplazamiento sea fluido.
+
+    Entrada: segundos que dura la pausa desde ahora. Salida: None.
+    """
+    _INTERACCION["hasta"] = max(_INTERACCION["hasta"], time.perf_counter() + segundos)
+
+
+def hay_interaccion():
+    """Indica si el usuario está desplazando en este momento.
+
+    Salida: True o False.
+    """
+    return time.perf_counter() < _INTERACCION["hasta"]
+
+
+def en_vista(widget):
+    """Indica si un widget se ve en pantalla: mapeado y dentro de la parte visible de su área desplazable.
+
+    Entrada: widget. Salida: True o False.
+    """
+    try:
+        if not widget.winfo_viewable():
+            return False
+        area = widget.master
+        while area is not None and not getattr(area, "_es_area_desplazable", False):
+            area = getattr(area, "master", None)
+        if area is None:
+            return True
+        y0 = widget.winfo_rooty()
+        a0 = area.canvas.winfo_rooty()
+        return y0 + widget.winfo_height() > a0 and y0 < a0 + area.canvas.winfo_height()
+    except tk.TclError:
+        return False
 
 
 def escala_de(widget):
@@ -261,17 +300,111 @@ def cargar_logo(tamano=(96, 96)):
         return None
 
 
+def _color_de_fondo(widget):
+    """Obtiene el color con el que se ve un contenedor (el de su propio contenedor si es transparente).
+
+    Entrada: widget de CustomTkinter o de Tk. Salida: color '#RRGGBB'.
+    """
+    try:
+        color = widget.cget("fg_color")
+        if color == "transparent":
+            color = widget.cget("bg_color")
+        return resolver_color(color)
+    except (ValueError, AttributeError, tk.TclError):
+        return widget.cget("bg")
+
+
+class EtiquetaLigera(tk.Label if ctk is not None else object):
+    """Texto de un solo widget de Tk con la apariencia de CTkLabel (que usa tres: marco, lienzo y texto).
+
+    Los resultados tienen cientos de textos y macOS redibuja cada widget al desplazarse; así cuesta un tercio.
+    """
+
+    ALTO_MINIMO = 28
+    OPCIONES = {"anchor", "justify", "wraplength", "cursor"}
+
+    def __init__(self, parent, text="", font=None, text_color=None, wraplength=0, **opciones):
+        """Crea el texto con la fuente escalada y el fondo del contenedor.
+
+        Entrada: contenedor, texto, fuente, color del texto, ancho de línea y anchor/justify/cursor. Salida: None.
+        """
+        self._escala = escala_de(parent)
+        self._fuente, self._color, self._ancho_linea = font or FUENTE_NORMAL, text_color, wraplength
+        super().__init__(parent, text=text, bd=0, highlightthickness=0, padx=0, pady=0, bg=_color_de_fondo(parent),
+                         fg=resolver_color(text_color) if text_color else None, font=self._fuente_escalada(),
+                         wraplength=round(wraplength * self._escala), **opciones)
+        self._ajustar_alto()
+
+    def _fuente_escalada(self):
+        """Convierte la fuente como lo hace CustomTkinter: tamaño en píxeles multiplicado por la escala.
+
+        Salida: fuente para Tk.
+        """
+        fuente = self._fuente
+        if isinstance(fuente, tuple) and len(fuente) >= 2:
+            return (fuente[0], -abs(round(fuente[1] * self._escala)), *fuente[2:])
+        return fuente
+
+    def _ajustar_alto(self):
+        """Centra el texto en el alto mínimo de CTkLabel para que la separación entre líneas sea la misma."""
+        tk.Label.configure(self, pady=0)
+        sobra = self.ALTO_MINIMO * self._escala - self.winfo_reqheight()
+        if sobra > 0:
+            tk.Label.configure(self, pady=round(sobra / 2))
+
+    def configure(self, cnf=None, **opciones):
+        """Acepta las opciones de CTkLabel que usa la calculadora y las traduce a Tk.
+
+        Entrada: opciones (text, text_color, font, wraplength, fg_color, bg_color, anchor, justify, cursor). Salida: None.
+        """
+        opciones.update(cnf or {})
+        if not opciones:
+            return tk.Label.configure(self)
+        if "text_color" in opciones:
+            self._color = opciones.pop("text_color")
+            opciones["fg"] = resolver_color(self._color) if self._color else None
+        if "font" in opciones:
+            self._fuente = opciones.pop("font")
+            opciones["font"] = self._fuente_escalada()
+        if "wraplength" in opciones:
+            self._ancho_linea = opciones.pop("wraplength")
+            opciones["wraplength"] = round(self._ancho_linea * self._escala)
+        for clave in ("fg_color", "bg_color"):
+            color = opciones.pop(clave, "transparent")
+            if color != "transparent":
+                opciones["bg"] = resolver_color(color)
+        tk.Label.configure(self, **opciones)
+        if {"text", "font", "wraplength"} & set(opciones):
+            self._ajustar_alto()
+
+    config = configure
+
+    def cget(self, clave):
+        """Devuelve las opciones con los nombres y valores de CTkLabel.
+
+        Entrada: nombre de la opción. Salida: su valor.
+        """
+        if clave == "text_color":
+            return self._color
+        if clave == "font":
+            return self._fuente
+        if clave == "wraplength":
+            return self._ancho_linea
+        return tk.Label.cget(self, clave)
+
+
 def etiqueta(parent, texto, fuente=None, color="texto_2", ajustar=None, **kwargs):
     """Crea un texto alineado a la izquierda; con «ajustar» se parte en líneas según el ancho visible.
 
-    Entrada: contenedor, texto, fuente, color y ajustar (margen o función). Salida: CTkLabel.
+    Entrada: contenedor, texto, fuente, color y ajustar (margen o función). Salida: EtiquetaLigera (CTkLabel si pide más).
     """
     opciones = {"anchor": "w", "justify": "left"}
     if ajustar is not None:
         opciones["wraplength"] = 200
     opciones.update(kwargs)
-    label = ctk.CTkLabel(parent, text=texto, font=fuente or FUENTE_NORMAL,
-                         text_color=PALETA.get(color, color), **opciones)
+    # Solo se usa CTkLabel cuando se pide algo que un texto de Tk no tiene (ancho en píxeles, fondo redondeado...).
+    clase = EtiquetaLigera if set(opciones) <= EtiquetaLigera.OPCIONES else ctk.CTkLabel
+    label = clase(parent, text=texto, font=fuente or FUENTE_NORMAL, text_color=PALETA.get(color, color), **opciones)
     if ajustar is not None:
         _ajustar_a_area(label, ajustar)
     return label
@@ -752,8 +885,11 @@ class AreaDesplazable(_Marco):
 
         self.canvas = tk.Canvas(self, bg=color_fondo, highlightthickness=0, bd=0, width=100, height=100,
                                 xscrollincrement=1, yscrollincrement=1)
-        self.barra_y = BarraDesplazamiento(self, "vertical", self.canvas.yview, fondo)
-        self.barra_x = BarraDesplazamiento(self, "horizontal", self.canvas.xview, fondo)
+        self.barra_y = BarraDesplazamiento(self, "vertical", self._mover_barra_y, fondo)
+        self.barra_x = BarraDesplazamiento(self, "horizontal", self._mover_barra_x, fondo)
+        self._pendiente = {"x": 0, "y": 0}
+        self._tarea_desplazar = None
+        self._carga = None
         self.canvas.configure(
             yscrollcommand=lambda a, b: self._ajustar_barra(self.barra_y, a, b),
             xscrollcommand=lambda a, b: self._ajustar_barra(self.barra_x, a, b),
@@ -815,13 +951,50 @@ class AreaDesplazable(_Marco):
         return vista != (0.0, 1.0)
 
     def desplazar(self, pixeles, horizontal=False):
-        """Desplaza el contenido la cantidad de píxeles indicada.
+        """Desplaza de inmediato y agrupa los eventos que llegan en los 12 ms siguientes: el trackpad envía muchos seguidos.
 
         Entrada: píxeles y horizontal (bool). Salida: None.
         """
-        pixeles = int(pixeles)
-        if pixeles:
-            (self.canvas.xview_scroll if horizontal else self.canvas.yview_scroll)(pixeles, "units")
+        marcar_interaccion()
+        self._pendiente["x" if horizontal else "y"] += pixeles
+        if not self.winfo_viewable():
+            # Sin nada en pantalla no hay cuadros que agrupar (por ejemplo en las pruebas).
+            self._aplicar_desplazamiento()
+        elif self._tarea_desplazar is None:
+            self._aplicar_desplazamiento(reprogramar=True)
+
+    def _aplicar_desplazamiento(self, reprogramar=False):
+        """Aplica el desplazamiento acumulado y carga las tarjetas que se acercan a la vista.
+
+        Entrada: reprogramar (bool), para agrupar lo que llegue después. Salida: None.
+        """
+        movido = False
+        for eje, mover in (("x", self.canvas.xview_scroll), ("y", self.canvas.yview_scroll)):
+            pixeles = int(self._pendiente[eje])
+            if pixeles:
+                mover(pixeles, "units")
+                self._pendiente[eje] -= pixeles
+                movido = True
+        # Mientras sigan llegando eventos se mantiene el ritmo de un desplazamiento cada 12 ms.
+        self._tarea_desplazar = self.after(12, self._aplicar_desplazamiento) if reprogramar or movido else None
+        self._continuar_carga()
+
+    def _mover_barra_y(self, *argumentos):
+        """Mueve la vista vertical desde la barra y carga lo que falte.
+
+        Entrada: argumentos de yview. Salida: None.
+        """
+        marcar_interaccion()
+        self.canvas.yview(*argumentos)
+        self._continuar_carga()
+
+    def _mover_barra_x(self, *argumentos):
+        """Mueve la vista horizontal desde la barra.
+
+        Entrada: argumentos de xview. Salida: None.
+        """
+        marcar_interaccion()
+        self.canvas.xview(*argumentos)
 
     def al_inicio(self):
         """Lleva la vista a la esquina superior izquierda."""
@@ -831,34 +1004,62 @@ class AreaDesplazable(_Marco):
     def limpiar(self):
         """Elimina el contenido e invalida los llenados en curso."""
         self._token += 1
+        self._carga = None
         self._ajustes = []
         for hijo in self.interior.winfo_children():
             hijo.destroy()
 
     def llenar(self, constructores, retardo=45):
-        """Reemplaza el contenido llamando a cada constructor(interior) con un pequeño retardo (efecto cascada).
+        """Reemplaza el contenido con carga diferida: construye las tarjetas en cascada solo hasta un poco más allá de lo visible.
 
-        Entrada: lista de constructores y retardo en ms. Salida: None; la ventana sigue respondiendo.
+        Entrada: lista de constructores y retardo en ms. Salida: None; el resto se construye al desplazarse hacia abajo.
         """
         self.limpiar()
         self.al_inicio()
-        token = self._token
-        constructores = list(constructores)
+        self._carga = {"token": self._token, "constructores": list(constructores), "indice": 0, "retardo": retardo, "en_curso": False}
+        self._continuar_carga()
 
-        def siguiente(indice):
-            """Construye la tarjeta número «indice» y programa la siguiente.
+    def _falta_contenido(self):
+        """Indica si el contenido construido todavía no llena la vista más un margen de una pantalla.
 
-            Entrada: índice del constructor. Salida: None.
-            """
-            if token != self._token or indice >= len(constructores):
-                return
-            try:
-                constructores[indice](self.interior)
-            except tk.TclError:
-                return
-            self.after(retardo if indice < 25 else 1, lambda: siguiente(indice + 1))
+        Salida: True o False.
+        """
+        # Con la ventana oculta (por ejemplo en las pruebas) no hay vista que medir: se construye todo.
+        if not self.winfo_toplevel().winfo_viewable():
+            return True
+        if not self.canvas.winfo_viewable():
+            return False
+        # Se usa el alto que Tk ya calculó: forzar el cálculo aquí redibujaría toda la ventana en cada tarjeta.
+        alto_vista = max(self.canvas.winfo_height(), 200)
+        return self.interior.winfo_reqheight() < self.canvas.canvasy(0) + 2 * alto_vista
 
-        siguiente(0)
+    def _continuar_carga(self):
+        """Construye la siguiente tarjeta pendiente si hace falta para llenar la vista."""
+        carga = self._carga
+        if carga is None or carga["en_curso"] or carga["indice"] >= len(carga["constructores"]):
+            return
+        carga["en_curso"] = True
+        self.after(1 if carga["indice"] == 0 else carga["retardo"], self._construir_siguiente)
+
+    def _construir_siguiente(self):
+        """Construye una tarjeta y decide si seguir ahora o esperar a que el usuario se desplace."""
+        carga = self._carga
+        if carga is None or carga["token"] != self._token:
+            return
+        carga["en_curso"] = False
+        if carga["indice"] >= len(carga["constructores"]):
+            return
+        if carga["indice"] > 0 and not self._falta_contenido():
+            if not self.canvas.winfo_viewable():
+                # La pestaña está oculta: se reanuda cuando se muestre.
+                self.canvas.bind("<Map>", lambda _e: (self.canvas.unbind("<Map>"), self._continuar_carga()))
+            return
+        try:
+            carga["constructores"][carga["indice"]](self.interior)
+        except tk.TclError:
+            return
+        carga["indice"] += 1
+        self._continuar_carga()
 
 
 def instalar_desplazamiento(raiz):
@@ -5192,18 +5393,20 @@ def renderizar_png(escena, ancho, alto, ruta, factor=2):
 class LienzoEscena(tk.Canvas):
     """Lienzo que dibuja una escena de modulos/graficos.py y la vuelve a calcular al cambiar de tamaño."""
 
-    def __init__(self, parent, generador=None, alto=None):
-        """Crea el lienzo.
+    def __init__(self, parent, generador=None, alto=None, perezoso=False):
+        """Crea el lienzo; con perezoso=True solo dibuja cuando está a la vista.
 
-        Entrada: contenedor, generador(ancho, alto) que retorna la escena (o (escena, alto natural)) y alto fijo. Salida: None.
+        Entrada: contenedor, generador(ancho, alto) de la escena (o (escena, alto natural)), alto fijo y perezoso. Salida: None.
         """
         escala = escala_de(parent)
         # El lienzo pide un ancho mínimo y toma el de su tarjeta: así nunca se sale de la columna de resultados.
         super().__init__(parent, highlightthickness=0, bd=0, bg=graficos.TEMA["fondo"], width=1, height=round((alto or 120) * escala))
         self.escala = escala
         self.generador = generador
+        self.perezoso = perezoso
         self.ultima_escena = []
         self._pendiente = None
+        self._reintento = None
         self.bind("<Configure>", lambda _evento: self.programar())
 
     def tamano_logico(self):
@@ -5224,12 +5427,31 @@ class LienzoEscena(tk.Canvas):
         ancho, alto = self.tamano_logico()
         if self.generador is None or ancho <= 2 or alto <= 2:
             return
+        # Con la ventana oculta (por ejemplo en las pruebas) no hay vista que medir: se dibuja de una vez.
+        if self.perezoso and self.winfo_toplevel().winfo_viewable() and not en_vista(self):
+            # Fuera de la vista no se dibuja; se vuelve a intentar cuando el usuario se desplace hasta aquí.
+            if self._reintento is None:
+                self._reintento = self.after(300, self._reintentar)
+            return
         resultado = self.generador(ancho, alto)
         if isinstance(resultado, tuple):
             resultado, natural = resultado
             if abs(natural - alto) > 1:
                 self.configure(height=round(natural * self.escala))
         self.pintar(resultado)
+
+    def _reintentar(self):
+        """Dibuja el lienzo pendiente si ya está a la vista."""
+        self._reintento = None
+        if self.winfo_exists():
+            self.dibujar()
+
+    def destroy(self):
+        """Cancela el dibujo pendiente antes de destruir el lienzo."""
+        for tarea in (self._pendiente, self._reintento):
+            if tarea is not None:
+                self.after_cancel(tarea)
+        super().destroy()
 
     def pintar(self, escena):
         """Convierte las primitivas de la escena en elementos del Canvas.
@@ -5494,10 +5716,15 @@ class Reproductor(_Marco):
     def _tic(self):
         """Avanza un cuadro según el tiempo real; se pausa si la animación dejó de estar visible."""
         self._tarea = None
-        if not self.winfo_exists() or not self.winfo_viewable():
+        if not self.winfo_exists() or not en_vista(self):
             self.pausar()
             return
         ahora = time.perf_counter()
+        if hay_interaccion():
+            # Mientras el usuario se desplaza no se dibuja; el tiempo no avanza para no saltar cuadros.
+            self._ultimo = ahora
+            self._tarea = self.after(60, self._tic)
+            return
         t = self.t + (ahora - self._ultimo) * self.velocidad * self.maximo / self.segundos
         self._ultimo = ahora
         if t >= self.maximo and not self.bucle:
@@ -6383,7 +6610,7 @@ class TarjetaRender(_Marco):
             self.girar = ctk.BooleanVar(value=True)
             ctk.CTkSwitch(self.reproductor.extras, text="Girar", variable=self.girar, command=self._programar_giro, font=FUENTE_PEQUENA,
                           text_color=PALETA["texto"], progress_color=PALETA["primario"], width=44).pack(side="left")
-        self.lienzo = LienzoEscena(self, self._escena, alto=alto)
+        self.lienzo = LienzoEscena(self, self._escena, alto=alto, perezoso=True)
         self.lienzo.pack(fill="x", padx=12)
         if es_3d:
             self.lienzo.bind("<ButtonPress-1>", lambda e: setattr(self, "_arrastre", (e.x, e.y)))
@@ -6395,12 +6622,15 @@ class TarjetaRender(_Marco):
         self._tarea_inicio = self.after(350, self._iniciar)
 
     def _iniciar(self):
-        """Reproduce la animación si la tarjeta está a la vista; si no, deja el cuadro final."""
+        """Reproduce la animación la primera vez que la tarjeta entra en la vista (carga diferida)."""
         self._tarea_inicio = None
-        if self.winfo_viewable():
-            self.reproductor.reproducir()
-        else:
+        if not self.winfo_toplevel().winfo_viewable():
             self.reproductor.fijar(self.reproductor.maximo)
+            return
+        if not en_vista(self.lienzo):
+            self._tarea_inicio = self.after(300, self._iniciar)
+            return
+        self.reproductor.reproducir()
         self._programar_giro()
 
     def _escena(self, ancho, alto):
@@ -6428,11 +6658,11 @@ class TarjetaRender(_Marco):
         self._tarea_giro = None
         if not self.girar.get():
             return
-        visible = self.winfo_viewable()
-        if visible and self._arrastre is None:
-            self.giro += 0.012
+        visible = en_vista(self.lienzo)
+        if visible and self._arrastre is None and not hay_interaccion():
+            self.giro += 0.018
             self.lienzo.dibujar()
-        self._tarea_giro = self.after(33 if visible else 500, self._girar)
+        self._tarea_giro = self.after(50 if visible else 500, self._girar)
 
     def _arrastrar(self, evento):
         """Gira la cámara con el mouse.
@@ -6776,6 +7006,14 @@ class PaginaIterativos(PaginaSistema):
         self.pestanas.set("Resultado")
 
 
+def _tapado(x0, y0, x1, y1, rectangulos):
+    """Indica si una caja queda completamente dentro de alguno de los rectángulos.
+
+    Entrada: caja (x0, y0, x1, y1) y lista de rectángulos. Salida: True o False.
+    """
+    return any(a <= x0 and b <= y0 and x1 <= c and y1 <= d for a, b, c, d in rectangulos)
+
+
 class FondoAnimado:
     """Fondo animado de toda la ventana: se dibuja en cada marco del color de fondo con coordenadas de la ventana, así se ve continuo.
 
@@ -6783,7 +7021,7 @@ class FondoAnimado:
     quedan encima.
     """
 
-    INTERVALO_MS = 33
+    INTERVALO_MS = 50
     COLORES_FONDO = ("fondo", "sidebar")
 
     def __init__(self, app):
@@ -6795,6 +7033,7 @@ class FondoAnimado:
         self.estado = graficos.crear_fondo()
         self.activo = True
         self.superficies = []
+        self._encima = []
         self._rejillas = {}
         self._tarea = None
         self._ultimo = time.perf_counter()
@@ -6840,29 +7079,38 @@ class FondoAnimado:
     def actualizar_superficies(self):
         """Busca los marcos visibles del color de fondo (y el lienzo de los menús desplazables); no entra en tarjetas."""
         encontrados = []
+        encima = []
 
-        def recorrer(widget):
-            """Agrega los marcos del color de fondo y sigue por sus hijos.
+        def recorrer(widget, linaje):
+            """Agrega los marcos del color de fondo y sigue por sus hijos; los demás hijos tapan a su superficie.
 
-            Entrada: widget. Salida: None.
+            Entrada: widget y superficie que lo contiene (tupla vacía o de un índice). Salida: None.
             """
             for hijo in widget.winfo_children():
                 try:
+                    if not hijo.winfo_ismapped():
+                        continue
                     if isinstance(hijo, ctk.CTkScrollableFrame):
-                        lienzo = hijo._parent_canvas
-                        if lienzo.winfo_ismapped() and lienzo.cget("bg") in self._colores:
-                            encontrados.append((lienzo, lienzo))
-                            recorrer(hijo)
-                    elif isinstance(hijo, ctk.CTkFrame) and hijo.winfo_ismapped() and self._color_efectivo(hijo) in self._colores:
-                        encontrados.append((hijo, hijo._canvas))
-                        recorrer(hijo)
+                        superficie = hijo._parent_canvas
+                        es_fondo = superficie.cget("bg") in self._colores
+                    else:
+                        superficie = getattr(hijo, "_canvas", None)
+                        es_fondo = isinstance(hijo, ctk.CTkFrame) and self._color_efectivo(hijo) in self._colores
+                    # Todo widget de Tk es opaco: lo que quede debajo de él no se ve y no hace falta dibujarlo.
+                    for ancestro in linaje:
+                        encima[ancestro].append(superficie if es_fondo else getattr(hijo, "_parent_frame", hijo))
+                    if es_fondo:
+                        encontrados.append((superficie if isinstance(hijo, ctk.CTkScrollableFrame) else hijo, superficie))
+                        encima.append([])
+                        recorrer(hijo, (len(encontrados) - 1,))
                 except (ValueError, AttributeError, tk.TclError):
                     continue
 
         try:
-            recorrer(self.app)
+            recorrer(self.app, ())
         except tk.TclError:
             return
+        self._encima = encima
         vigentes = {str(lienzo) for _widget, lienzo in encontrados}
         for _widget, lienzo in self.superficies:
             if str(lienzo) not in vigentes:
@@ -6887,6 +7135,15 @@ class FondoAnimado:
             self._borrar(lienzo)
         self._rejillas = {}
 
+    @staticmethod
+    def _rectangulo(widget, origen_x, origen_y):
+        """Calcula el rectángulo que ocupa un widget en coordenadas de la ventana.
+
+        Entrada: widget y origen de la ventana. Salida: (x0, y0, x1, y1).
+        """
+        x, y = widget.winfo_rootx() - origen_x, widget.winfo_rooty() - origen_y
+        return x, y, x + widget.winfo_width(), y + widget.winfo_height()
+
     def _tic(self):
         """Avanza un cuadro; si la ventana no está visible solo vuelve a comprobar más tarde."""
         self._tarea = None
@@ -6900,9 +7157,13 @@ class FondoAnimado:
             self._tarea = self.app.after(400, self._tic)
             return
         ahora = time.perf_counter()
+        if hay_interaccion():
+            self._ultimo = ahora
+            self._tarea = self.app.after(120, self._tic)
+            return
         dt, self._ultimo = ahora - self._ultimo, ahora
         self._cuadros += 1
-        if self._cuadros % 30 == 0:
+        if self._cuadros % 40 == 0:
             self.actualizar_superficies()
         try:
             self._dibujar(dt)
@@ -6917,23 +7178,26 @@ class FondoAnimado:
         """
         origen_x, origen_y = self.app.winfo_rootx(), self.app.winfo_rooty()
         escala = escala_de(self.app)
-        graficos.avanzar_fondo(self.estado, dt, self.app.winfo_width(), self.app.winfo_height(), 1 / (24000 * escala * escala))
+        graficos.avanzar_fondo(self.estado, dt, self.app.winfo_width(), self.app.winfo_height(), 1 / (32000 * escala * escala))
         acento = resolver_color(PALETA["primario"])
         escenas = {}
-        for widget, lienzo in self.superficies:
+        for indice, (widget, lienzo) in enumerate(self.superficies):
             base = self._color_efectivo(widget)
             # Un elemento del menú cambia de color al pasar el puntero o al activarse: ahí no se dibuja.
             if base not in self._colores or not widget.winfo_ismapped():
                 self._borrar(lienzo)
                 self._rejillas.pop(str(lienzo), None)
                 continue
-            ox, oy = lienzo.winfo_rootx() - origen_x, lienzo.winfo_rooty() - origen_y
-            ancho, alto = lienzo.winfo_width(), lienzo.winfo_height()
+            ox, oy, fin_x, fin_y = self._rectangulo(lienzo, origen_x, origen_y)
+            ancho, alto = fin_x - ox, fin_y - oy
+            encima = [self._rectangulo(w, origen_x, origen_y) for w in self._encima[indice]] if indice < len(self._encima) else []
             clave = str(lienzo)
-            if self._rejillas.get(clave) != (ox, oy, ancho, alto):
-                self._rejillas[clave] = (ox, oy, ancho, alto)
+            if self._rejillas.get(clave) != (ox, oy, ancho, alto, tuple(encima)):
+                self._rejillas[clave] = (ox, oy, ancho, alto, tuple(encima))
                 lienzo.delete("fondo_rejilla")
                 for p in graficos.rejilla_fondo(ox, oy, ox + ancho, oy + alto, base, acento, 44 * escala):
+                    if _tapado(p["x"] - p["radio"], p["y"] - p["radio"], p["x"] + p["radio"], p["y"] + p["radio"], encima):
+                        continue
                     lienzo.create_oval(p["x"] - ox - p["radio"], p["y"] - oy - p["radio"], p["x"] - ox + p["radio"], p["y"] - oy + p["radio"],
                                        fill=p["relleno"], outline="", tags="fondo_rejilla")
             lienzo.delete("fondo_animado")
@@ -6942,14 +7206,16 @@ class FondoAnimado:
             for p in escenas[base]:
                 if p["tipo"] == "linea":
                     (x1, y1), (x2, y2) = p["puntos"]
-                    if max(x1, x2) < ox or min(x1, x2) > ox + ancho or max(y1, y2) < oy - 6 or min(y1, y2) > oy + alto + 6:
+                    caja = (min(x1, x2), min(y1, y2) - 6, max(x1, x2), max(y1, y2) + 6)
+                    if caja[2] < ox or caja[0] > fin_x or caja[3] < oy or caja[1] > fin_y or _tapado(*caja, encima):
                         continue
                     lienzo.create_line(x1 - ox, y1 - oy, x2 - ox, y2 - oy, fill=p["color"], width=p["ancho"], tags="fondo_animado")
                 else:
-                    r, x, y = p["radio"], p["x"] - ox, p["y"] - oy
-                    if x + r < 0 or x - r > ancho or y + r < 0 or y - r > alto:
+                    r, x, y = p["radio"], p["x"], p["y"]
+                    if x + r < ox or x - r > fin_x or y + r < oy or y - r > fin_y or _tapado(x - r, y - r, x + r, y + r, encima):
                         continue
-                    lienzo.create_oval(x - r, y - r, x + r, y + r, fill=p["relleno"], outline=p["borde"] or "", width=p["ancho"], tags="fondo_animado")
+                    lienzo.create_oval(x - r - ox, y - r - oy, x + r - ox, y + r - oy, fill=p["relleno"], outline=p["borde"] or "",
+                                       width=p["ancho"], tags="fondo_animado")
             # El marco dibuja su propio rectángulo de fondo; el fondo animado debe quedar por encima de él.
             lienzo.tag_raise("fondo_rejilla")
             lienzo.tag_raise("fondo_animado")
