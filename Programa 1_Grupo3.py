@@ -2,9 +2,9 @@
 
 Propósito: capturar datos, mostrar Resultado, Procedimiento y Verificación de cada sección (sistemas,
 combinaciones, Ax = b, propiedades de Ax, operaciones matriciales, determinantes e inversas, factorización LU,
-independencia lineal y métodos numéricos), animar y renderizar los resultados y encadenarlos entre secciones.
-Todo el cálculo vive en modulos/.
-Unidad: Álgebra Lineal (MTM0120), Programa 7: módulo de Métodos Numéricos, renders y animaciones.
+independencia lineal, métodos numéricos y métodos iterativos de Jacobi y Gauss-Seidel), mostrar en cada resultado un render
+animado y encadenar resultados entre secciones. Todo el cálculo vive en modulos/.
+Unidad: Álgebra Lineal (MTM0120), Programa 8: métodos iterativos de Jacobi y Gauss-Seidel, renders integrados.
 Autores (Grupo 3, UAM): Andrés Eduardo Mejía Castro, José Andrés Zepeda Grijalba,
 Eddy Alfonso Almendárez Ruiz y Brandon Javier Rocha Varela.
 Notas: la paleta usa el turquesa institucional de la UAM con tuplas (modo claro, modo oscuro); si
@@ -23,10 +23,12 @@ from tkinter import filedialog
 from teoremas.teoremas_matrices import TEOREMAS_MATRICES, texto_teoremas, LOGO_ASCII
 from modulos import informes as didactica
 from modulos import graficos
+from modulos import modulo_iterativos as iterativos
 from modulos import modulo_lu
 from modulos import modulo_numericos as numericos
 from modulos.graficos import mezclar_colores
 from teoremas.teoremas_lu import LOGO_LU, TEOREMAS_LU
+from teoremas.teoremas_iterativos import LOGO_ITERATIVOS, TEOREMAS_ITERATIVOS
 from teoremas.teoremas_numericos import LOGO_NUMERICOS, TEOREMAS_NUMERICOS
 
 try:
@@ -2479,7 +2481,7 @@ class PaginaCalculadora(PaginaSistema):
         return [
             lambda p: tarjeta_estado(p, resultado["clasificacion"], descripcion, color, icono),
             lambda p: indicadores_sistema(p, resultado),
-        ] + constructores_solucion(resultado) + constructores_render_sistema(self.app, resultado)
+        ] + constructores_solucion(resultado) + render_de_sistema(resultado)
 
 
 class PaginaAxb(PaginaSistema):
@@ -2554,7 +2556,11 @@ class PaginaAxb(PaginaSistema):
         constructores.append(lambda p: tarjeta_encadenar(
             p, "Encadenar con «Factorización LU»", "Los mismos A y b se resuelven con A = LU, Ly = b y Ux = y.",
             [("Resolver este sistema por factorización LU", lambda: self._enviar_a_lu(A, b))]))
-        return constructores + constructores_render_sistema(self.app, resultado)
+        coeficientes = resultado["solucion"] if resultado["solucion"] is not None else resultado["solucion_particular"]
+        columnas = columnas_de(A)
+        return constructores + render_combinacion(
+            coeficientes, columnas, b, [f"a{j + 1}" for j in range(len(columnas))], "b", "Ax = b: b como combinación de las columnas de A",
+            "b no es combinación de las columnas de A: Ax = b no tiene solución.")
 
     def _enviar_a_lu(self, A, b):
         """Encadena A y b a la página de factorización LU y la resuelve.
@@ -2726,9 +2732,10 @@ class PaginaLU(PaginaSistema):
                 f"det(A) = det(L)·det(U) = ∏ uᵢᵢ = {formatear_numero(det)}",
                 "A es invertible (det(A) ≠ 0)." if det != 0 else "A es singular (det(A) = 0): no tiene inversa."],
                 "primario"))
-        constructores.append(lambda p: tarjeta_lienzo(
-            p, "Mapa de calor de L y U", "El color indica el tamaño y el signo de cada entrada: se ven los ceros que crea la eliminación.",
-            lambda ancho, _alto: graficos.escena_mapa_calor([("L", resultado["matriz_L"]), ("U", resultado["matriz_U"])], ancho)))
+        constructores.append(render_mapa_calor(
+            [("A", resultado["matriz_A"]), ("L", resultado["matriz_L"]), ("U", resultado["matriz_U"])], "Mapa de calor de A, L y U",
+            "El color indica el tamaño y el signo de cada entrada: se ven los ceros que crea la eliminación bajo la diagonal de U.",
+            nombre="mapa_lu"))
         constructores.append(lambda p: tarjeta_encadenar(
             p, "Encadenar con otras secciones", "Los datos pasan tal cual, sin volver a escribirlos.",
             [("Comprobar L·U = A en «Operaciones matriciales»", lambda: self._enviar_a_operaciones(resultado)),
@@ -2889,10 +2896,8 @@ class PaginaCombinaciones(PaginaSistema):
             titulo = "Combinación encontrada" if resultado["solucion"] is not None else \
                 "Un ejemplo concreto (parámetros = 0)"
             constructores.append(lambda p: self._tarjeta_combinacion(p, titulo, coeficientes, vectores, simbolos, w))
-        if len(w) in (2, 3) and len(vectores) <= PaginaRenders.MAXIMO_VECTORES:
-            constructores.append(lambda p: tarjeta_encadenar(
-                p, "Ver la combinación animada", "Cada coeficiente por su vector se coloca a continuación del anterior hasta llegar a w.",
-                [("Abrir en «Renders y animaciones»", lambda: self.app.ir_a("renders").cargar_combinacion(vectores, w))]))
+        constructores += render_combinacion(coeficientes, vectores, w, simbolos, "w", "w como combinación de los vectores",
+                                            "w no es combinación lineal de estos vectores.")
         return constructores + constructores_solucion(resultado, simbolo="c")
 
     @staticmethod
@@ -3013,6 +3018,10 @@ class PaginaIndependencia(PaginaSistema):
         ]
         if resultado["observaciones"]:
             constructores.append(lambda p: tarjeta_mensajes(p, "Observaciones", resultado["observaciones"]))
+        constructores += render_combinacion(
+            None if independiente else resultado["relacion"], vectores, None, simbolos, "",
+            "Los vectores y su relación de dependencia" if not independiente else "Los vectores en el espacio",
+            "Solo la combinación trivial da el vector cero: los vectores son L.I.")
 
         if independiente:
             def trivial(parent):
@@ -3317,9 +3326,12 @@ class PaginaPropiedades(PaginaSistema):
         mensajes = ["A(cv) = c(Av): " + ("Se cumple" if datos["propiedad"] else "No se cumple")]
         if datos["u"] is not None:
             mensajes.append("A(u+v) = Au+Av: " + ("Se cumple" if datos["propiedad_suma"] else "No se cumple"))
+        columnas = columnas_de(datos["A"])
         return [lambda p: tarjeta_estado(p, "Producto Av calculado", "Resultado exacto; el cálculo de ambos lados está en Procedimiento.",
                                         PALETA["exito"] if cumple else PALETA["error"], "✓" if cumple else "✗"),
-                *constructores_etapas([respuesta]), lambda p: tarjeta_mensajes(p, "Propiedades", mensajes, "primario")]
+                *constructores_etapas([respuesta]), lambda p: tarjeta_mensajes(p, "Propiedades", mensajes, "primario"),
+                *render_combinacion(datos["v"], columnas, datos["Av"], [f"a{j + 1}" for j in range(len(columnas))], "Av",
+                                    "Av como combinación de las columnas de A", "")]
 
     def mostrar_procedimiento(self, datos):
         """Muestra ambos lados de cada propiedad en la pestaña Procedimiento.
@@ -3707,10 +3719,13 @@ def constructores_resultado_expresion(resolucion, informe, app, al_guardar=None)
             boton_secundario(fila, f"↪  Usar como {nombre}", lambda n=nombre: al_guardar(n, resultado),
                              width=128, height=34).pack(side="left", padx=(0 if k == 0 else 8, 0))
 
+    matrices = [(nombre, M) for nombre, M in dict(resolucion.get("matrices") or {}).items() if isinstance(M, list)]
+    render = ([render_mapa_calor(matrices + [(expresion, resultado)], "Mapa de calor de los operandos y del resultado",
+                                 "El color muestra el tamaño y el signo de cada entrada.", nombre="mapa_expresion")] if dimension else [])
     return [
         lambda p: tarjeta_estado(p, titulo, descripcion, PALETA["exito"] if correcto else PALETA["error"],
                                  "✓" if correcto else "✕"),
-        resultado_final, conclusion,
+        resultado_final, conclusion, *render,
         *([encadenar] if dimension and al_guardar else []),
         lambda p: fila_copiar(p, app, texto_copia),
     ]
@@ -3952,6 +3967,11 @@ def constructores_resultado_propiedad(informe, al_cargar_contraejemplo):
         else:
             ctk.CTkFrame(tarjeta, fg_color="transparent", height=10).pack()
 
+    lados = [(lado["etiqueta"], lado["resolucion"]["resultado"]) for lado in informe["lados"]
+             if isinstance(lado["resolucion"].get("resultado"), list)]
+    if lados:
+        lista.append(render_mapa_calor(lados, "Mapa de calor de ambos lados", "Si la propiedad se cumple, los dos mapas son idénticos.",
+                                       nombre="mapa_propiedad"))
     return lista + [conclusion, teoria]
 
 
@@ -4802,7 +4822,7 @@ class PaginaMetodo(PaginaInformativa):
         self.panel_pasos.mostrar_pasos([teoria, *didactica.procedimiento_sistema(r)])
         self.area_verificacion.llenar(constructores_chequeo(didactica.verificacion_sistema(r)), retardo=45)
         return [lambda p: tarjeta_estado(p, "Ejemplo resuelto: x1=2, x2=1", "Sistema original: 2x1+x2=5; x1−x2=1. Explora los pasos y la sustitución en sus pestañas.", PALETA["exito"], "✓"),
-                *constructores_solucion(r)]
+                *constructores_solucion(r), *render_de_sistema(r)]
 
 
 class PaginaAyuda(PaginaInformativa):
@@ -4826,8 +4846,10 @@ class PaginaAyuda(PaginaInformativa):
         "En «Métodos numéricos» elige Bisección, Graficador, Notación posicional o Errores numéricos. Las funciones se "
         "escriben como x^3 - x - 2, 2sen(x) o e^x; cada opción anima el procedimiento, lo explica y lo verifica.",
         "En el graficador usa la rueda para acercar, arrastra para mover y haz doble clic para volver a la vista inicial.",
-        "En «Renders y animaciones» se ve cómo una matriz deforma el plano o el espacio, las rectas y planos de un sistema "
-        "y las combinaciones lineales. En 3D, arrastra para girar. Cada gráfica se puede guardar con el botón «PNG».",
+        "Cada resultado incluye un render animado: rectas o planos del sistema, combinaciones de vectores, cómo una matriz "
+        "deforma el plano o el espacio y mapas de calor. En 3D, arrastra para girar; el botón «PNG» guarda la imagen.",
+        "En «Jacobi y Gauss-Seidel» escribe A, b y x⁽⁰⁾ (o carga uno de los tres casos de prueba), la tolerancia ε y el "
+        "máximo de iteraciones. Se valida la diagonal, se reordena si hace falta y se comparan ambos métodos con Gauss-Jordan.",
     ]
     ATAJOS = [
         ("Enter", "Ir a la siguiente casilla"),
@@ -4859,6 +4881,8 @@ class PaginaAyuda(PaginaInformativa):
         ("Bisección", "Si f es continua y f(a)·f(b) < 0, hay una raíz en [a, b]. Cada iteración divide el intervalo a la mitad."),
         ("Notación posicional", "Cada dígito vale según su posición: en base β, la posición k pesa βᵏ."),
         ("Error absoluto y relativo", "Ea = |v − v*| mide la distancia; Er = Ea/|v| la compara con el tamaño de v."),
+        ("Jacobi y Gauss-Seidel", "Métodos iterativos para Ax = b: Jacobi usa solo la iteración anterior; Gauss-Seidel usa de inmediato cada valor nuevo."),
+        ("Diagonal dominante", "|aᵢᵢ| > Σⱼ≠ᵢ |aᵢⱼ| en cada fila garantiza la convergencia de ambos métodos, pero no es necesaria."),
     ]
 
     def constructores(self):
@@ -5061,11 +5085,12 @@ class PaginaDeterminantes(PaginaBase):
                 "La A original pasa como A y la inversa calculada como B: BA = A⁻¹A y AB = AA⁻¹ deben dar I.",
                 [("Comprobar A⁻¹A = I con B = A⁻¹", lambda: self._enviar_inversa(A, inversa))]))
         A_datos = datos.get("A")
-        if A_datos and len(A_datos) in (2, 3) and len(A_datos) == len(A_datos[0]):
-            espacio = "el plano" if len(A_datos) == 2 else "el espacio"
-            constructores.append(lambda p: tarjeta_encadenar(
-                p, f"Ver cómo A deforma {espacio}", "|det(A)| es el factor por el que A multiplica las áreas y los volúmenes.",
-                [("Abrir en «Renders y animaciones»", lambda: self.app.ir_a("renders").cargar_transformacion(A_datos))]))
+        if A_datos and len(A_datos) == len(A_datos[0]):
+            if len(A_datos) in (2, 3):
+                constructores += render_transformacion(A_datos)
+            if informe["definido"] and self.OPERACIONES[self.operacion.get()][0] == "inv":
+                constructores.append(render_mapa_calor([("A", A_datos), ("A⁻¹", informe["resultado"])], "Mapa de calor de A y A⁻¹",
+                                                       "El color muestra el tamaño y el signo de cada entrada."))
         self.area_resultado.llenar(constructores, retardo=45)
         self.panel_pasos.mostrar_pasos(informe["procedimiento"])
         self.area_verificacion.llenar(constructores_chequeo(informe["verificacion"]), retardo=45)
@@ -5173,7 +5198,8 @@ class LienzoEscena(tk.Canvas):
         Entrada: contenedor, generador(ancho, alto) que retorna la escena (o (escena, alto natural)) y alto fijo. Salida: None.
         """
         escala = escala_de(parent)
-        super().__init__(parent, highlightthickness=0, bd=0, bg=graficos.TEMA["fondo"], height=round((alto or 120) * escala))
+        # El lienzo pide un ancho mínimo y toma el de su tarjeta: así nunca se sale de la columna de resultados.
+        super().__init__(parent, highlightthickness=0, bd=0, bg=graficos.TEMA["fondo"], width=1, height=round((alto or 120) * escala))
         self.escala = escala
         self.generador = generador
         self.ultima_escena = []
@@ -5376,10 +5402,10 @@ class Reproductor(_Marco):
 
     VELOCIDADES = {"½×": 0.5, "1×": 1.0, "2×": 2.0}
 
-    def __init__(self, parent, al_cambiar, formato=None, al_exportar=None):
-        """Crea los controles.
+    def __init__(self, parent, al_cambiar, formato=None, al_exportar=None, compacto=False):
+        """Crea los controles; la versión compacta omite la velocidad para caber en una columna angosta.
 
-        Entrada: contenedor, al_cambiar(t), formato(t) del texto de posición y al_exportar. Salida: None.
+        Entrada: contenedor, al_cambiar(t), formato(t) del texto de posición, al_exportar y compacto (bool). Salida: None.
         """
         super().__init__(parent, fg_color="transparent", corner_radius=0)
         self.al_cambiar, self.formato = al_cambiar, formato
@@ -5389,19 +5415,20 @@ class Reproductor(_Marco):
         self.boton_reiniciar.pack(side="left")
         self.boton = boton_primario(self, "▶", self.alternar, width=46, height=32)
         self.boton.pack(side="left", padx=(6, 10))
-        self.linea_tiempo = ctk.CTkSlider(self, from_=0, to=1, command=self._al_mover, height=16,
+        self.linea_tiempo = ctk.CTkSlider(self, from_=0, to=1, command=self._al_mover, height=16, width=80 if compacto else 200,
                                           progress_color=PALETA["primario"], button_color=PALETA["primario"],
                                           button_hover_color=PALETA["primario_hover"], fg_color=PALETA["panel_2"])
         self.linea_tiempo.set(0)
         self.linea_tiempo.pack(side="left", fill="x", expand=True)
-        self.etiqueta = etiqueta(self, "", FUENTE_PEQUENA_NEGRITA, "texto", width=112, anchor="e")
+        self.etiqueta = etiqueta(self, "", FUENTE_PEQUENA_NEGRITA, "texto", width=48 if compacto else 112, anchor="e")
         self.etiqueta.pack(side="left", padx=(8, 8))
         self.selector = ctk.CTkSegmentedButton(self, values=list(self.VELOCIDADES), command=self._cambiar_velocidad, font=FUENTE_PEQUENA_NEGRITA,
                                                height=28, fg_color=PALETA["panel_2"], selected_color=PALETA["primario"],
                                                selected_hover_color=PALETA["primario_hover"], unselected_color=PALETA["panel_2"],
                                                unselected_hover_color=PALETA["secundario_hover"], text_color=PALETA["texto"])
         self.selector.set("1×")
-        self.selector.pack(side="left")
+        if not compacto:
+            self.selector.pack(side="left")
         self.extras = ctk.CTkFrame(self, fg_color="transparent", width=1, height=1)
         self.extras.pack(side="left", padx=(8, 0))
         if al_exportar is not None:
@@ -5457,10 +5484,17 @@ class Reproductor(_Marco):
         self.pausar()
         self.fijar(0.0)
 
+    def destroy(self):
+        """Cancela el cuadro pendiente antes de destruir los controles."""
+        if self._tarea is not None:
+            self.after_cancel(self._tarea)
+            self._tarea = None
+        super().destroy()
+
     def _tic(self):
         """Avanza un cuadro según el tiempo real; se pausa si la animación dejó de estar visible."""
         self._tarea = None
-        if not self.winfo_viewable():
+        if not self.winfo_exists() or not self.winfo_viewable():
             self.pausar()
             return
         ahora = time.perf_counter()
@@ -5511,20 +5545,6 @@ def tarjeta_lienzo(parent, titulo, subtitulo, generador, alto=None):
     tarjeta = tarjeta_seccion(parent, titulo, subtitulo)
     LienzoEscena(tarjeta, generador, alto=alto).pack(fill="x", padx=12, pady=(0, 12))
     return tarjeta
-
-
-def constructores_render_sistema(app, resultado):
-    """Agrega el acceso al render de rectas o planos cuando el sistema tiene 2 o 3 incógnitas.
-
-    Entrada: aplicación y resultado de resolver_sistema. Salida: lista de constructores (vacía si no aplica).
-    """
-    A = [fila[:-1] for fila in resultado["matriz_inicial"]]
-    b = [fila[-1] for fila in resultado["matriz_inicial"]]
-    if len(A[0]) not in (2, 3) or len(A) > PaginaRenders.MAXIMO_FILAS:
-        return []
-    figura = "una recta" if len(A[0]) == 2 else "un plano"
-    return [lambda p: tarjeta_encadenar(p, "Ver el sistema en el espacio", f"Cada ecuación es {figura}; la solución es donde se cruzan.",
-                                        [("Abrir en «Renders y animaciones»", lambda: app.ir_a("renders").cargar_sistema(A, b))])]
 
 
 class OpcionNumerica:
@@ -6338,227 +6358,57 @@ class PaginaNumericos(PaginaBase):
         self.pestanas.set("Resultado")
 
 
-class PaginaRenders(PaginaBase):
-    """Página «Renders y animaciones»: transformaciones lineales, sistemas y combinaciones en 2D y 3D."""
+class TarjetaRender(_Marco):
+    """Tarjeta de resultado con un render animado: se reproduce al aparecer, se pausa, gira en 3D y se exporta a PNG."""
 
-    titulo = "Renders y animaciones"
-    subtitulo = "Mira cómo una matriz deforma el espacio, cómo se cruzan las ecuaciones y cómo se combinan los vectores"
-    MAXIMO_FILAS = 5
-    MAXIMO_VECTORES = 4
-    MODOS = {
-        "Transformación del plano (2×2)": {"tipo": "transformacion", "n": 2, "ejemplo": [[2, 1], [1, 1]]},
-        "Transformación del espacio (3×3)": {"tipo": "transformacion", "n": 3, "ejemplo": [[1, 1, 0], [0, 2, 0], ["1/2", 0, 1]]},
-        "Sistema de 2 incógnitas (rectas)": {"tipo": "sistema", "n": 2, "ejemplo": [[1, 1, 3], [1, -1, 1]]},
-        "Sistema de 3 incógnitas (planos)": {"tipo": "sistema", "n": 3, "ejemplo": [[1, 1, 1, 6], [2, -1, 1, 3], [1, 2, -1, 2]]},
-        "Combinación lineal en R²": {"tipo": "combinacion", "n": 2, "ejemplo": [[1, 1, 4], [0, 2, 2]]},
-        "Combinación lineal en R³": {"tipo": "combinacion", "n": 3, "ejemplo": [[1, 0, 1, 3], [0, 1, 1, 3], [1, 1, 0, 2]]},
-    }
+    def __init__(self, parent, titulo, subtitulo, generador, es_3d=False, duracion=3.5, alto=340, explicacion=None, nombre="render"):
+        """Crea la tarjeta, la empaqueta a lo ancho y programa el inicio de la animación.
 
-    def __init__(self, parent, app):
-        """Crea los datos, el lienzo, la línea de tiempo y la explicación.
-
-        Entrada: contenedor y aplicación. Salida: None.
+        Entrada: contenedor, título, subtítulo, generador(t, giro, inclinación, ancho, alto), es_3d, duración en s,
+        alto del lienzo, explicación opcional y nombre del PNG. Salida: None.
         """
-        super().__init__(parent, app)
-        self.grid_rowconfigure(1, weight=1)
+        super().__init__(parent, fg_color=PALETA["panel_2"], corner_radius=14, border_width=1, border_color=PALETA["borde"])
+        self.pack(fill="x", padx=2, pady=(0, 12))
+        self.generador, self.es_3d = generador, es_3d
         self.t, self.giro, self.inclinacion = 0.0, 0.7, 0.45
-        self.escena_actual, self._arrastre, self._tarea_giro = None, None, None
-        contenido = ctk.CTkFrame(self, fg_color="transparent")
-        contenido.grid(row=1, column=0, sticky="nsew", padx=24, pady=(0, 20))
-        contenido.grid_columnconfigure(0, weight=0, minsize=410)
-        contenido.grid_columnconfigure(1, weight=1)
-        contenido.grid_rowconfigure(0, weight=1)
+        self._arrastre, self._tarea_giro = None, None
+        etiqueta(self, titulo, FUENTE_SECCION, "texto", ajustar=48).pack(anchor="w", padx=18, pady=(14, 2))
+        if subtitulo:
+            etiqueta(self, subtitulo, FUENTE_PEQUENA, "texto_3", ajustar=48).pack(anchor="w", padx=18, pady=(0, 6))
+        self.reproductor = Reproductor(self, self._al_tiempo, lambda t: f"{round(t * 100)} %",
+                                       lambda: exportar_lienzo(self.winfo_toplevel(), self.lienzo, nombre), compacto=True)
+        self.reproductor.configurar(1.0, duracion)
+        self.reproductor.pack(fill="x", padx=12, pady=(4, 6))
+        if es_3d:
+            self.girar = ctk.BooleanVar(value=True)
+            ctk.CTkSwitch(self.reproductor.extras, text="Girar", variable=self.girar, command=self._programar_giro, font=FUENTE_PEQUENA,
+                          text_color=PALETA["texto"], progress_color=PALETA["primario"], width=44).pack(side="left")
+        self.lienzo = LienzoEscena(self, self._escena, alto=alto)
+        self.lienzo.pack(fill="x", padx=12)
+        if es_3d:
+            self.lienzo.bind("<ButtonPress-1>", lambda e: setattr(self, "_arrastre", (e.x, e.y)))
+            self.lienzo.bind("<B1-Motion>", self._arrastrar)
+            self.lienzo.bind("<ButtonRelease-1>", lambda _e: setattr(self, "_arrastre", None))
+        if explicacion:
+            etiqueta(self, explicacion, FUENTE_NORMAL, "texto_2", ajustar=48).pack(anchor="w", padx=18, pady=(8, 0))
+        ctk.CTkFrame(self, fg_color="transparent", height=10).pack()
+        self._tarea_inicio = self.after(350, self._iniciar)
 
-        tarjeta = crear_tarjeta(contenido, "Datos")
-        tarjeta.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
-        area = AreaDesplazable(tarjeta, PALETA["panel"])
-        area.pack(fill="both", expand=True, padx=8, pady=4)
-        self.modo = ctk.CTkOptionMenu(area.interior, values=list(self.MODOS), command=self.cambiar_modo, height=34, dynamic_resizing=False,
-                                      fg_color=PALETA["secundario"], button_color=PALETA["secundario_hover"],
-                                      button_hover_color=PALETA["primario_hover"], text_color=PALETA["texto"])
-        self.modo.pack(fill="x", padx=8, pady=(4, 8))
-        self.fila_contadores = ctk.CTkFrame(area.interior, fg_color="transparent", width=1, height=1)
-        self.fila_contadores.pack(anchor="w", padx=8)
-        self.contador_filas = Contador(self.fila_contadores, "ecuaciones", 2, 1, self.MAXIMO_FILAS, lambda _v: self._reconstruir(), en_linea=True)
-        self.contador_vectores = Contador(self.fila_contadores, "vectores", 2, 1, self.MAXIMO_VECTORES, lambda _v: self._reconstruir(), en_linea=True)
-        self.matriz = MatrizEntrada(area.interior)
-        self.matriz.pack(anchor="w", padx=8, pady=(6, 8))
-        self.boton = boton_primario(tarjeta, "Renderizar y animar", self.resolver)
-        self.boton.pack(fill="x", padx=16, pady=(4, 16))
-
-        derecha = crear_tarjeta(contenido)
-        derecha.grid(row=0, column=1, sticky="nsew")
-        self.reproductor = Reproductor(derecha, self._al_tiempo, lambda t: f"{round(t * 100)} %", lambda: exportar_lienzo(self.app, self.lienzo, "render"))
-        self.reproductor.pack(fill="x", padx=10, pady=(10, 6))
-        self.reproductor.configurar(1.0, 4.0)
-        self.girar = ctk.BooleanVar(value=True)
-        self.interruptor_giro = ctk.CTkSwitch(self.reproductor.extras, text="Girar", variable=self.girar, command=self._iniciar_giro, font=FUENTE_PEQUENA,
-                                              text_color=PALETA["texto"], progress_color=PALETA["primario"], width=44)
-        self.lienzo = LienzoEscena(derecha, self._escena, alto=430)
-        self.lienzo.pack(fill="both", expand=True, padx=10)
-        self.lienzo.bind("<ButtonPress-1>", self._presionar)
-        self.lienzo.bind("<B1-Motion>", self._arrastrar)
-        self.lienzo.bind("<ButtonRelease-1>", self._soltar)
-        self.explicacion = etiqueta(derecha, "", FUENTE_NORMAL, "texto_2", ajustar=44)
-        self.explicacion.pack(anchor="w", padx=14, pady=(8, 12))
-        self.cambiar_modo(next(iter(self.MODOS)))
-
-    def _es_3d(self):
-        """Indica si la escena actual se dibuja en tres dimensiones.
-
-        Salida: True o False.
-        """
-        return self.MODOS[self.modo.get()]["n"] == 3
-
-    def cambiar_modo(self, nombre):
-        """Prepara la rejilla del modo con su ejemplo.
-
-        Entrada: nombre del modo. Salida: None.
-        """
-        datos = self.MODOS[nombre]
-        self.modo.set(nombre)
-        self.contador_filas.set(len(datos["ejemplo"]), False)
-        self.contador_vectores.set(len(datos["ejemplo"][0]) - 1 if datos["tipo"] == "combinacion" else 2, False)
-        self._reconstruir(datos["ejemplo"])
-        self.escena_actual = None
-        self.resolver()
-
-    def _reconstruir(self, valores=None):
-        """Ajusta la rejilla al modo y al tamaño elegido.
-
-        Entrada: valores opcionales. Salida: None.
-        """
-        datos = self.MODOS[self.modo.get()]
-        n, tipo = datos["n"], datos["tipo"]
-        self.contador_filas.pack_forget()
-        self.contador_vectores.pack_forget()
-        if tipo == "transformacion":
-            self.matriz.configurar(n, n, [f"col {j + 1}" for j in range(n)], [f"F{i + 1}" for i in range(n)], None, valores)
-        elif tipo == "sistema":
-            self.contador_filas.pack(side="left")
-            filas = self.contador_filas.get()
-            self.matriz.configurar(filas, n + 1, [f"x{j + 1}" for j in range(n)] + ["b"], [f"F{i + 1}" for i in range(filas)], n, valores)
+    def _iniciar(self):
+        """Reproduce la animación si la tarjeta está a la vista; si no, deja el cuadro final."""
+        self._tarea_inicio = None
+        if self.winfo_viewable():
+            self.reproductor.reproducir()
         else:
-            self.contador_vectores.pack(side="left")
-            vectores = self.contador_vectores.get()
-            self.matriz.configurar(n, vectores + 1, [f"v{j + 1}" for j in range(vectores)] + ["w"], [f"F{i + 1}" for i in range(n)], vectores, valores)
-
-    def cargar_transformacion(self, A):
-        """Carga una matriz 2×2 o 3×3 desde otra sección y la anima.
-
-        Entrada: matriz A. Salida: None.
-        """
-        self._cargar(next(m for m, d in self.MODOS.items() if d["tipo"] == "transformacion" and d["n"] == len(A)), A)
-
-    def cargar_sistema(self, A, b):
-        """Carga un sistema de 2 o 3 incógnitas desde otra sección y lo anima.
-
-        Entrada: A y b. Salida: None.
-        """
-        self.contador_filas.set(len(A), False)
-        self._cargar(next(m for m, d in self.MODOS.items() if d["tipo"] == "sistema" and d["n"] == len(A[0])),
-                     [fila + [bi] for fila, bi in zip(A, b)])
-
-    def cargar_combinacion(self, vectores, w):
-        """Carga vectores de R² o R³ desde otra sección y anima la combinación.
-
-        Entrada: vectores (lista de columnas) y w. Salida: None.
-        """
-        self.contador_vectores.set(len(vectores), False)
-        filas = [[v[i] for v in vectores] + [w[i]] for i in range(len(w))]
-        self._cargar(next(m for m, d in self.MODOS.items() if d["tipo"] == "combinacion" and d["n"] == len(w)), filas)
-
-    def _cargar(self, modo, valores):
-        """Selecciona un modo, escribe los valores y resuelve.
-
-        Entrada: modo y valores. Salida: None.
-        """
-        self.modo.set(modo)
-        self._reconstruir(valores)
-        self.resolver()
-
-    def resolver(self):
-        """Lee los datos, prepara la escena y su explicación y reproduce la animación."""
-        datos = self.MODOS[self.modo.get()]
-        try:
-            matriz = self.matriz.valores()
-        except ValueError as error:
-            self.app.notificar(str(error), "error")
-            return
-        if datos["tipo"] == "transformacion":
-            self.escena_actual, texto = self._preparar_transformacion(matriz)
-        elif datos["tipo"] == "sistema":
-            self.escena_actual, texto = self._preparar_sistema(matriz, datos["n"])
-        else:
-            self.escena_actual, texto = self._preparar_combinacion(matriz, datos["n"])
-        self.explicacion.configure(text=texto)
-        if self._es_3d():
-            self.interruptor_giro.pack(side="left")
-            self._iniciar_giro()
-        else:
-            self.interruptor_giro.pack_forget()
-        self.reproductor.reproducir()
-
-    def _preparar_transformacion(self, A):
-        """Prepara el render de una transformación lineal y explica qué significa su determinante.
-
-        Entrada: matriz A. Salida: (generador de la escena, explicación).
-        """
-        n = len(A)
-        det = calcular_determinante(A)["determinante"]
-        medida = "las áreas" if n == 2 else "los volúmenes"
-        figura = "el plano" if n == 2 else "el espacio"
-        texto = (f"Las columnas de A son las imágenes de la base canónica. det(A) = {formatear_numero(det)}: A multiplica {medida} por "
-                 f"{formatear_numero(abs(det))}" + ("; un signo negativo indica que invierte la orientación." if det < 0 else "."))
-        if det == 0:
-            texto = f"det(A) = 0: A aplasta {figura} en una dimensión menor y por eso no tiene inversa."
-        if n == 2:
-            return (lambda ancho, alto: graficos.escena_transformacion_2d(A, self.t, ancho, alto)), texto
-        return (lambda ancho, alto: graficos.escena_transformacion_3d(A, self.t, self.giro, self.inclinacion, ancho, alto)), texto
-
-    def _preparar_sistema(self, matriz, n):
-        """Resuelve el sistema con el núcleo exacto y prepara el render de rectas o planos.
-
-        Entrada: matriz aumentada y cantidad de incógnitas. Salida: (generador de la escena, explicación).
-        """
-        A, b = [fila[:-1] for fila in matriz], [fila[-1] for fila in matriz]
-        r = resolver_sistema(A, b)
-        punto = r["solucion"] if r["solucion"] is not None else r["solucion_particular"]
-        figura = "una recta" if n == 2 else "un plano"
-        if r["solucion"] is not None:
-            texto = f"Cada ecuación es {figura}. {r['clasificacion']}: se cruzan en x = ({', '.join(formatear_numero(v) for v in punto)})."
-        elif punto is not None:
-            texto = f"Cada ecuación es {figura}. {r['clasificacion']}: comparten infinitos puntos; se marca uno de ellos."
-        else:
-            texto = f"Cada ecuación es {figura}. {r['clasificacion']}: no existe un punto común a todas las ecuaciones."
-        if n == 2:
-            return (lambda ancho, alto: graficos.escena_sistema_2d(A, b, punto, self.t, ancho, alto)), texto
-        return (lambda ancho, alto: graficos.escena_sistema_3d(A, b, punto, self.t, self.giro, self.inclinacion, ancho, alto)), texto
-
-    def _preparar_combinacion(self, matriz, n):
-        """Resuelve los coeficientes con el núcleo exacto y prepara el render de la combinación.
-
-        Entrada: matriz [v₁ … vₖ | w] y dimensión. Salida: (generador de la escena, explicación).
-        """
-        A, w = [fila[:-1] for fila in matriz], [fila[-1] for fila in matriz]
-        vectores = columnas_de(A)
-        r = resolver_sistema(A, w, obtener_nombres_variables(len(vectores), "c"))
-        coeficientes = r["solucion"] if r["solucion"] is not None else r["solucion_particular"]
-        if coeficientes is None:
-            texto = "w no pertenece al espacio generado por estos vectores: el sistema de coeficientes es inconsistente."
-        else:
-            simbolos = [f"v{j + 1}" for j in range(len(vectores))]
-            texto = f"w = {formatear_combinacion_lineal(coeficientes, simbolos)}: cada flecha de color es un coeficiente por su vector y se coloca a continuación de la anterior."
-        return (lambda ancho, alto: graficos.escena_combinacion(coeficientes, vectores, w, self.t, self.giro, self.inclinacion, ancho, alto)), texto
+            self.reproductor.fijar(self.reproductor.maximo)
+        self._programar_giro()
 
     def _escena(self, ancho, alto):
-        """Construye el cuadro actual.
+        """Construye el cuadro actual con el generador de la tarjeta.
 
-        Entrada: tamaño lógico. Salida: lista de primitivas.
+        Entrada: tamaño lógico. Salida: primitivas o (primitivas, alto natural).
         """
-        if self.escena_actual is None:
-            return [graficos.rectangulo(0, 0, ancho, alto, graficos.TEMA["fondo"])]
-        return self.escena_actual(ancho, alto)
+        return self.generador(self.t, self.giro, self.inclinacion, ancho, alto)
 
     def _al_tiempo(self, t):
         """Redibuja el cuadro del instante t.
@@ -6568,54 +6418,541 @@ class PaginaRenders(PaginaBase):
         self.t = t
         self.lienzo.dibujar()
 
-    def _iniciar_giro(self):
-        """Inicia el giro automático de la cámara si está activado."""
-        if self._tarea_giro is None and self.girar.get() and self._es_3d():
-            self._tarea_giro = self.after(33, self._tic_giro)
+    def _programar_giro(self):
+        """Programa el giro automático de la cámara en los renders 3D."""
+        if self.es_3d and self._tarea_giro is None and self.girar.get():
+            self._tarea_giro = self.after(33, self._girar)
 
-    def _tic_giro(self):
-        """Gira la cámara un poco; se detiene si el lienzo no está visible o el modo no es 3D."""
+    def _girar(self):
+        """Gira la cámara un poco; si la tarjeta no está a la vista, solo vuelve a comprobar más tarde."""
         self._tarea_giro = None
-        if not (self.girar.get() and self._es_3d() and self.lienzo.winfo_viewable()):
+        if not self.girar.get():
             return
-        if self._arrastre is None:
+        visible = self.winfo_viewable()
+        if visible and self._arrastre is None:
             self.giro += 0.012
             self.lienzo.dibujar()
-        self._tarea_giro = self.after(33, self._tic_giro)
-
-    def al_mostrar(self):
-        """Anima el encabezado y reanuda el giro y la animación al volver a la página."""
-        super().al_mostrar()
-        self._iniciar_giro()
-        self.after(150, self._reanudar)
-
-    def _reanudar(self):
-        """Continúa la animación que se pausó porque la página aún no estaba visible."""
-        if self.reproductor._tarea is None and self.reproductor.t < self.reproductor.maximo:
-            self.reproductor.reproducir(desde_inicio=False)
-
-    def _presionar(self, evento):
-        """Empieza a girar la cámara con el mouse.
-
-        Entrada: evento del mouse. Salida: None.
-        """
-        self._arrastre = (evento.x, evento.y)
+        self._tarea_giro = self.after(33 if visible else 500, self._girar)
 
     def _arrastrar(self, evento):
-        """Gira la cámara con el arrastre.
+        """Gira la cámara con el mouse.
 
         Entrada: evento del mouse. Salida: None.
         """
-        if self._arrastre is None or not self._es_3d():
+        if self._arrastre is None:
             return
         self.giro += (evento.x - self._arrastre[0]) * 0.01
         self.inclinacion = max(-1.4, min(1.4, self.inclinacion + (evento.y - self._arrastre[1]) * 0.01))
         self._arrastre = (evento.x, evento.y)
         self.lienzo.dibujar()
 
-    def _soltar(self, _evento):
-        """Termina el giro con el mouse."""
-        self._arrastre = None
+    def destroy(self):
+        """Cancela el inicio y el giro pendientes antes de destruir la tarjeta."""
+        for tarea in (self._tarea_inicio, self._tarea_giro):
+            if tarea is not None:
+                self.after_cancel(tarea)
+        self._tarea_inicio = self._tarea_giro = None
+        super().destroy()
+
+
+def render_mapa_calor(matrices, titulo, subtitulo, explicacion=None, nombre="mapa_de_calor"):
+    """Prepara una tarjeta con mapas de calor que aparecen celda por celda.
+
+    Entrada: lista de (nombre, matriz), título, subtítulo, explicación y nombre del PNG. Salida: constructor de la tarjeta.
+    """
+    return lambda p: TarjetaRender(p, titulo, subtitulo, lambda t, _g, _i, ancho, _alto: graficos.escena_mapa_calor(matrices, ancho, t),
+                                   duracion=2.2, alto=180, explicacion=explicacion, nombre=nombre)
+
+
+def render_sistema(A, b, solucion, clasificacion=""):
+    """Prepara el render del sistema: rectas (2 incógnitas), planos (3 incógnitas) o mapas de calor en los demás casos.
+
+    Entrada: A, b, solución (o un punto de la familia, o None) y clasificación. Salida: lista con un constructor.
+    """
+    n = len(A[0])
+    punto = list(solucion) if solucion is not None else None
+    if n == 2 and len(A) <= 6:
+        texto = ("La solución es el punto donde se cruzan todas las rectas." if clasificacion == "Sistema consistente determinado" else
+                 "Las rectas coinciden: comparten infinitos puntos; se marca uno." if punto else "Las rectas no tienen un punto común: el sistema es inconsistente.")
+        return [lambda p: TarjetaRender(p, "Cada ecuación es una recta", "Las rectas se trazan una por una.",
+                                        lambda t, _g, _i, ancho, alto: graficos.escena_sistema_2d(A, b, punto, t, ancho, alto),
+                                        alto=340, explicacion=texto, nombre="rectas")]
+    if n == 3 and len(A) <= 6:
+        texto = ("Los planos se cruzan en un único punto: la solución." if clasificacion == "Sistema consistente determinado" else
+                 "Los planos comparten una recta o un plano: hay infinitas soluciones; se marca una." if punto else
+                 "No hay un punto común a todos los planos: el sistema es inconsistente.")
+        return [lambda p: TarjetaRender(p, "Cada ecuación es un plano", "Arrastra para girar. Los planos se ordenan por profundidad.",
+                                        lambda t, g, i, ancho, alto: graficos.escena_sistema_3d(A, b, punto, t, g, i, ancho, alto),
+                                        es_3d=True, alto=380, explicacion=texto, nombre="planos")]
+    return [render_mapa_calor([("A", A), ("b", [[v] for v in b])], "Mapa de calor del sistema",
+                              "Con más de 3 incógnitas no se puede dibujar el espacio: el color muestra el tamaño y el signo de cada coeficiente.")]
+
+
+def render_de_sistema(resultado):
+    """Prepara el render de un resultado de resolver_sistema a partir de su matriz aumentada.
+
+    Entrada: resultado de resolver_sistema. Salida: lista con un constructor.
+    """
+    A = [fila[:-1] for fila in resultado["matriz_inicial"]]
+    b = [fila[-1] for fila in resultado["matriz_inicial"]]
+    punto = resultado["solucion"] if resultado["solucion"] is not None else resultado["solucion_particular"]
+    return render_sistema(A, b, punto, resultado["clasificacion"])
+
+
+def render_combinacion(coeficientes, vectores, w, nombres, nombre_w, titulo, mensaje):
+    """Prepara el render de una combinación lineal en R² o R³ (o un mapa de calor en dimensiones mayores).
+
+    Entrada: coeficientes (o None), vectores, w (o None para Σ = 0), nombres, nombre de w, título y mensaje sin combinación.
+    Salida: lista con un constructor.
+    """
+    dimension = len(vectores[0])
+    if dimension in (2, 3) and len(vectores) <= 6:
+        return [lambda p: TarjetaRender(
+            p, titulo, "Cada coeficiente por su vector se coloca a continuación del anterior." + (" Arrastra para girar." if dimension == 3 else ""),
+            lambda t, g, i, ancho, alto: graficos.escena_combinacion(coeficientes, vectores, w, t, g, i, ancho, alto, nombres, nombre_w, mensaje),
+            es_3d=dimension == 3, alto=360, nombre="combinacion")]
+    columnas = [[v[k] for v in vectores] for k in range(dimension)]
+    matrices = [("[" + " ".join(nombres) + "]", columnas)] + ([(nombre_w, [[v] for v in w])] if w is not None else [])
+    if coeficientes is not None:
+        matrices.append(("coeficientes", [[c] for c in coeficientes]))
+    return [render_mapa_calor(matrices, titulo, f"En R^{dimension} no se pueden dibujar flechas: el color muestra el tamaño y el signo de cada componente.")]
+
+
+def render_transformacion(A, titulo="Cómo A deforma el espacio"):
+    """Prepara el render de la transformación x ↦ Ax para una matriz 2×2 o 3×3, o un mapa de calor si es mayor.
+
+    Entrada: matriz cuadrada y título. Salida: lista con un constructor.
+    """
+    n = len(A)
+    if n == 2:
+        return [lambda p: TarjetaRender(p, "Cómo A deforma el plano", "La cuadrícula pasa de la identidad a A; el área del cuadrado unidad se multiplica por |det(A)|.",
+                                        lambda t, _g, _i, ancho, alto: graficos.escena_transformacion_2d(A, t, ancho, alto), alto=360, nombre="transformacion")]
+    if n == 3:
+        return [lambda p: TarjetaRender(p, titulo, "El cubo unidad se deforma en un paralelepípedo de volumen |det(A)|. Arrastra para girar.",
+                                        lambda t, g, i, ancho, alto: graficos.escena_transformacion_3d(A, t, g, i, ancho, alto),
+                                        es_3d=True, alto=380, nombre="transformacion")]
+    return [render_mapa_calor([("A", A)], "Mapa de calor de A", "El color muestra el tamaño y el signo de cada entrada.")]
+
+
+class PaginaIterativos(PaginaSistema):
+    """Página «Jacobi y Gauss-Seidel»: métodos iterativos con validación, reordenamiento, tablas, gráficas y comparación."""
+
+    titulo = "Métodos iterativos: Jacobi y Gauss-Seidel"
+    subtitulo = ("Aproximan la solución de Ax = b a partir de x⁽⁰⁾; se detienen cuando ‖x⁽ᵏ⁾ − x⁽ᵏ⁻¹⁾‖∞ ≤ ε o al llegar al "
+                 "máximo de iteraciones")
+    etiqueta_filas = "Ecuaciones (n)"
+    etiqueta_columnas = "Incógnitas"
+    filas_inicial = 4
+    columnas_inicial = 4
+    minimo_filas = 2
+    titulo_datos = "Sistema Ax = b y vector inicial x⁽⁰⁾"
+    texto_boton = "Iterar y comparar"
+    vacio_resultado = "Escribe A, b y x⁽⁰⁾ (o carga un caso de prueba) y presiona «Iterar y comparar»."
+    vacio_pasos = "Aquí se explicarán la validación, la diagonal, el reordenamiento y las primeras iteraciones de cada método."
+    ejemplos = {nombre: (len(caso["A"]), len(caso["A"]), [fila + [bi, xi] for fila, bi, xi in zip(caso["A"], caso["b"], caso["x0"])])
+                for nombre, caso in iterativos.CASOS_DE_PRUEBA.items()}
+    ejemplo_inicial = next(iter(iterativos.CASOS_DE_PRUEBA))
+
+    def __init__(self, parent, app):
+        """Crea la página y oculta el contador de columnas: A siempre es cuadrada.
+
+        Entrada: contenedor y aplicación. Salida: None.
+        """
+        super().__init__(parent, app)
+        self.contador_columnas.pack_forget()
+
+    def controles_extra(self, fila):
+        """Agrega la tolerancia, el máximo de iteraciones, el reordenamiento y los teoremas a la barra.
+
+        Entrada: fila de la barra. Salida: None.
+        """
+        for rotulo, atributo, valor, ancho in (("Tolerancia ε", "entrada_tolerancia", "0.000001", 100), ("Máx. iteraciones", "entrada_iteraciones", "100", 80)):
+            grupo = ctk.CTkFrame(fila, fg_color="transparent")
+            grupo.pack(side="left", padx=(0, 14))
+            etiqueta(grupo, rotulo, FUENTE_PEQUENA_NEGRITA, "texto_3").pack(anchor="w", pady=(0, 4))
+            entrada = ctk.CTkEntry(grupo, width=ancho, height=34, font=FUENTE_MONO, fg_color=PALETA["entrada"], border_color=PALETA["borde"],
+                                   text_color=PALETA["texto"])
+            entrada.insert(0, valor)
+            entrada.pack(anchor="w")
+            setattr(self, atributo, entrada)
+        grupo = ctk.CTkFrame(fila, fg_color="transparent")
+        grupo.pack(side="left", padx=(0, 14))
+        etiqueta(grupo, "Reordenar filas", FUENTE_PEQUENA_NEGRITA, "texto_3").pack(anchor="w", pady=(0, 4))
+        self.reordenar = ctk.BooleanVar(value=True)
+        ctk.CTkSwitch(grupo, text="si hace falta", variable=self.reordenar, font=FUENTE_PEQUENA, text_color=PALETA["texto"],
+                      progress_color=PALETA["primario"]).pack(anchor="w", pady=(6, 0))
+        grupo = ctk.CTkFrame(fila, fg_color="transparent")
+        grupo.pack(side="left", padx=(0, 14))
+        etiqueta(grupo, "Teoría", FUENTE_PEQUENA_NEGRITA, "texto_3").pack(anchor="w", pady=(0, 4))
+        boton_secundario(grupo, "0. Teoremas", self.mostrar_teoremas, width=110, height=34).pack(anchor="w")
+
+    def configuracion_rejilla(self, filas, columnas):
+        """Define la rejilla [A | b | x⁽⁰⁾]: A es n × n, seguida de b y del vector inicial.
+
+        Entrada: filas (n) y columnas (se ignora). Salida: diccionario de configuración.
+        """
+        return {"columnas": filas + 2, "encabezados": [f"x{j + 1}" for j in range(filas)] + ["b", "x⁽⁰⁾"],
+                "encabezados_fila": [f"E{i + 1}" for i in range(filas)], "separador": filas}
+
+    def texto_dimension(self, filas, columnas):
+        """Escribe el orden del sistema.
+
+        Entrada: filas y columnas. Salida: cadena.
+        """
+        return f"A {filas} × {filas} · b y x⁽⁰⁾ con {filas} componentes"
+
+    def construir_previa(self, parent, valores):
+        """Muestra Ax = b con x⁽⁰⁾ y avisa en vivo si la diagonal tiene ceros o es estrictamente dominante.
+
+        Entrada: contenedor y valores. Salida: None.
+        """
+        n = len(valores)
+        A = [fila[:n] for fila in valores]
+        dibujar_expresion(parent, [A, obtener_nombres_variables(n), "=", [fila[n] for fila in valores], "   x⁽⁰⁾ =",
+                                   [fila[n + 1] for fila in valores]], tamano=12).pack(anchor="w")
+        if all(v is not None for fila in A for v in fila):
+            analisis = iterativos.analizar_diagonal([[float(v) for v in fila] for fila in A])
+            if analisis["ceros"]:
+                texto, color = "La diagonal tiene ceros: hará falta reordenar las ecuaciones.", "advertencia"
+            elif analisis["dominante"]:
+                texto, color = "Diagonal estrictamente dominante: ambos métodos convergen.", "exito"
+            else:
+                texto, color = "Diagonal no dominante: la convergencia no está garantizada (tampoco descartada).", "advertencia"
+            etiqueta(parent, texto, FUENTE_PEQUENA, color, ajustar=48).pack(anchor="w", pady=(6, 0))
+
+    def valores_aleatorios(self, filas, columnas):
+        """Genera un sistema estrictamente diagonal dominante con solución entera y x⁽⁰⁾ = 0.
+
+        Entrada: filas (n) y columnas (se ignora). Salida: filas [A | b | x⁽⁰⁾].
+        """
+        solucion = [random.randint(-5, 5) for _ in range(filas)]
+        A = [[random.randint(-4, 4) for _ in range(filas)] for _ in range(filas)]
+        for i, fila in enumerate(A):
+            # La diagonal supera a la suma de los demás valores absolutos: así la convergencia está garantizada.
+            fila[i] = (sum(abs(v) for j, v in enumerate(fila) if j != i) + random.randint(1, 5)) * random.choice((-1, 1))
+        return [fila + [sum(a * x for a, x in zip(fila, solucion)), 0] for fila in A]
+
+    def cargar_ejemplo(self, nombre):
+        """Carga un caso de prueba con su tolerancia, máximo de iteraciones y opción de reordenar, y explica qué comprueba.
+
+        Entrada: nombre del caso. Salida: None.
+        """
+        caso = iterativos.CASOS_DE_PRUEBA[nombre]
+        for entrada, valor in ((self.entrada_tolerancia, caso["tolerancia"]), (self.entrada_iteraciones, str(caso["max_iteraciones"]))):
+            entrada.delete(0, "end")
+            entrada.insert(0, valor)
+        self.reordenar.set(caso["reordenar"])
+        self.establecer_datos(*self.ejemplos[nombre])
+        self.app.notificar(f"{nombre}: {caso['objetivo']}", "info")
+
+    def calcular(self, matriz):
+        """Separa A, b y x⁽⁰⁾ y aplica ambos métodos.
+
+        Entrada: filas [A | b | x⁽⁰⁾]. Salida: informe de resolver_iterativos.
+        """
+        n = len(matriz)
+        return iterativos.resolver_iterativos([fila[:n] for fila in matriz], [fila[n] for fila in matriz], [fila[n + 1] for fila in matriz],
+                                              self.entrada_tolerancia.get().strip(), self.entrada_iteraciones.get().strip(), self.reordenar.get())
+
+    def resolver(self):
+        """Resuelve; los datos inválidos (tolerancia, iteraciones o dimensiones) se explican sin cerrar la calculadora."""
+        try:
+            iterativos.validar_datos([[0]], [0], [0], self.entrada_tolerancia.get().strip(), self.entrada_iteraciones.get().strip())
+        except ValueError as error:
+            self.mostrar_vacio()
+            self.area_resultado.llenar([lambda p, texto=str(error): tarjeta_mensajes(p, "Datos no válidos", [texto], "error")])
+            self.app.notificar(str(error), "error")
+            return
+        super().resolver()
+
+    def construir_resultado(self, informe):
+        """Prepara el estado, la diagonal, los renders, las soluciones, las tablas y la comparación.
+
+        Entrada: informe de resolver_iterativos. Salida: lista de constructores.
+        """
+        reorden = informe["reordenamiento"]
+        diagonal = ["Sistema original: " + ("diagonal con ceros" if informe["analisis"]["ceros"] else
+                                            "estrictamente diagonal dominante" if informe["analisis"]["dominante"] else "sin diagonal dominante"),
+                    reorden["motivo"]]
+        if reorden["aplicado"]:
+            diagonal.append("Orden usado: " + ", ".join(f"E{i + 1}" for i in reorden["orden"]) + " → " +
+                            ("diagonal estrictamente dominante." if informe["analisis_usado"]["dominante"] else "diagonal sin ceros, no dominante."))
+        if not informe["analisis_usado"]["dominante"] and not informe["analisis_usado"]["ceros"]:
+            diagonal.append("La diagonal dominante es una condición suficiente, no necesaria: su ausencia no implica divergencia.")
+        if not informe["definido"]:
+            return [lambda p: tarjeta_estado(p, informe["titulo"], informe["conclusion"], PALETA["error"], "!"),
+                    lambda p: tarjeta_mensajes(p, "Diagonal y reordenamiento", diagonal, "advertencia"),
+                    render_mapa_calor([("A", informe["datos"]["A"])], "Mapa de calor de A", "Las celdas oscuras de la diagonal son los ceros que impiden iterar.")]
+        j, gs = informe["jacobi"], informe["gauss_seidel"]
+        color = PALETA["exito"] if j["convergio"] and gs["convergio"] else PALETA["advertencia"] if j["convergio"] or gs["convergio"] else PALETA["error"]
+        icono = "✓" if color == PALETA["exito"] else "!" if color == PALETA["advertencia"] else "✕"
+        constructores = [
+            lambda p: tarjeta_estado(p, informe["titulo"], informe["conclusion"], color, icono),
+            lambda p: fila_indicadores(p, [(j["n_iteraciones"], "Iteraciones de Jacobi"), (gs["n_iteraciones"], "Iteraciones de Gauss-Seidel"),
+                                           (informe["n"], "Ecuaciones (n)")]),
+            lambda p: tarjeta_mensajes(p, "Diagonal y reordenamiento", diagonal, "primario"),
+            lambda p: TarjetaRender(p, "Error entre iteraciones", "Gráfica comparativa en escala logarítmica; la línea verde es la tolerancia ε.",
+                                    lambda t, _g, _i, ancho, alto: graficos.escena_errores_iterativos(informe, t, ancho, alto),
+                                    duracion=3.0, alto=260, nombre="errores_jacobi_gauss_seidel",
+                                    explicacion="Si una curva baja, el método se acerca a la solución; si sube, el error crece y el método diverge."),
+        ]
+        if informe["n"] in (2, 3):
+            constructores.append(lambda p: TarjetaRender(
+                p, "Trayectoria de las aproximaciones x⁽ᵏ⁾", "Cada punto es una iteración; ambos parten de x⁽⁰⁾." + (" Arrastra para girar." if informe["n"] == 3 else ""),
+                lambda t, g, i, ancho, alto: graficos.escena_iteraciones(informe, t, g, i, ancho, alto),
+                es_3d=informe["n"] == 3, duracion=4.5, alto=380, nombre="trayectorias",
+                explicacion="Jacobi avanza con los valores de la iteración anterior; Gauss-Seidel usa de inmediato cada valor nuevo."))
+        for resultado in (j, gs):
+            mensajes = [f"x ≈ {self._vector(resultado['solucion'])}" if resultado["estado"] != "no_finito" else "No hay una aproximación finita.",
+                        f"Estado: {'convergencia alcanzada' if resultado['convergio'] else 'máximo de iteraciones / posible no convergencia'}",
+                        f"Iteraciones: {resultado['n_iteraciones']};  error final: {numericos.formatear_real(resultado['error'], 3)};  "
+                        f"residuo ‖Ax − b‖∞ = {numericos.formatear_real(resultado['residuo'], 3)}"]
+            if resultado["factor"] is not None:
+                mensajes.append(f"Factor de convergencia observado (error_k / error_k−1): {numericos.formatear_real(resultado['factor'], 4)}")
+            mensajes += resultado["advertencias"]
+            constructores.append(lambda p, r=resultado, m=mensajes: tarjeta_mensajes(p, r["nombre"], m, "exito" if r["convergio"] else "error"))
+            encabezados, filas = iterativos.tabla_iteraciones(resultado, 7)
+            if len(filas) > 61:
+                filas = filas[:40] + [["…"] * len(encabezados)] + filas[-20:]
+            constructores.append(lambda p, r=resultado, e=encabezados, f=filas: tarjeta_lienzo(
+                p, f"Tabla de iteraciones de {r['nombre']}", "k, aproximaciones de cada variable, error ‖x⁽ᵏ⁾ − x⁽ᵏ⁻¹⁾‖∞ y residuo ‖Ax⁽ᵏ⁾ − b‖∞.",
+                lambda ancho, _alto: (graficos.escena_tabla(e, f, ancho, [0.5] + [1.2] * (len(e) - 3) + [1.1, 1.1], resaltar=len(f) - 1),
+                                      graficos.alto_tabla(len(f), con_titulo=False))))
+        referencia = informe["referencia"]
+        comparacion = list(informe["comparacion"]["lineas"])
+        if referencia["solucion"] is not None:
+            comparacion.insert(0, f"Solución de referencia (Gauss-Jordan exacto): {self._vector(referencia['solucion'])}")
+        else:
+            comparacion.insert(0, f"Gauss-Jordan: {referencia['clasificacion']}; no hay una solución única de referencia.")
+        constructores.append(lambda p: tarjeta_mensajes(p, "Comparación y validación", comparacion, "primario"))
+        return constructores
+
+    @staticmethod
+    def _vector(valores):
+        """Escribe un vector de aproximaciones.
+
+        Entrada: lista de números. Salida: cadena.
+        """
+        return "(" + ", ".join(numericos.formatear_real(v, 8) for v in valores) + ")"
+
+    def mostrar_procedimiento(self, informe):
+        """Muestra la validación, la diagonal, el reordenamiento y las iteraciones explicadas.
+
+        Entrada: informe. Salida: None.
+        """
+        self.panel_pasos.mostrar_pasos(informe["procedimiento"])
+
+    def mostrar_verificacion(self, informe):
+        """Muestra la verificación con el sistema original y con Gauss-Jordan.
+
+        Entrada: informe. Salida: None.
+        """
+        self.area_verificacion.llenar(constructores_chequeo(informe["verificacion"]), retardo=45)
+
+    def texto_copiar(self, informe):
+        """Escribe las tablas y la comparación en texto plano.
+
+        Entrada: informe. Salida: cadena.
+        """
+        return "\n".join(iterativos.formatear_iterativos(informe))
+
+    def mensaje_resuelto(self, informe):
+        """Resume el resultado en una notificación.
+
+        Entrada: informe. Salida: (texto, tipo).
+        """
+        if not informe["definido"]:
+            return informe["conclusion"], "error"
+        ambos = informe["jacobi"]["convergio"] and informe["gauss_seidel"]["convergio"]
+        return informe["titulo"], "exito" if ambos else "aviso"
+
+    def mostrar_teoremas(self):
+        """Muestra el logotipo y los teoremas clave del módulo en la pestaña Resultado."""
+        self.area_resultado.llenar(
+            [lambda p: etiqueta(p, LOGO_ITERATIVOS.strip("\n"), (FAMILIA_MONO, 11), "primario", justify="left").pack(anchor="w", padx=4, pady=(0, 8)),
+             lambda p: tarjeta_estado(p, "0. Ver Teoremas Clave del Módulo", "Jacobi, Gauss-Seidel, diagonal dominante y criterio de parada.",
+                                      PALETA["primario"], "0")]
+            + [lambda p, n=n, t=t, d=d: tarjeta_numerada(p, n, t, d) for n, (t, d) in enumerate(TEOREMAS_ITERATIVOS, 1)], retardo=40)
+        self.pestanas.set("Resultado")
+
+
+class FondoAnimado:
+    """Fondo animado de toda la ventana: se dibuja en cada marco del color de fondo con coordenadas de la ventana, así se ve continuo.
+
+    Tkinter no tiene transparencia entre widgets; por eso cada marco dibuja la parte de la escena que le toca y las tarjetas
+    quedan encima.
+    """
+
+    INTERVALO_MS = 33
+    COLORES_FONDO = ("fondo", "sidebar")
+
+    def __init__(self, app):
+        """Prepara el estado de la escena y la lista de superficies.
+
+        Entrada: aplicación. Salida: None.
+        """
+        self.app = app
+        self.estado = graficos.crear_fondo()
+        self.activo = True
+        self.superficies = []
+        self._rejillas = {}
+        self._tarea = None
+        self._ultimo = time.perf_counter()
+        self._cuadros = 0
+        self._colores = {resolver_color(PALETA[c]) for c in self.COLORES_FONDO}
+
+    def iniciar(self):
+        """Empieza la animación."""
+        self.actualizar_superficies()
+        if self._tarea is None:
+            self._tarea = self.app.after(self.INTERVALO_MS, self._tic)
+
+    def detener(self):
+        """Detiene la animación y borra lo dibujado."""
+        if self._tarea is not None:
+            self.app.after_cancel(self._tarea)
+            self._tarea = None
+        self._limpiar()
+
+    def alternar(self, activo):
+        """Activa o desactiva el fondo animado.
+
+        Entrada: activo (bool). Salida: None.
+        """
+        self.activo = bool(activo)
+        if self.activo:
+            self.iniciar()
+        else:
+            self.detener()
+
+    def _color_efectivo(self, widget):
+        """Obtiene el color con el que se ve un marco (el de su contenedor si es transparente) o un lienzo.
+
+        Entrada: CTkFrame o tk.Canvas. Salida: color '#RRGGBB'.
+        """
+        if not isinstance(widget, ctk.CTkFrame):
+            return widget.cget("bg")
+        color = widget.cget("fg_color")
+        if color == "transparent":
+            color = widget.cget("bg_color")
+        return resolver_color(color)
+
+    def actualizar_superficies(self):
+        """Busca los marcos visibles del color de fondo (y el lienzo de los menús desplazables); no entra en tarjetas."""
+        encontrados = []
+
+        def recorrer(widget):
+            """Agrega los marcos del color de fondo y sigue por sus hijos.
+
+            Entrada: widget. Salida: None.
+            """
+            for hijo in widget.winfo_children():
+                try:
+                    if isinstance(hijo, ctk.CTkScrollableFrame):
+                        lienzo = hijo._parent_canvas
+                        if lienzo.winfo_ismapped() and lienzo.cget("bg") in self._colores:
+                            encontrados.append((lienzo, lienzo))
+                            recorrer(hijo)
+                    elif isinstance(hijo, ctk.CTkFrame) and hijo.winfo_ismapped() and self._color_efectivo(hijo) in self._colores:
+                        encontrados.append((hijo, hijo._canvas))
+                        recorrer(hijo)
+                except (ValueError, AttributeError, tk.TclError):
+                    continue
+
+        try:
+            recorrer(self.app)
+        except tk.TclError:
+            return
+        vigentes = {str(lienzo) for _widget, lienzo in encontrados}
+        for _widget, lienzo in self.superficies:
+            if str(lienzo) not in vigentes:
+                self._borrar(lienzo)
+        self._rejillas = {clave: valor for clave, valor in self._rejillas.items() if clave in vigentes}
+        self.superficies = encontrados
+
+    @staticmethod
+    def _borrar(lienzo):
+        """Borra lo dibujado por el fondo en un lienzo.
+
+        Entrada: lienzo. Salida: None.
+        """
+        try:
+            lienzo.delete("fondo_animado", "fondo_rejilla")
+        except tk.TclError:
+            pass
+
+    def _limpiar(self):
+        """Borra lo dibujado en todas las superficies."""
+        for _widget, lienzo in self.superficies:
+            self._borrar(lienzo)
+        self._rejillas = {}
+
+    def _tic(self):
+        """Avanza un cuadro; si la ventana no está visible solo vuelve a comprobar más tarde."""
+        self._tarea = None
+        try:
+            visible = self.app.winfo_viewable() and self.app.state() != "iconic"
+        except tk.TclError:
+            return
+        if not self.activo:
+            return
+        if not visible:
+            self._tarea = self.app.after(400, self._tic)
+            return
+        ahora = time.perf_counter()
+        dt, self._ultimo = ahora - self._ultimo, ahora
+        self._cuadros += 1
+        if self._cuadros % 30 == 0:
+            self.actualizar_superficies()
+        try:
+            self._dibujar(dt)
+        except tk.TclError:
+            self.actualizar_superficies()
+        self._tarea = self.app.after(self.INTERVALO_MS, self._tic)
+
+    def _dibujar(self, dt):
+        """Avanza la escena y dibuja en cada superficie la parte que le corresponde.
+
+        Entrada: dt en segundos. Salida: None.
+        """
+        origen_x, origen_y = self.app.winfo_rootx(), self.app.winfo_rooty()
+        escala = escala_de(self.app)
+        graficos.avanzar_fondo(self.estado, dt, self.app.winfo_width(), self.app.winfo_height(), 1 / (24000 * escala * escala))
+        acento = resolver_color(PALETA["primario"])
+        escenas = {}
+        for widget, lienzo in self.superficies:
+            base = self._color_efectivo(widget)
+            # Un elemento del menú cambia de color al pasar el puntero o al activarse: ahí no se dibuja.
+            if base not in self._colores or not widget.winfo_ismapped():
+                self._borrar(lienzo)
+                self._rejillas.pop(str(lienzo), None)
+                continue
+            ox, oy = lienzo.winfo_rootx() - origen_x, lienzo.winfo_rooty() - origen_y
+            ancho, alto = lienzo.winfo_width(), lienzo.winfo_height()
+            clave = str(lienzo)
+            if self._rejillas.get(clave) != (ox, oy, ancho, alto):
+                self._rejillas[clave] = (ox, oy, ancho, alto)
+                lienzo.delete("fondo_rejilla")
+                for p in graficos.rejilla_fondo(ox, oy, ox + ancho, oy + alto, base, acento, 44 * escala):
+                    lienzo.create_oval(p["x"] - ox - p["radio"], p["y"] - oy - p["radio"], p["x"] - ox + p["radio"], p["y"] - oy + p["radio"],
+                                       fill=p["relleno"], outline="", tags="fondo_rejilla")
+            lienzo.delete("fondo_animado")
+            if base not in escenas:
+                escenas[base] = graficos.escena_fondo(self.estado, base, acento, escala)
+            for p in escenas[base]:
+                if p["tipo"] == "linea":
+                    (x1, y1), (x2, y2) = p["puntos"]
+                    if max(x1, x2) < ox or min(x1, x2) > ox + ancho or max(y1, y2) < oy - 6 or min(y1, y2) > oy + alto + 6:
+                        continue
+                    lienzo.create_line(x1 - ox, y1 - oy, x2 - ox, y2 - oy, fill=p["color"], width=p["ancho"], tags="fondo_animado")
+                else:
+                    r, x, y = p["radio"], p["x"] - ox, p["y"] - oy
+                    if x + r < 0 or x - r > ancho or y + r < 0 or y - r > alto:
+                        continue
+                    lienzo.create_oval(x - r, y - r, x + r, y + r, fill=p["relleno"], outline=p["borde"] or "", width=p["ancho"], tags="fondo_animado")
+            # El marco dibuja su propio rectángulo de fondo; el fondo animado debe quedar por encima de él.
+            lienzo.tag_raise("fondo_rejilla")
+            lienzo.tag_raise("fondo_animado")
 
 
 class AplicacionAlgebraLineal(_Ventana):
@@ -6632,7 +6969,7 @@ class AplicacionAlgebraLineal(_Ventana):
         ("lu", "◩", "Factorización LU y Ax = b", PaginaLU),
         ("independencia", "⊥", "Independencia lineal", PaginaIndependencia),
         ("numericos", "∿", "Métodos numéricos", PaginaNumericos),
-        ("renders", "◈", "Renders y animaciones", PaginaRenders),
+        ("iterativos", "⟳", "Jacobi y Gauss-Seidel", PaginaIterativos),
         ("metodo", "☰", "Método de eliminación", PaginaMetodo),
         ("ayuda", "?", "Ayuda", PaginaAyuda),
     ]
@@ -6661,6 +6998,7 @@ class AplicacionAlgebraLineal(_Ventana):
         self.pagina_actual = None
         self.crear_sidebar()
         self.crear_contenido_principal()
+        self.fondo_animado = FondoAnimado(self)
         instalar_desplazamiento(self)
         self._configurar_atajos()
         self.cambiar_pagina("calculadora")
@@ -6729,6 +7067,15 @@ class AplicacionAlgebraLineal(_Ventana):
         if self.logo_pequeno is not None:
             ctk.CTkLabel(pie, image=self.logo_pequeno, text="").pack(side="left", padx=(0, 8))
         etiqueta(pie, "Excellentia\nAcademica", (FAMILIA, 10), "texto_3").pack(side="left")
+        self.interruptor_fondo = ctk.CTkSwitch(pie, text="Fondo", command=self._alternar_fondo, font=FUENTE_PEQUENA,
+                                               text_color=PALETA["texto_3"], progress_color=PALETA["primario"], width=36, switch_width=30,
+                                               switch_height=16)
+        self.interruptor_fondo.select()
+        self.interruptor_fondo.pack(side="right")
+
+    def _alternar_fondo(self):
+        """Activa o desactiva el fondo animado con el interruptor del menú lateral."""
+        self.fondo_animado.alternar(self.interruptor_fondo.get() == 1)
 
     def crear_contenido_principal(self):
         """Crea el contenedor de páginas; cada página se crea al visitarla y solo la activa queda en pantalla."""
@@ -6773,6 +7120,8 @@ class AplicacionAlgebraLineal(_Ventana):
             anterior.grid_remove()
         nueva.grid(row=0, column=0, sticky="nsew")
         nueva.al_mostrar()
+        if hasattr(self, "fondo_animado"):
+            self.after(80, self.fondo_animado.iniciar)
         self.after(10, self._mover_indicador)
 
     def _mover_indicador(self):

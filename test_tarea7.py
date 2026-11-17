@@ -315,7 +315,7 @@ class MenuDeConsola(unittest.TestCase):
 
 
 class InterfazGrafica(unittest.TestCase):
-    """Páginas «Métodos numéricos» y «Renders y animaciones» con widgets reales."""
+    """Página «Métodos numéricos» con widgets reales."""
 
     @classmethod
     def setUpClass(cls):
@@ -323,7 +323,7 @@ class InterfazGrafica(unittest.TestCase):
         cls.gui = main.cargar_aplicacion()
 
     def test_paginas_nuevas_con_widgets_reales(self):
-        """Comprueba las cuatro opciones, los cinco modos de render, el zoom, el encadenamiento y la exportación a PNG."""
+        """Comprueba las cuatro opciones, el zoom del graficador y la exportación de un render a PNG."""
         if self.gui.ctk is None:
             self.skipTest("CustomTkinter no disponible")
         try:
@@ -360,27 +360,11 @@ class InterfazGrafica(unittest.TestCase):
             bombear(0.2)
             self.assertFalse(pagina.opcion.informe["definido"])
 
-            renders = app.ir_a("renders")
-            for modo in renders.MODOS:
-                with self.subTest(modo=modo):
-                    renders.cambiar_modo(modo)
-                    renders.reproductor.fijar(1.0)
-                    bombear(0.1)
-                    self.assertGreater(len(renders._escena(800, 500)), 10)
+            escena = self.gui.graficos.escena_sistema_3d([[1, 1, 1], [2, -1, 1], [1, 2, -1]], [6, 3, 2], [1, 2, 3], 1, 0.6, 0.4, 400, 300)
             with tempfile.TemporaryDirectory() as carpeta:
                 ruta = Path(carpeta) / "render.png"
-                self.gui.renderizar_png(renders._escena(400, 300), 400, 300, str(ruta))
+                self.gui.renderizar_png(escena, 400, 300, str(ruta))
                 self.assertEqual(ruta.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
-
-            determinantes = app.ir_a("determinantes")
-            determinantes.resolver()
-            app.ir_a("renders").cargar_transformacion([[0, 1], [1, 0]])
-            bombear(0.2)
-            self.assertEqual(renders.modo.get(), "Transformación del plano (2×2)")
-            self.assertIn("orientación", renders.explicacion.cget("text"))
-            app.ir_a("renders").cargar_sistema([[1, 1, 1], [2, -1, 1], [1, 2, -1]], [6, 3, 2])
-            bombear(0.2)
-            self.assertIn("(1, 2, 3)", renders.explicacion.cget("text"))
             self.assertEqual(errores, [])
         finally:
             app.destroy()

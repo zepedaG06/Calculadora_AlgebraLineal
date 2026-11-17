@@ -2,7 +2,7 @@
 
 Propósito: traducir gráficas, procedimientos numéricos y transformaciones lineales a listas de primitivas
 (líneas, polígonos, círculos y textos) que la GUI dibuja en un Canvas y exporta a PNG con el mismo resultado.
-Unidad: Álgebra Lineal (MTM0120), Programa 7: módulo de Métodos Numéricos y visualización de la Calculadora.
+Unidad: Álgebra Lineal (MTM0120), Programas 7 y 8: métodos numéricos, métodos iterativos y renders de cada sección.
 Autores (Grupo 3, UAM): Andrés Eduardo Mejía Castro, José Andrés Zepeda Grijalba,
 Eddy Alfonso Almendárez Ruiz y Brandon Javier Rocha Varela.
 Notas: funciones puras (sin input() ni print()) y sin NumPy ni math; en 3D, las superficies que se cruzan se
@@ -1008,13 +1008,56 @@ def _ecuacion(fila, termino, nombres):
     return formatear_ecuacion_original([Fraction(v) for v in fila], Fraction(termino), list(nombres))
 
 
-def escena_sistema_2d(A, b, solucion, t, ancho, alto):
-    """Dibuja cada ecuación como una recta que se traza progresivamente y marca la solución.
+def _radio_con_trayectorias(centro, trayectorias, minimo):
+    """Calcula cuánto debe abarcar la vista para incluir la solución y los puntos razonables de las trayectorias.
 
-    Entrada: A (filas de 2 números), b, solución (par o None), t y tamaño. Salida: lista de primitivas.
+    Entrada: centro, trayectorias y radio mínimo. Salida: radio.
+    """
+    radio = max(minimo, max(abs(c) for c in centro) * 0.6)
+    tope = 12 * max(1.0, max(abs(c) for c in centro))
+    for trayectoria in trayectorias:
+        for punto in trayectoria["puntos"]:
+            distancia = max(abs(a - c) for a, c in zip(punto, centro))
+            # Un método que diverge se aleja sin límite: esos puntos se recortan en lugar de alejar la cámara.
+            if distancia <= tope:
+                radio = max(radio, distancia * 1.15)
+    return radio
+
+
+def puntos_hasta(puntos, t):
+    """Toma los puntos de una trayectoria hasta el instante t, interpolando el último tramo.
+
+    Entrada: lista de puntos y t entre 0 y 1 (fracción de la trayectoria). Salida: lista de puntos.
+    """
+    if len(puntos) <= 1:
+        return list(puntos)
+    avance = max(0.0, min(1.0, t)) * (len(puntos) - 1)
+    completos = int(avance)
+    visibles = list(puntos[:completos + 1])
+    if completos < len(puntos) - 1:
+        p, q, s = puntos[completos], puntos[completos + 1], suavizar(avance - completos)
+        visibles.append(tuple(a + (c - a) * s for a, c in zip(p, q)))
+    return visibles
+
+
+def _leyenda_trayectorias(escena, trayectorias, x, y):
+    """Agrega la leyenda de las trayectorias en la esquina indicada.
+
+    Entrada: escena, trayectorias, posición. Salida: None.
+    """
+    for k, trayectoria in enumerate(trayectorias):
+        escena.append(linea([(x, y + 18 * k), (x + 20, y + 18 * k)], trayectoria["color"], 3))
+        escena.append(texto(x + 26, y + 18 * k, trayectoria["nombre"], TEMA["texto"], 12, True, "w"))
+
+
+def escena_sistema_2d(A, b, solucion, t, ancho, alto, trayectorias=(), avance=1.0):
+    """Dibuja cada ecuación como una recta que se traza progresivamente, marca la solución y, si se dan, las trayectorias de un método iterativo.
+
+    Entrada: A (filas de 2 números), b, solución (par o None), t, tamaño, trayectorias (puntos, color, nombre) y su avance (0 a 1).
+    Salida: lista de primitivas.
     """
     centro = (float(solucion[0]), float(solucion[1])) if solucion else (0.0, 0.0)
-    radio = max(4.0, abs(centro[0]) * 0.6, abs(centro[1]) * 0.6)
+    radio = _radio_con_trayectorias(centro, trayectorias, 4.0)
     vista = vista_cuadrada(radio, radio, ancho, alto, centro)
     escena = escena_ejes(vista)
     filas = len(A)
@@ -1039,6 +1082,15 @@ def escena_sistema_2d(A, b, solucion, t, ancho, alto):
         escena.append(circulo(px, py, radio_punto + 4, mezclar_colores(TEMA["fondo"], TEMA["texto"], 0.25)))
         escena.append(circulo(px, py, radio_punto, TEMA["texto"], TEMA["fondo"], 2))
         escena.append(texto(px + 14, py - 14, f"x = ({formatear_real(centro[0], 5)}, {formatear_real(centro[1], 5)})", TEMA["texto"], 13, True, "sw"))
+    for trayectoria in trayectorias:
+        puntos = [vista.a_pixel(*p) for p in puntos_hasta(trayectoria["puntos"], avance)]
+        for trozo in recortar_polilinea(puntos, vista.izquierda, vista.arriba, vista.derecha, vista.abajo):
+            escena.append(linea(trozo, trayectoria["color"], 2.2))
+        for px, py in puntos:
+            if vista.izquierda <= px <= vista.derecha and vista.arriba <= py <= vista.abajo:
+                escena.append(circulo(px, py, 3.2, trayectoria["color"], TEMA["fondo"], 1))
+    if trayectorias:
+        _leyenda_trayectorias(escena, trayectorias, vista.derecha - 150, vista.arriba + 14)
     return escena
 
 
@@ -1135,13 +1187,16 @@ def ordenar_superficies(piezas, planos, ojo, k=0):
     return ordenar_superficies(lejos, planos, ojo, k + 1) + sobre + ordenar_superficies(cerca, planos, ojo, k + 1)
 
 
-def escena_sistema_3d(A, b, solucion, t, giro, inclinacion, ancho, alto):
-    """Renderiza cada ecuación como un plano; donde se cruzan los tres planos está la solución.
+def escena_sistema_3d(A, b, solucion, t, giro, inclinacion, ancho, alto, trayectorias=(), avance=1.0):
+    """Renderiza cada ecuación como un plano; donde se cruzan los planos está la solución. Puede dibujar trayectorias iterativas.
 
-    Entrada: A (filas de 3 números), b, solución o None, t, ángulos de cámara y tamaño. Salida: lista de primitivas.
+    Entrada: A (filas de 3 números), b, solución o None, t, ángulos de cámara, tamaño, trayectorias y su avance.
+    Salida: lista de primitivas.
     """
     centro = [float(v) for v in solucion] if solucion else [0.0, 0.0, 0.0]
     radio = max(3.0, max(abs(v) for v in centro) * 1.4)
+    if trayectorias:
+        radio = max(radio, max(abs(c) for c in centro) + _radio_con_trayectorias(centro, trayectorias, 0.0))
     camara = _camara_para_caja(giro, inclinacion, radio, ancho, alto)
     escena = [rectangulo(0, 0, ancho, alto, TEMA["fondo"])]
     escena.extend(_caja_3d(camara, radio))
@@ -1179,6 +1234,19 @@ def escena_sistema_3d(A, b, solucion, t, giro, inclinacion, ancho, alto):
         escena.append(circulo(px, py, 11, mezclar_colores(TEMA["fondo"], TEMA["texto"], 0.3)))
         escena.append(circulo(px, py, 7, TEMA["texto"], TEMA["fondo"], 2))
         escena.append(texto(px + 13, py - 13, "x = (" + ", ".join(formatear_real(v, 4) for v in centro) + ")", TEMA["texto"], 13, True, "sw"))
+    for trayectoria in trayectorias:
+        dentro = [p for p in puntos_hasta(trayectoria["puntos"], avance)]
+        anterior = None
+        for punto in dentro:
+            visible = max(abs(c) for c in punto) <= radio * 1.5
+            actual = camara.proyectar(punto)[:2] if visible else None
+            if actual and anterior:
+                escena.append(linea([anterior, actual], trayectoria["color"], 2.4))
+            if actual:
+                escena.append(circulo(actual[0], actual[1], 3.2, trayectoria["color"], TEMA["fondo"], 1))
+            anterior = actual
+    if trayectorias:
+        _leyenda_trayectorias(escena, trayectorias, ancho - 160, 22)
     return escena
 
 
@@ -1201,13 +1269,17 @@ def _trayecto_combinacion(coeficientes, vectores, t):
     return trayecto
 
 
-def escena_combinacion(coeficientes, vectores, w, t, giro, inclinacion, ancho, alto):
-    """Anima la combinación lineal: cada cᵢvᵢ se coloca a continuación del anterior hasta llegar a w.
+def escena_combinacion(coeficientes, vectores, w, t, giro, inclinacion, ancho, alto, nombres=None, nombre_w="w",
+                       mensaje_sin_combinacion="w no es combinación lineal de estos vectores."):
+    """Anima la combinación lineal: cada cᵢvᵢ se coloca a continuación del anterior hasta llegar a w (o al origen si w es None).
 
-    Entrada: coeficientes (o None), vectores, w, t, ángulos de cámara (para R³) y tamaño. Salida: lista de primitivas.
+    Entrada: coeficientes (o None), vectores, w (o None), t, ángulos de cámara (para R³), tamaño, nombres de los vectores,
+    nombre de w y mensaje si no hay combinación. Salida: lista de primitivas.
     """
-    dimension = len(w)
-    w = [float(v) for v in w]
+    dimension = len(vectores[0])
+    nombres = nombres or [f"v{i + 1}" for i in range(len(vectores))]
+    hacia_origen = w is None
+    w = [0.0] * dimension if hacia_origen else [float(v) for v in w]
     trayecto = _trayecto_combinacion(coeficientes, vectores, t) if coeficientes else []
     puntos = [w, *[[float(u) for u in v] for v in vectores]]
     for inicio, fin, _ in _trayecto_combinacion(coeficientes, vectores, 1.0) if coeficientes else []:
@@ -1228,23 +1300,27 @@ def escena_combinacion(coeficientes, vectores, w, t, giro, inclinacion, ancho, a
         destino = convertir([float(u) for u in v])
         color = mezclar_colores(TEMA["fondo"], SERIES[i % len(SERIES)], 0.55)
         escena.extend(flecha(origen[0], origen[1], destino[0], destino[1], color, 2, 9))
-        escena.append(texto(destino[0] + 6, destino[1] - 6, f"v{i + 1}", color, 11, True, "sw"))
-    destino_w = convertir(w)
-    escena.extend(flecha(origen[0], origen[1], destino_w[0], destino_w[1], TEMA["texto"], 3, 12))
-    escena.append(texto(destino_w[0] + 8, destino_w[1] - 8, "w", TEMA["texto"], 14, True, "sw"))
+        escena.append(texto(destino[0] + 6, destino[1] - 6, nombres[i], color, 11, True, "sw"))
+    if not hacia_origen:
+        destino_w = convertir(w)
+        escena.extend(flecha(origen[0], origen[1], destino_w[0], destino_w[1], TEMA["texto"], 3, 12))
+        escena.append(texto(destino_w[0] + 8, destino_w[1] - 8, nombre_w, TEMA["texto"], 14, True, "sw"))
     for inicio, fin, i in trayecto:
         p, q = convertir(inicio), convertir(fin)
         escena.extend(flecha(p[0], p[1], q[0], q[1], SERIES[i % len(SERIES)], 3.5, 12))
-        escena.append(texto((p[0] + q[0]) / 2 + 8, (p[1] + q[1]) / 2 - 8, f"{formatear_real(float(coeficientes[i]), 4)}·v{i + 1}", SERIES[i % len(SERIES)], 12, True, "sw"))
-    if coeficientes is None:
-        escena.append(texto(ancho / 2, alto - 18, "w no es combinación lineal de estos vectores.", TEMA["error"], 13, True))
+        escena.append(texto((p[0] + q[0]) / 2 + 8, (p[1] + q[1]) / 2 - 8, f"{formatear_real(float(coeficientes[i]), 4)}·{nombres[i]}", SERIES[i % len(SERIES)], 12, True, "sw"))
+    if hacia_origen and coeficientes is not None and t > 0.9:
+        escena.append(circulo(origen[0], origen[1], 8, "", TEMA["exito"], 2.5))
+        escena.append(texto(ancho / 2, alto - 18, "La cadena vuelve al origen: Σ cᵢvᵢ = 0 con coeficientes no todos nulos.", TEMA["exito"], 13, True))
+    if coeficientes is None and mensaje_sin_combinacion:
+        escena.append(texto(ancho / 2, alto - 18, mensaje_sin_combinacion, TEMA["error"] if not hacia_origen else TEMA["exito"], 13, True))
     return escena
 
 
-def escena_mapa_calor(matrices, ancho):
-    """Renderiza matrices como mapas de calor: el color muestra el tamaño y el signo de cada entrada.
+def escena_mapa_calor(matrices, ancho, t=1.0):
+    """Renderiza matrices como mapas de calor que aparecen celda por celda: el color muestra el tamaño y el signo.
 
-    Entrada: lista de (nombre, matriz de números) y ancho. Salida: (primitivas, alto natural).
+    Entrada: lista de (nombre, matriz de números), ancho y t entre 0 y 1. Salida: (primitivas, alto natural).
     """
     columnas_total = sum(len(M[0]) for _, M in matrices)
     separacion = 34
@@ -1254,12 +1330,16 @@ def escena_mapa_calor(matrices, ancho):
     escena = [rectangulo(0, 0, ancho, alto, TEMA["fondo"])]
     maximo = max((abs(float(v)) for _, M in matrices for fila in M for v in fila), default=1.0) or 1.0
     x = 12.0
+    total = max(1, sum(len(M) * len(M[0]) for _, M in matrices))
+    contador = 0
     for nombre, M in matrices:
         escena.append(texto(x, 14, nombre, TEMA["texto"], 13, True, "w"))
         for i, fila in enumerate(M):
             for j, v in enumerate(fila):
+                contador += 1
+                aparicion = suavizar(t * 1.6 - contador / total * 0.6)
                 numero = float(v)
-                intensidad = (abs(numero) / maximo) ** 0.5
+                intensidad = (abs(numero) / maximo) ** 0.5 * aparicion
                 color = TEMA["primario"] if numero >= 0 else TEMA["rosa"]
                 relleno = mezclar_colores(TEMA["fondo"], color, 0.08 + 0.8 * intensidad)
                 x1, y1 = x + j * celda, 28 + i * celda
@@ -1268,3 +1348,163 @@ def escena_mapa_calor(matrices, ancho):
                     escena.append(texto(x1 + celda / 2, y1 + celda / 2, formatear_real(numero, 3), TEMA["texto"], max(8, int(celda * 0.26)), mono=True))
         x += len(M[0]) * celda + separacion
     return escena, alto
+
+
+def trayectorias_iterativas(informe):
+    """Toma las aproximaciones x⁽ᵏ⁾ de Jacobi y Gauss-Seidel para dibujarlas como trayectorias.
+
+    Entrada: informe de resolver_iterativos. Salida: lista de trayectorias (puntos, color, nombre).
+    """
+    trayectorias = []
+    for clave, color in (("jacobi", TEMA["advertencia"]), ("gauss_seidel", TEMA["rosa"])):
+        resultado = informe.get(clave)
+        if resultado:
+            trayectorias.append({"puntos": [tuple(f["x"]) for f in resultado["iteraciones"]], "color": color, "nombre": resultado["nombre"]})
+    return trayectorias
+
+
+def escena_iteraciones(informe, t, giro, inclinacion, ancho, alto):
+    """Dibuja el sistema (rectas o planos) y cómo cada método se acerca (o se aleja) de la solución iteración tras iteración.
+
+    Entrada: informe de resolver_iterativos, t entre 0 y 1, ángulos de cámara y tamaño. Salida: lista de primitivas o None si n > 3.
+    """
+    n = informe["n"]
+    if n not in (2, 3):
+        return None
+    A, b = informe["datos"]["A"], informe["datos"]["b"]
+    solucion = informe["referencia"]["solucion"]
+    trayectorias = trayectorias_iterativas(informe)
+    if n == 2:
+        return escena_sistema_2d(A, b, solucion, 1.0, ancho, alto, trayectorias, t)
+    return escena_sistema_3d(A, b, solucion, 1.0, giro, inclinacion, ancho, alto, trayectorias, t)
+
+
+def escena_errores_iterativos(informe, t, ancho, alto):
+    """Compara el error ‖x⁽ᵏ⁾ − x⁽ᵏ⁻¹⁾‖∞ de Jacobi y Gauss-Seidel en escala logarítmica, con la tolerancia como referencia.
+
+    Entrada: informe de resolver_iterativos, t entre 0 y 1 y tamaño. Salida: lista de primitivas.
+    """
+    series = []
+    for clave, color in (("jacobi", TEMA["advertencia"]), ("gauss_seidel", TEMA["rosa"])):
+        resultado = informe.get(clave)
+        if resultado:
+            puntos = [(f["k"], f["error"]) for f in resultado["iteraciones"][1:] if f["error"]]
+            if puntos:
+                series.append({"texto": resultado["nombre"], "color": color, "puntos": puntos})
+    if not series:
+        return [rectangulo(0, 0, ancho, alto, TEMA["fondo"]),
+                texto(ancho / 2, alto / 2, "No hay errores que graficar: los métodos no se pudieron aplicar.", TEMA["texto_3"], 13)]
+    ultimo = max(x for s in series for x, _ in s["puntos"])
+    tolerancia = informe["datos"]["tolerancia"]
+    series.append({"texto": f"ε = {formatear_real(tolerancia, 3)}", "color": TEMA["exito"], "punteada": True,
+                   "puntos": [(1, tolerancia), (max(2, ultimo), tolerancia)]})
+    return escena_lineas_log(series, "Error entre iteraciones ‖x⁽ᵏ⁾ − x⁽ᵏ⁻¹⁾‖∞", ancho, alto, "iteración k", t)
+
+
+def crear_fondo(semilla=20261117):
+    """Crea el estado del fondo animado: nodos que derivan, un haz de escaneo y pulsos ocasionales.
+
+    Entrada: semilla del generador pseudoaleatorio. Salida: diccionario con el estado (sin dimensiones todavía).
+    """
+    return {"nodos": [], "pulsos": [], "t": 0.0, "ancho": 0.0, "alto": 0.0, "semilla": semilla, "proximo_pulso": 2.5}
+
+
+def _aleatorio(estado):
+    """Genera un número pseudoaleatorio en [0, 1) con un generador congruencial propio, para que el fondo sea reproducible.
+
+    Entrada: estado del fondo. Salida: float.
+    """
+    estado["semilla"] = (estado["semilla"] * 1103515245 + 12345) % 2147483648
+    return estado["semilla"] / 2147483648
+
+
+def _nuevo_nodo(estado, ancho, alto):
+    """Crea un nodo con posición, dirección, velocidad lenta, tamaño y brillo al azar.
+
+    Entrada: estado y tamaño del área. Salida: diccionario del nodo.
+    """
+    angulo = _aleatorio(estado) * 6.283185307179586
+    rapidez = 5 + _aleatorio(estado) * 11
+    return {"x": _aleatorio(estado) * ancho, "y": _aleatorio(estado) * alto, "vx": coseno(angulo) * rapidez, "vy": seno(angulo) * rapidez,
+            "radio": 1.8 + _aleatorio(estado) * 1.9, "brillo": 0.55 + _aleatorio(estado) * 0.4, "fase": _aleatorio(estado) * 6.283185307179586}
+
+
+def avanzar_fondo(estado, dt, ancho, alto, densidad=1 / 24000):
+    """Avanza el fondo dt segundos: mueve los nodos (reaparecen por el lado opuesto), ajusta su cantidad al área y crea pulsos.
+
+    Entrada: estado, dt en segundos, tamaño del área y nodos por píxel². Salida: None; modifica el estado.
+    """
+    dt = max(0.0, min(dt, 0.1))
+    estado["t"] += dt
+    objetivo = max(12, min(70, int(ancho * alto * densidad)))
+    while len(estado["nodos"]) < objetivo:
+        estado["nodos"].append(_nuevo_nodo(estado, ancho, alto))
+    del estado["nodos"][objetivo:]
+    margen = 30.0
+    for nodo in estado["nodos"]:
+        nodo["x"] += nodo["vx"] * dt
+        nodo["y"] += nodo["vy"] * dt
+        if nodo["x"] < -margen:
+            nodo["x"] += ancho + 2 * margen
+        elif nodo["x"] > ancho + margen:
+            nodo["x"] -= ancho + 2 * margen
+        if nodo["y"] < -margen:
+            nodo["y"] += alto + 2 * margen
+        elif nodo["y"] > alto + margen:
+            nodo["y"] -= alto + 2 * margen
+    estado["pulsos"] = [p for p in estado["pulsos"] if estado["t"] - p["inicio"] < 2.6]
+    if estado["t"] >= estado["proximo_pulso"] and estado["nodos"]:
+        nodo = estado["nodos"][int(_aleatorio(estado) * len(estado["nodos"]))]
+        estado["pulsos"].append({"x": nodo["x"], "y": nodo["y"], "inicio": estado["t"]})
+        estado["proximo_pulso"] = estado["t"] + 2.2 + _aleatorio(estado) * 3.0
+    estado["ancho"], estado["alto"] = ancho, alto
+
+
+def escena_fondo(estado, base, acento, escala=1.0, distancia=170.0, periodo_haz=11.0):
+    """Construye las primitivas del fondo: enlaces entre nodos cercanos, nodos que titilan, pulsos y el haz de escaneo.
+
+    Entrada: estado, color base del fondo, color de acento, escala de pantalla, distancia de enlace y periodo del haz en s.
+    Salida: lista de primitivas en coordenadas de la ventana.
+    """
+    escena = []
+    nodos = estado["nodos"]
+    alcance = distancia * escala
+    for i, a in enumerate(nodos):
+        for b in nodos[i + 1:]:
+            dx, dy = a["x"] - b["x"], a["y"] - b["y"]
+            if abs(dx) < alcance and abs(dy) < alcance:
+                d = (dx * dx + dy * dy) ** 0.5
+                if d < alcance:
+                    # El enlace se desvanece con la distancia: así la red aparece y desaparece suavemente.
+                    escena.append(linea([(a["x"], a["y"]), (b["x"], b["y"])], mezclar_colores(base, acento, 0.42 * (1 - d / alcance) ** 1.3), 1.2 * escala))
+    for p in estado["pulsos"]:
+        avance = (estado["t"] - p["inicio"]) / 2.6
+        radio = (6 + 46 * suavizar(avance)) * escala
+        escena.append(circulo(p["x"], p["y"], radio, "", mezclar_colores(base, acento, 0.45 * (1 - avance)), 1.4 * escala))
+    for nodo in nodos:
+        brillo = nodo["brillo"] * (0.75 + 0.25 * seno(estado["t"] * 1.3 + nodo["fase"]))
+        escena.append(circulo(nodo["x"], nodo["y"], nodo["radio"] * escala, mezclar_colores(base, acento, brillo)))
+    fase = (estado["t"] % periodo_haz) / periodo_haz
+    if fase < 0.55:
+        y = suavizar(fase / 0.55) * (estado["alto"] + 40) - 20
+        intensidad = seno(3.141592653589793 * fase / 0.55)
+        escena.append(linea([(0, y - 3 * escala), (estado["ancho"], y - 3 * escala)], mezclar_colores(base, acento, 0.08 * intensidad), 7 * escala))
+        escena.append(linea([(0, y), (estado["ancho"], y)], mezclar_colores(base, acento, 0.26 * intensidad), escala))
+    return escena
+
+
+def rejilla_fondo(x0, y0, x1, y1, base, acento, paso=44.0):
+    """Construye la rejilla de puntos fija del fondo dentro de un rectángulo, alineada con la ventana para que sea continua.
+
+    Entrada: rectángulo en coordenadas de la ventana, colores y separación. Salida: lista de primitivas.
+    """
+    color = mezclar_colores(base, acento, 0.19)
+    escena = []
+    x = (int(x0 // paso) + 1) * paso
+    while x < x1:
+        y = (int(y0 // paso) + 1) * paso
+        while y < y1:
+            escena.append(circulo(x, y, 0.9, color))
+            y += paso
+        x += paso
+    return escena

@@ -1,9 +1,9 @@
 """Punto de entrada y menú principal de la Calculadora de Álgebra Lineal.
 
 Propósito: abrir la interfaz gráfica o, con --consola, el menú de texto que incluye «Factorización LU y
-solución Ax = b», el verificador de propiedades, la independencia lineal y los métodos numéricos. Solo aquí se
-usan input()/print().
-Unidad: Álgebra Lineal (MTM0120), Programa 7: módulo de Métodos Numéricos.
+solución Ax = b», el verificador de propiedades, la independencia lineal, los métodos numéricos y los métodos
+iterativos de Jacobi y Gauss-Seidel. Solo aquí se usan input()/print().
+Unidad: Álgebra Lineal (MTM0120), Programa 8: métodos iterativos de Jacobi y Gauss-Seidel.
 Autores (Grupo 3, UAM): Andrés Eduardo Mejía Castro, José Andrés Zepeda Grijalba,
 Eddy Alfonso Almendárez Ruiz y Brandon Javier Rocha Varela.
 """
@@ -12,9 +12,11 @@ import sys
 from pathlib import Path
 
 from modulos.modulo_lu import formatear_resultado_lu, resolver_lu
+from modulos.modulo_iterativos import CASOS_DE_PRUEBA, LIMITE_ORDEN, formatear_iterativos, resolver_iterativos
 from modulos.modulo_matrices import LIMITE_DIMENSION, convertir_numero, formatear_numero, verificar_propiedades_clave
 from modulos.modulo_numericos import (FuncionReal, biseccion, formatear_informe, grafica_ascii, informe_errores,
                                       informe_graficador, informe_posicional, leer_real, tabla_biseccion)
+from teoremas.teoremas_iterativos import LOGO_ITERATIVOS, texto_teoremas_iterativos
 from teoremas.teoremas_lu import LOGO_LU, texto_teoremas_lu
 from teoremas.teoremas_numericos import LOGO_NUMERICOS, texto_teoremas_numericos
 
@@ -24,6 +26,7 @@ OPCIONES_MENU_PRINCIPAL = (
     ("3", "Verificador de propiedades de matrices"),
     ("4", "Independencia lineal"),
     ("5", "Métodos numéricos"),
+    ("6", "Métodos iterativos: Jacobi y Gauss-Seidel"),
     ("S", "Salir"),
 )
 OPCIONES_MENU_LU = (
@@ -277,6 +280,62 @@ def menu_metodos_numericos(entrada=input, salida=print):
             salida("  Opción no válida: elige 1, 2, 3, 4, 0 o V.")
 
 
+def ejecutar_iterativos(entrada=input, salida=print):
+    """Pide A, b, x⁽⁰⁾, ε y el máximo de iteraciones, aplica Jacobi y Gauss-Seidel y muestra tablas y comparación.
+
+    Entrada: funciones de entrada/salida. Salida: el informe de resolver_iterativos (None si los datos no son válidos).
+    """
+    n = leer_entero(f"Número de ecuaciones n (2 a {LIMITE_ORDEN}): ", 2, LIMITE_ORDEN, entrada, salida)
+    A = leer_matriz("A", n, n, entrada, salida)
+    b = leer_numeros(f"Vector b ({n} componentes): ", n, entrada, salida)
+    x0 = leer_numeros(f"Vector inicial x⁽⁰⁾ ({n} componentes): ", n, entrada, salida)
+    while True:
+        tolerancia = entrada("Tolerancia ε [0.000001]: ").strip() or "0.000001"
+        maximo = entrada("Máximo de iteraciones [100]: ").strip() or "100"
+        reordenar = entrada("¿Reordenar filas si hace falta? (S/N) [S]: ").strip().upper() != "N"
+        try:
+            informe = resolver_iterativos(A, b, x0, tolerancia, maximo, reordenar)
+            break
+        except ValueError as error:
+            salida(f"  Error: {error} Vuelve a escribir la tolerancia y el máximo de iteraciones.")
+    salida("")
+    for linea in formatear_iterativos(informe):
+        salida(linea)
+    return informe
+
+
+def menu_iterativos(entrada=input, salida=print):
+    """Muestra el logotipo, los casos de prueba y la opción de datos propios hasta que el usuario elige volver.
+
+    Entrada: funciones de entrada/salida. Salida: None.
+    """
+    casos = list(CASOS_DE_PRUEBA.items())
+    while True:
+        salida(LOGO_ITERATIVOS)
+        salida("JACOBI Y GAUSS-SEIDEL")
+        salida("  1. Ingresar A, b y x⁽⁰⁾")
+        for k, (nombre, _caso) in enumerate(casos, start=2):
+            salida(f"  {k}. {nombre}")
+        salida("  0. Ver Teoremas Clave del Módulo")
+        salida("  V. Volver al menú principal")
+        opcion = entrada("Elige una opción: ").strip().upper()
+        if opcion == "1":
+            ejecutar_iterativos(entrada, salida)
+        elif opcion.isdigit() and 2 <= int(opcion) < len(casos) + 2:
+            nombre, caso = casos[int(opcion) - 2]
+            salida(f"\n{nombre}\n{caso['objetivo']}\n")
+            informe = resolver_iterativos(caso["A"], caso["b"], caso["x0"], caso["tolerancia"], caso["max_iteraciones"], caso["reordenar"])
+            for linea in formatear_iterativos(informe):
+                salida(linea)
+        elif opcion == "0":
+            salida("\n0. Ver Teoremas Clave del Módulo\n")
+            salida(texto_teoremas_iterativos())
+        elif opcion == "V":
+            return
+        else:
+            salida(f"  Opción no válida: elige 1 a {len(casos) + 1}, 0 o V.")
+
+
 def menu_principal(entrada=input, salida=print):
     """Muestra el menú principal de consola y ejecuta cada opción hasta que el usuario sale.
 
@@ -302,10 +361,12 @@ def menu_principal(entrada=input, salida=print):
             cargar_aplicacion().independencia_consola(entrada)
         elif opcion == "5":
             menu_metodos_numericos(entrada, salida)
+        elif opcion == "6":
+            menu_iterativos(entrada, salida)
         elif opcion == "S":
             return
         else:
-            salida("  Opción no válida: elige 1, 2, 3, 4, 5 o S.")
+            salida("  Opción no válida: elige 1, 2, 3, 4, 5, 6 o S.")
 
 
 def main(argumentos=None):

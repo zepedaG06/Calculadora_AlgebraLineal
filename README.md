@@ -1,6 +1,6 @@
-# Calculadora de Álgebra Lineal (Programas 1 a 7)
+# Calculadora de Álgebra Lineal (Programas 1 a 8)
 
-Proyecto universitario del Grupo 3 (Universidad Americana, Álgebra Lineal MTM0120) para resolver problemas de álgebra lineal con aritmética exacta. El Programa 6 agrega la **factorización LU y la solución de Ax = b** (`modulos/modulo_lu.py`) y las mejoras obligatorias de las Tareas 4 y 5. El Programa 7 agrega el módulo de **Métodos Numéricos** (`modulos/modulo_numericos.py`): bisección, graficador de funciones, notación posicional en base 10 y base 2 y errores numéricos, más una sección de **renders y animaciones** (`modulos/graficos.py`).
+Proyecto universitario del Grupo 3 (Universidad Americana, Álgebra Lineal MTM0120) para resolver problemas de álgebra lineal con aritmética exacta. El Programa 6 agrega la **factorización LU y la solución de Ax = b** (`modulos/modulo_lu.py`) y las mejoras obligatorias de las Tareas 4 y 5. El Programa 7 agrega el módulo de **Métodos Numéricos** (`modulos/modulo_numericos.py`): bisección, graficador de funciones, notación posicional en base 10 y base 2 y errores numéricos, más una sección de **renders y animaciones** (`modulos/graficos.py`). El Programa 8 agrega los **métodos iterativos de Jacobi y Gauss-Seidel** (`modulos/modulo_iterativos.py`) e integra un render animado en el resultado de cada sección.
 
 ## Secciones
 
@@ -16,7 +16,8 @@ Proyecto universitario del Grupo 3 (Universidad Americana, Álgebra Lineal MTM01
   2. **Graficador**: hasta tres funciones con trazado animado, ceros, extremos, intersecciones y asíntotas sin líneas falsas. La rueda acerca, arrastrar mueve, doble clic restablece y el cursor lee los valores.
   3. **Notación posicional en base 10 y base 2**: descompone el número en dígitos, pesos y contribuciones, lo convierte con divisiones y multiplicaciones sucesivas (detecta los desarrollos periódicos, como 0.1 = 0.0(0011)₂) y muestra sus bits en IEEE 754 de 32 y 64 bits con el error de representación exacto.
   4. **Errores numéricos**: errores absoluto, relativo y porcentual con fracciones exactas, cifras significativas garantizadas, redondeo frente a truncamiento, épsilon de la máquina (2⁻⁵²), acumulación del error, truncamiento de una serie y cancelación de cifras.
-- **Renders y animaciones**: cómo una matriz 2×2 o 3×3 deforma el plano o el espacio (con |det| como área o volumen), las rectas o planos de un sistema y dónde se cruzan, y las combinaciones lineales en R² y R³. En 3D la cámara gira sola o con el mouse. Cada render se exporta a PNG en alta resolución. Las secciones de sistemas, combinaciones, determinantes y LU tienen accesos directos a estos renders, y LU muestra el mapa de calor de L y U.
+- **Jacobi y Gauss-Seidel** (Programa 8): se escriben A (n × n), b, el vector inicial x⁽⁰⁾, la tolerancia ε y el máximo de iteraciones. Se validan las dimensiones y los datos, se revisa que la diagonal no tenga ceros y si es estrictamente dominante por filas (condición suficiente, no necesaria) y, si hace falta, se busca un reordenamiento de ecuaciones válido (sin forzarlo si no existe). Jacobi usa solo la iteración anterior; Gauss-Seidel usa de inmediato cada valor nuevo. Se detiene cuando ‖x⁽ᵏ⁾ − x⁽ᵏ⁻¹⁾‖∞ ≤ ε o al llegar al máximo, y advierte si el error crece o los valores dejan de ser finitos. Muestra la solución de cada método, sus tablas de iteraciones (k, xᵢ, error y residuo), el estado final, el residuo ‖Ax − b‖∞, la gráfica comparativa del error, las trayectorias de x⁽ᵏ⁾ (en 2D y 3D) y la comparación con la solución exacta de Gauss-Jordan. Incluye los tres casos de prueba de la guía: convergencia, reordenamiento por cero en la diagonal y no convergencia.
+- **Renders animados en cada resultado**: al resolver, cada sección agrega su render con línea de tiempo, pausa y exportación a PNG. La Calculadora muestra las rectas o planos del sistema; Combinaciones y Ax = b, la combinación de vectores; Propiedades de Ax, Av como combinación de columnas; Independencia, los vectores y su relación de dependencia; Determinantes, cómo A deforma el plano o el espacio (|det| como área o volumen); LU, el mapa de calor de A, L y U; Operaciones matriciales, el mapa de calor de operandos y resultado. En 3D la cámara gira sola o se arrastra con el mouse.
 - **Método** y **Ayuda**: explicación del algoritmo con un ejemplo resuelto, atajos y conceptos clave.
 
 Cada sección permite cargar ejemplos, generar datos aleatorios y ver el procedimiento completo o paso a paso (con reproducción automática). La fila que cambia se resalta y el pivote aparece encerrado en cada matriz.
@@ -62,7 +63,7 @@ python3 main.py
 python3 main.py --consola
 ```
 
-Opciones: 1. Abrir la interfaz gráfica · 2. **Factorización LU y solución Ax = b** · 3. Verificador de propiedades de matrices · 4. Independencia lineal · 5. **Métodos numéricos** · S. Salir. La opción 2 muestra el logotipo ASCII del módulo y «0. Ver Teoremas Clave del Módulo»; pide m × n, las filas de A y el vector b, valida cada dato (si es inválido lo notifica y lo vuelve a pedir sin cerrarse) y despliega L, U, el mensaje de verificación, y, x y la comprobación final. Si CustomTkinter no está instalado, `main.py` abre este menú automáticamente. El archivo histórico `python3 "Programa 1_Grupo3.py" --consola` conserva el análisis de independencia lineal.
+Opciones: 1. Abrir la interfaz gráfica · 2. **Factorización LU y solución Ax = b** · 3. Verificador de propiedades de matrices · 4. Independencia lineal · 5. **Métodos numéricos** · 6. **Jacobi y Gauss-Seidel** (datos propios o los casos de prueba) · S. Salir. La opción 2 muestra el logotipo ASCII del módulo y «0. Ver Teoremas Clave del Módulo»; pide m × n, las filas de A y el vector b, valida cada dato (si es inválido lo notifica y lo vuelve a pedir sin cerrarse) y despliega L, U, el mensaje de verificación, y, x y la comprobación final. Si CustomTkinter no está instalado, `main.py` abre este menú automáticamente. El archivo histórico `python3 "Programa 1_Grupo3.py" --consola` conserva el análisis de independencia lineal.
 
 ## Cómo usar
 
@@ -76,7 +77,7 @@ Opciones: 1. Abrir la interfaz gráfica · 2. **Factorización LU y solución Ax
 python3 -m unittest discover -v
 ```
 
-`test_tarea7.py` comprueba los requisitos del Programa 7 (funciones elementales propias, intérprete de funciones, bisección, graficador, notación posicional, errores, motor de renders, consola y GUI) y `test_tarea6.py` los del Programa 6 (reglas técnicas, mensajes exactos, reutilización, cobertura de propiedades, encadenamiento y consola) y `test_modulo_lu.py` la factorización con oráculos y datos alterados.
+`test_tarea8.py` comprueba los requisitos del Programa 8 (validaciones, diagonal, reordenamiento, reglas de Jacobi y Gauss-Seidel, criterio de parada, no convergencia, los tres casos de prueba, consola y renders en cada sección); `test_tarea7.py`, los del Programa 7 (funciones elementales propias, intérprete de funciones, bisección, graficador, notación posicional, errores, motor de renders, consola y GUI) y `test_tarea6.py` los del Programa 6 (reglas técnicas, mensajes exactos, reutilización, cobertura de propiedades, encadenamiento y consola) y `test_modulo_lu.py` la factorización con oráculos y datos alterados.
 
 En Windows usa `py` en lugar de `python3`.
 
@@ -122,14 +123,17 @@ modulos/modulo_matrices.py  Núcleo exacto, sin dependencias gráficas ni E/S
 modulos/modulo_lu.py        Factorización LU, Ly = b, Ux = y y su verificación
 teoremas/teoremas_matrices.py  Teoremas y demostraciones de matrices e inversas
 modulos/modulo_numericos.py Bisección, graficador, base 10 y base 2, errores (sin math)
+modulos/modulo_iterativos.py Jacobi, Gauss-Seidel, diagonal, reordenamiento y comparación
 modulos/graficos.py         Escenas vectoriales: gráficas, animaciones y renders 2D/3D
 teoremas/teoremas_lu.py    Logotipo ASCII y teoremas clave del módulo LU
 teoremas/teoremas_numericos.py  Logotipo ASCII y teoremas del módulo de Métodos Numéricos
+teoremas/teoremas_iterativos.py Logotipo ASCII y teoremas de Jacobi y Gauss-Seidel
 test_algoritmo.py           Suite histórica, conservada
 test_matrices_avanzadas.py  Determinantes, inversas, propiedades y regresión
 test_modulo_lu.py           LU con oráculos, datos alterados y GUI
 test_tarea6.py              Requisitos del Programa 6
 test_tarea7.py              Requisitos del Programa 7
+test_tarea8.py              Requisitos del Programa 8
 ```
 
 Ejecuta `py -m unittest discover -v` para incluir todos los tests. Las pruebas
